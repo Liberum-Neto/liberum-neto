@@ -1,6 +1,12 @@
 [package]
-name = "vault"
+name = "liberum-vault-async"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.89"
+base64 = "0.22.1"
+rand = "0.8.5"
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+tokio = { version = "1.40.0", features = ["full"] }
+tokio-rusqlite = "0.6.0"
