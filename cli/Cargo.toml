@@ -1,0 +1,9 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = {version="4", features=["cargo", "derive"]}
+clap_derive = {version="4"}
+shlex = "1"
