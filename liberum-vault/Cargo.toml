@@ -1,5 +1,5 @@
 [package]
-name = "liberum-vault-async"
+name = "liberum-vault"
 version = "0.1.0"
 edition = "2021"
 

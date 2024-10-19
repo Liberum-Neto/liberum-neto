@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = [ "cli" , "vault"]
+members = [ "liberum-cli", "liberum-vault" ]
