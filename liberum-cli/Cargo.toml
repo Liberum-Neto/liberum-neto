@@ -7,3 +7,4 @@ edition = "2021"
 clap = {version="4", features=["cargo", "derive"]}
 clap_derive = {version="4"}
 shlex = "1"
+homedir = "0.3"
