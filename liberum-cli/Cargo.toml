@@ -8,3 +8,5 @@ clap = {version="4", features=["cargo", "derive"]}
 clap_derive = {version="4"}
 shlex = "1"
 homedir = "0.3"
+liberum-core = { path = "../liberum-core"}
+tokio ={ version = "1.40", features = ["full"]}
