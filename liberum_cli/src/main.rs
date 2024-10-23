@@ -1,14 +1,15 @@
-use std::{io::Write, path::{Path, PathBuf}};
+use std::{env::temp_dir, fs, io::Write, path::{Path, PathBuf}};
 use clap::{Error, Parser, Subcommand};
-use liberum_core::UIMessage;
-use tokio;
+use tokio::net::UnixStream;
+use liberum_core;
 
 const LN_CONFIG_DIRECTORY: &str = ".liberum-neto";
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
 
-    let mut s = liberum_core::UIActor::new();
+    //let mut socket = UnixStream::connect()).await.unwrap();
+    let mut sender = liberum_core::connect(temp_dir().join("liberum-core-socket")).await;
 
     loop {
         let line = readline()?;
@@ -18,7 +19,17 @@ async fn main() -> Result<(), String> {
         }
 
         let args = shlex::split(line).ok_or("error: Invalid quoting")?;
-        let cli = Cli::try_parse_from(args).map_err(|e| e.to_string())?;
+        let cli = Cli::try_parse_from(args).map_err(|e| e.to_string());
+        let cli = match cli {
+            Ok(cli) => {
+                cli
+            },
+            Err(e) => {
+                println!("{e}");
+                continue;
+            }
+        };
+        
 
         let response: Result<bool, ()> = match cli.command {
             Commands::NewNode { path } => {
@@ -27,10 +38,14 @@ async fn main() -> Result<(), String> {
                 let (path, result) = get_config_or_default(path_str, false);
                 if let Err(()) = result {
                     println!("{} already exits!", path.to_str().unwrap());
-                } else {              
+                    fs::remove_dir(&path).unwrap();
+                } //else {              
                     println!("Creating node at {}", path.to_str().expect("Path should be able to be represented as string"));
-                    s.sender.send(UIMessage::GenerateConfig {  }).await;
-                }
+                    let sender = sender.as_ref().unwrap();
+                    sender.send(liberum_core::UIMessage::GenerateConfig {  }).await.unwrap();
+                    println!("Sent message!");
+                    
+                //}
                 // path is valid at this point
                 Ok(false)
             }
@@ -76,6 +91,7 @@ async fn main() -> Result<(), String> {
 
         match response {
             Ok(quit) => {
+                println!("quit: {quit}");
                 if quit {
                     break;
                 }

@@ -1,9 +1,16 @@
 [package]
-name = "liberum-core"
+name = "liberum_core"
 version = "0.1.0"
 edition = "2021"
 publish = false
 license = "MIT"
+
+[lib]
+path="src/lib.rs"
+
+[[bin]]
+name="liberum_core"
+path="src/main.rs"
 
 [package.metadata.release]
 release = false
@@ -18,3 +25,6 @@ tracing = { version = "0.1"}
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 void = "1.0.2"
 daemonize = "0.5.0"
+tokio-util = {version="0.7", features=["codec"]}
+bytes = "1.8"
+futures = "0.3"
