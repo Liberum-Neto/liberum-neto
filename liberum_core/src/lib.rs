@@ -1,7 +1,7 @@
 
 use std::{env::temp_dir, error::Error, time::Duration};
-use tracing_subscriber::EnvFilter;
 use libp2p::{futures::StreamExt, identity::Keypair, swarm::{SwarmEvent, Swarm}, Multiaddr, ping::{Behaviour}};
+use tracing::{debug, info, warn, error};
 use std::{io, net::TcpListener};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::{fs, io::AsyncWriteExt, sync::{mpsc, oneshot}};
@@ -24,9 +24,10 @@ pub struct UIActor {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum UIMessage {
     GenerateConfig {
+        path: Option<std::path::PathBuf>,
     },
     LoadConfig {
-        path: std::path::PathBuf,
+        path: Option<std::path::PathBuf>,
     }
 }
 
@@ -77,8 +78,13 @@ where
         &mut self,
         src: &mut BytesMut,
     ) -> Result<Option<Self::Item>, Self::Error> {
-        //println!("Decoding {} bytes of {}", src.len(), type_name::<U>());
+        if src.len() == 0 {
+            return Ok(None);
+        }
+        debug!("Decoding {} bytes of {}", src.len(), type_name::<U>());
         let result = bincode::deserialize::<U>(&src);
+        src.advance(src.len());
+        //src.clear();
         match result {
             Ok(message) => {/*println!("Deserialized");*/ Ok(Some(message))},
             Err(e) => {/*println!("Failed to deserialize {e}");*/ Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "fail deserializing message"))}
@@ -95,16 +101,12 @@ impl<T, U> AsymmetricMessageCodec<T, U> {
     }
 }
 
-pub async fn listen(socket_path: PathBuf, sender: mpsc::Sender<UIMessage>) {
-    if socket_path.exists() {
-        fs::remove_file(&socket_path).await.unwrap();
-    }
-    let listener = UnixListener::bind(&socket_path).unwrap();
-    println!("Serwer nasluchuje na {socket_path:?}");
+pub async fn listen(listener: UnixListener, sender: mpsc::Sender<UIMessage>) {
+    info!("Serwer nasluchuje na {:?}", listener);
     
     loop {
         let (socket, _) = listener.accept().await.unwrap();
-        println!("Obsługa nowego połączenia");
+        info!("Obsługa nowego połączenia");
         let sender = sender.clone();
         tokio::spawn(async move {
             let encoder: AsymmetricMessageCodec<String, UIMessage> = AsymmetricMessageCodec::new();
@@ -112,8 +114,8 @@ pub async fn listen(socket_path: PathBuf, sender: mpsc::Sender<UIMessage>) {
             loop {
                 tokio::select! {
                     Some(message) = framed.next() => {
-                        //framed.send("Actor at core received a message".to_string()).await.unwrap();
-                        println!("{message:?}");
+                        info!("Received: {message:?}");
+                        framed.send(format!("Received {message:?}",)).await.unwrap();
                         match message {
                             Ok(message) => {sender.send(message).await.unwrap()},
                             Err(e) => {}
@@ -140,10 +142,10 @@ pub async fn connect(socket_path: PathBuf) -> Result<mpsc::Sender<UIMessage>, Bo
         loop {
             tokio::select! {
                 Some(message) = receiver.recv() => {
-                    println!("Actor received message, sending to socket");
+                    debug!("Actor received message, sending to socket");
                     framed.send(message).await.unwrap();
                     let resp = framed.next().await.unwrap().unwrap();
-                    println!("Received: {}", resp);
+                    info!("Received: {}", resp);
                 }
             };
         }

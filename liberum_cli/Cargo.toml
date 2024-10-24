@@ -10,3 +10,5 @@ clap_derive = {version="4"}
 shlex = "1"
 homedir = "0.3"
 tokio ={ version = "1.40", features = ["full"]}
+tracing = { version = "0.1"}
+tracing-subscriber = { version = "0.3.18" }

@@ -1,15 +1,16 @@
 use std::{env::temp_dir, fs, io::Write, path::{Path, PathBuf}};
 use clap::{Error, Parser, Subcommand};
 use tokio::net::UnixStream;
-use liberum_core;
-
-const LN_CONFIG_DIRECTORY: &str = ".liberum-neto";
+use liberum_core::{self, UIMessage};
+use tracing_subscriber;
+use tracing::{info, warn, error, debug};
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
-
+    tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).init();
     //let mut socket = UnixStream::connect()).await.unwrap();
-    let mut sender = liberum_core::connect(temp_dir().join("liberum-core-socket")).await;
+    let path = Path::new("/tmp/liberum-core/");
+    let mut sender = liberum_core::connect(path.join("liberum-core-socket")).await;
 
     loop {
         let line = readline()?;
@@ -25,40 +26,40 @@ async fn main() -> Result<(), String> {
                 cli
             },
             Err(e) => {
-                println!("{e}");
+                info!("Match CLI: {e}");
                 continue;
             }
         };
         
+        let sender = match sender.as_ref() {
+            Ok(sender) => {
+                sender
+            }
+            Err(e) => {
+                error!("No connection with the core!");
+                error!("{}",e.to_string());
+                continue;
+            }
+        };
 
         let response: Result<bool, ()> = match cli.command {
             Commands::NewNode { path } => {
-                let path_str = path;
-    
-                let (path, result) = get_config_or_default(path_str, false);
-                if let Err(()) = result {
-                    println!("{} already exits!", path.to_str().unwrap());
-                    fs::remove_dir(&path).unwrap();
-                } //else {              
-                    println!("Creating node at {}", path.to_str().expect("Path should be able to be represented as string"));
-                    let sender = sender.as_ref().unwrap();
-                    sender.send(liberum_core::UIMessage::GenerateConfig {  }).await.unwrap();
-                    println!("Sent message!");
-                    
-                //}
-                // path is valid at this point
+                let path = match path {
+                    Some(p) => Some(PathBuf::from(p)),
+                    None => None,
+                };
+                debug!("Creating node at {:?}", path);
+                sender.send(liberum_core::UIMessage::GenerateConfig { path }).await.unwrap();
                 Ok(false)
             }
             
             Commands::LoadNode { path } => {
-                let path_str = path;
-    
-                let (path, result) = get_config_or_default(path_str, true);
-                if let Err(()) = result {
-                    println!("{} does not exit!", path.to_str().unwrap());
-                }  else {
-                    println!("Loading node config at {}", path.to_str().unwrap());
-                }
+                let path = match path {
+                    Some(p) => Some(PathBuf::from(p)),
+                    None => None,
+                };
+                debug!("Loading node config at {:?}", path);
+                sender.send(liberum_core::UIMessage::LoadConfig { path }).await.unwrap();
                 Ok(false)
             }
     
@@ -67,7 +68,7 @@ async fn main() -> Result<(), String> {
                 let path = std::path::Path::new(&path_str);
     
                 if !path.exists() {
-                    println!("File {path_str} does not exist");
+                    info!("File {path_str} does not exist");
                 } else {
                     let name = match name {
                         Some(name) => name,
@@ -75,13 +76,13 @@ async fn main() -> Result<(), String> {
                             String::from(path.file_name().expect("Path should contain filename").to_str().expect("Publish filename should be convertable to str"))
                         }
                     };
-                println!("Publish file {name} at {}", path.file_name().unwrap().to_str().unwrap());
+                debug!("Publish file {name} at {}", path.file_name().unwrap().to_str().unwrap());
                 }
                 
                 Ok(false)
             }
             Commands::DownloadFile { name } => {
-                println!("Download file");
+                debug!("Download file");
                 Ok(false)
             }
             Commands::Exit => {
@@ -91,7 +92,7 @@ async fn main() -> Result<(), String> {
 
         match response {
             Ok(quit) => {
-                println!("quit: {quit}");
+                info!("quit: {quit}");
                 if quit {
                     break;
                 }
@@ -105,27 +106,6 @@ async fn main() -> Result<(), String> {
 
     Ok(())
 }
-
-/// if path_str == None => if default path exists == should_exist then the path, else None
-/// if path_str == Some => if path exists == should_exist then the path, else None
-fn get_config_or_default(path_str: Option<String>, should_exist: bool) -> (PathBuf, Result<(),()>) {
-    let path: PathBuf;
-
-    if let Some(p) = path_str {
-        path = std::path::Path::new(&p).to_path_buf();
-    } else {
-        path = homedir::my_home().unwrap()
-        .expect("Should be able to find the home path")
-        .join(LN_CONFIG_DIRECTORY);
-    }
-
-    if path.exists() == should_exist{
-        return (path, Ok(()));
-    }
-
-    (path, Err(()))
-}
-
 
 #[derive(Debug, Parser)]
 #[command(multicall = true)]
