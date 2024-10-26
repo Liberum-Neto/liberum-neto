@@ -1,7 +1,7 @@
 use libp2p::identity::Keypair;
 use homedir;
 use serde::{Deserialize, Serialize};
-use tracing::{debug,info,error};
+use tracing::{debug,error};
 use std::{fs, io::Write, os::unix::fs::{DirBuilderExt, PermissionsExt}, path::{self, PathBuf}};
 
 const LN_CONFIG_DIRECTORY: &str = ".liberum-neto";

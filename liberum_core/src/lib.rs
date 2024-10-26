@@ -1,19 +1,16 @@
 
-use std::{env::temp_dir, error::Error, time::Duration};
-use libp2p::{futures::StreamExt, identity::Keypair, swarm::{SwarmEvent, Swarm}, Multiaddr, ping::{Behaviour}};
-use tracing::{debug, info, warn, error};
-use std::{io, net::TcpListener};
+use std::{error::Error, time::Duration};
+use libp2p::futures::StreamExt;
+use tracing::{debug, error, info, warn};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use tokio::{fs, io::AsyncWriteExt, sync::{mpsc, oneshot}};
-use tokio::io::Interest;
+use tokio::sync::mpsc;
 use tokio::net::{UnixStream, UnixListener};
 use std::path::PathBuf;
 
-use tokio_util::codec::{self, LinesCodec, Decoder, Encoder};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
-use std::mem;
+use tokio_util::codec::{Decoder, Encoder};
+use bytes::{Buf, BufMut, BytesMut};
 use std::marker::PhantomData;
-use futures::{channel::mpsc::Receiver, prelude::*};
+use futures::prelude::*;
 use std::any::type_name;
 
 pub struct UIActor {
@@ -32,7 +29,7 @@ pub enum UIMessage {
 }
 
 impl UIActor {
-    pub fn new(path: &str) -> Self {
+    pub fn new() -> Self {
         let (sender, receiver) = mpsc::channel(16);
         UIActor {
             sender,
@@ -58,10 +55,7 @@ where
         item: T,
         dst: &mut BytesMut,
     ) -> Result<(), Self::Error> {
-        //println!("Encoding {} bytes of {}", std::mem::size_of::<T>(), type_name::<T>());
-        let len= dst.len();
         dst.put(bincode::serialize::<T>(&item).unwrap().as_slice());
-        //println!("Encoded {} bytes",dst.len() - len);
         Ok(())
     }
 }
@@ -84,10 +78,9 @@ where
         debug!("Decoding {} bytes of {}", src.len(), type_name::<U>());
         let result = bincode::deserialize::<U>(&src);
         src.advance(src.len());
-        //src.clear();
         match result {
-            Ok(message) => {/*println!("Deserialized");*/ Ok(Some(message))},
-            Err(e) => {/*println!("Failed to deserialize {e}");*/ Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "fail deserializing message"))}
+            Ok(message) => {debug!("Deserialized"); Ok(Some(message))},
+            Err(e) => {error!("Failed to deserialize {e}"); Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "fail deserializing message"))}
         }
     }
 }
@@ -118,7 +111,7 @@ pub async fn listen(listener: UnixListener, sender: mpsc::Sender<UIMessage>) {
                         framed.send(format!("Received {message:?}",)).await.unwrap();
                         match message {
                             Ok(message) => {sender.send(message).await.unwrap()},
-                            Err(e) => {}
+                            Err(e) => {warn!("Error receiving message: {e:?}"); break;}
                         };
                     },
                     else => {

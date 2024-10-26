@@ -1,16 +1,15 @@
-use std::{env::temp_dir, fs, io::Write, path::{Path, PathBuf}};
-use clap::{Error, Parser, Subcommand};
-use tokio::net::UnixStream;
-use liberum_core::{self, UIMessage};
+use std::{io::Write, path::{Path, PathBuf}};
+use clap::{Parser, Subcommand};
+use liberum_core;
 use tracing_subscriber;
-use tracing::{info, warn, error, debug};
+use tracing::{info, error, debug};
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
     tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).init();
     //let mut socket = UnixStream::connect()).await.unwrap();
     let path = Path::new("/tmp/liberum-core/");
-    let mut sender = liberum_core::connect(path.join("liberum-core-socket")).await;
+    let sender = liberum_core::connect(path.join("liberum-core-socket")).await;
 
     loop {
         let line = readline()?;
@@ -82,7 +81,7 @@ async fn main() -> Result<(), String> {
                 Ok(false)
             }
             Commands::DownloadFile { name } => {
-                debug!("Download file");
+                debug!("Download file {name}");
                 Ok(false)
             }
             Commands::Exit => {

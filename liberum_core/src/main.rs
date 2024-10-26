@@ -1,4 +1,4 @@
-use std::{fs::{self, Permissions}, os::unix::fs::PermissionsExt, path, time::Duration};
+use std::{fs::{self, Permissions}, os::unix::fs::PermissionsExt, path::Path, time::Duration};
 use tracing::{info, error, debug};
 use libp2p::swarm::Swarm;
 use tokio::sync::mpsc;
@@ -22,12 +22,13 @@ fn build_swarm(config: &Config) -> Result<libp2p::swarm::Swarm<libp2p::ping::Beh
 
 
 #[tokio::main]
-pub async fn run(path: &path::Path) -> Result<(), Box<dyn std::error::Error>>{
+pub async fn run(path: &Path) -> Result<(), Box<dyn std::error::Error>>{
     let mut config: Option<Config> = None;
 
     let (sender, mut receiver) = mpsc::channel(16);
     let socket = path.join("liberum-core-socket");
-    fs::remove_file(&socket).unwrap_or_else(|e|println!("{e}"));
+    
+    fs::remove_file(&socket).unwrap_or_else(|e|debug!("Daemon removing old socket file: {e}"));
     let listener = UnixListener::bind(&socket).unwrap();
     fs::set_permissions(&socket, Permissions::from_mode(0o666)).unwrap();
     tokio::spawn(liberum_core::listen(listener, sender.clone()));
@@ -85,13 +86,22 @@ pub async fn run(path: &path::Path) -> Result<(), Box<dyn std::error::Error>>{
 }
 
 
+fn setup_logging() {
+    tracing_subscriber::fmt()
+    .with_max_level(tracing::Level::DEBUG)
+    .with_line_number(true)
+    .with_target(true)
+    .pretty()
+    .with_file(true).init();
+}
+
 
 fn main() {
-    tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).init();
+    setup_logging();
 
-    let path = path::Path::new("/tmp/liberum-core/");
-    fs::remove_dir_all(path).unwrap_or_else(|e|println!("{e}"));
-    fs::create_dir(path).unwrap_or_else(|e| println!("{e}"));
+    let path = Path::new("/tmp/liberum-core/");
+    fs::remove_dir_all(path).unwrap_or_else(|e|debug!("{e}"));
+    fs::create_dir(path).unwrap_or_else(|e| debug!("{e}"));
     let args: Vec<String> = std::env::args().collect();
     let uid = nix::unistd::geteuid();
     let gid = nix::unistd::getgid();
