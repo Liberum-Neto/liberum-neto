@@ -8,10 +8,6 @@ license = "MIT"
 [lib]
 path="src/lib.rs"
 
-[[bin]]
-name="liberum_core"
-path="src/main.rs"
-
 [package.metadata.release]
 release = false
 

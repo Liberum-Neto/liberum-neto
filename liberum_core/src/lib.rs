@@ -21,10 +21,10 @@ pub struct UIActor {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum UIMessage {
     GenerateConfig {
-        path: Option<std::path::PathBuf>,
+        path: Option<std::path::PathBuf>
     },
     LoadConfig {
-        path: Option<std::path::PathBuf>,
+        path: Option<std::path::PathBuf>
     }
 }
 
@@ -94,43 +94,44 @@ impl<T, U> AsymmetricMessageCodec<T, U> {
     }
 }
 
-pub async fn listen(listener: UnixListener, sender: mpsc::Sender<UIMessage>) {
+pub async fn listen(listener: UnixListener, sender: mpsc::Sender<UIMessage>, mut receiver: mpsc::Receiver<String>) {
     info!("Serwer nasluchuje na {:?}", listener);
     
     loop {
         let (socket, _) = listener.accept().await.unwrap();
         info!("Obsługa nowego połączenia");
         let sender = sender.clone();
-        tokio::spawn(async move {
-            let encoder: AsymmetricMessageCodec<String, UIMessage> = AsymmetricMessageCodec::new();
-            let mut framed = encoder.framed(socket);
-            loop {
-                tokio::select! {
-                    Some(message) = framed.next() => {
-                        info!("Received: {message:?}");
-                        framed.send(format!("Received {message:?}",)).await.unwrap();
-                        match message {
-                            Ok(message) => {sender.send(message).await.unwrap()},
-                            Err(e) => {warn!("Error receiving message: {e:?}"); break;}
-                        };
-                    },
-                    else => {
-                        break;
-                    }
+        let encoder: AsymmetricMessageCodec<String, UIMessage> = AsymmetricMessageCodec::new();
+        let mut framed = encoder.framed(socket);
+        loop {
+            tokio::select! {
+                Some(message) = framed.next() => {
+                    info!("Received: {message:?}");
+                    //framed.send(format!("Received {message:?}",)).await.unwrap();
+                    match message {
+                        Ok(message) => {
+                            sender.send(message).await.unwrap();
+                            let response = receiver.recv().await.unwrap();
+                            framed.send(response).await.unwrap();
+                        },
+                        Err(e) => {warn!("Error receiving message: {e:?}"); break;}
+                    };
+                },
+                else => {
+                    break;
                 }
-                tokio::time::sleep(Duration::from_millis(100)).await;
             }
-        });
-
-        
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 }
 
-pub async fn connect(socket_path: PathBuf) -> Result<mpsc::Sender<UIMessage>, Box<dyn Error>> {
+pub async fn connect(socket_path: PathBuf) -> Result<(mpsc::Sender<UIMessage>, mpsc::Receiver<String>), Box<dyn Error>> {
     let socket = UnixStream::connect(&socket_path).await?;
     let encoder: AsymmetricMessageCodec<UIMessage, String> = AsymmetricMessageCodec::new();
     let mut framed = encoder.framed(socket);
     let (sender,mut receiver) = mpsc::channel::<UIMessage>(16);
+    let (resp_sender, mut resp_receiver) = mpsc::channel::<String>(16);
     tokio::spawn (async move {
         loop {
             tokio::select! {
@@ -139,9 +140,10 @@ pub async fn connect(socket_path: PathBuf) -> Result<mpsc::Sender<UIMessage>, Bo
                     framed.send(message).await.unwrap();
                     let resp = framed.next().await.unwrap().unwrap();
                     info!("Received: {}", resp);
+                    resp_sender.send(resp).await.unwrap();
                 }
             };
         }
     });
-    Ok(sender)
+    Ok((sender, resp_receiver))
 }

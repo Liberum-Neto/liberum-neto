@@ -2,7 +2,7 @@ use libp2p::identity::Keypair;
 use homedir;
 use serde::{Deserialize, Serialize};
 use tracing::{debug,error};
-use std::{fs, io::Write, os::unix::fs::{DirBuilderExt, PermissionsExt}, path::{self, PathBuf}};
+use std::{fs, io::Write, os::unix::fs::{DirBuilderExt, PermissionsExt}, path::{self, Path, PathBuf}};
 
 const LN_CONFIG_DIRECTORY: &str = ".liberum-neto";
 
@@ -39,7 +39,7 @@ impl Config {
         libp2p::identity::Keypair::generate_ed25519()
     }
 
-    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>>{
+    pub fn save(&self) -> Result<&Path, Box<dyn std::error::Error>>{
         debug!("Saving config at {:?}",self.path);
         if let Some(parent) = self.path.parent() {
             debug!("parent: {parent:?}");
@@ -53,7 +53,7 @@ impl Config {
         let serializable = self.as_serializable();
         file.write_all(serde_json::to_string(&serializable)?.as_bytes())?;
         debug!("Success in writing the {serializable:?} config to {:?}", self.path);
-        Ok(())
+        Ok(self.path.as_path())
     }
 
 

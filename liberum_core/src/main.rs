@@ -26,12 +26,13 @@ pub async fn run(path: &Path) -> Result<(), Box<dyn std::error::Error>>{
     let mut config: Option<Config> = None;
 
     let (sender, mut receiver) = mpsc::channel(16);
+    let (resp_sender, mut resp_receiver) = mpsc::channel::<String>(16);
     let socket = path.join("liberum-core-socket");
     
     fs::remove_file(&socket).unwrap_or_else(|e|debug!("Daemon removing old socket file: {e}"));
     let listener = UnixListener::bind(&socket).unwrap();
     fs::set_permissions(&socket, Permissions::from_mode(0o666)).unwrap();
-    tokio::spawn(liberum_core::listen(listener, sender.clone()));
+    tokio::spawn(liberum_core::listen(listener, sender.clone(), resp_receiver));
 
     // Loop until a swarm can be built
     let swarm: Result<Swarm<libp2p::ping::Behaviour>, Box<dyn std::error::Error>> = loop {
@@ -41,18 +42,20 @@ pub async fn run(path: &Path) -> Result<(), Box<dyn std::error::Error>>{
                 match msg {
                     UIMessage::GenerateConfig{ path } => {
                         debug!("Received GenerateConfig in core!");
-                        match Config::new(path.clone()).save() {
-                            Ok(_) => {},
-                            Err(e) => {
-                                error!("Error generating a config {e}")
-                            }
+                        if let Ok(path) = Config::new(path.clone()).save() {
+                            resp_sender.send(format!("Config generated at {path:?}")).await.unwrap();
+                        } else {
+                            error!("Error generating the config at {path:?}");
                         }
                     },
                     UIMessage::LoadConfig{ path } => {
                         debug!("Received LoadConfig {path:?} in core!");
                         if let Ok(c) = Config::load(path.clone()) {
-                            debug!("Successfully oaded the config at {path:?}");
+                            debug!("Successfully loaded the config at {:?}", c.path);
+                            resp_sender.send(format!("Config loaded from {path:?}")).await.unwrap();
                             config = Some(c);
+                        } else {
+                            error!("Error loading the config at {path:?}");
                         }
                     }
                 }
@@ -61,7 +64,7 @@ pub async fn run(path: &Path) -> Result<(), Box<dyn std::error::Error>>{
                     debug!("Got a config. Trying to build a swarm");
                     let s = build_swarm(&config);
                     if let Ok(s) = s {
-                        break Ok(s);
+                        //break Ok(s);  // With this line the program will end unless if using the swarm is not implemented
                     }
                 }
             }
