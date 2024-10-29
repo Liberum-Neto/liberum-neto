@@ -1,15 +1,15 @@
-use tracing::{debug, error};
-use serde::{de::DeserializeOwned, Serialize};
 use bytes::{Buf, BufMut, BytesMut};
-use std::marker::PhantomData;
+use serde::{de::DeserializeOwned, Serialize};
 use std::any::type_name;
+use std::marker::PhantomData;
 use tokio_util::codec::{Decoder, Encoder};
+use tracing::{debug, error};
 
 /// A codec to use a byte stream to encode and decode messages of different types
 /// - create a stream of structs from a stream of bytes
 pub struct AsymmetricMessageCodec<T, U> {
     encoded_type: PhantomData<T>,
-    decoded_type: PhantomData<U>
+    decoded_type: PhantomData<U>,
 }
 
 impl<T, U> Encoder<T> for AsymmetricMessageCodec<T, U>
@@ -19,14 +19,13 @@ where
 {
     type Error = std::io::Error;
 
-    fn encode(
-        &mut self,
-        item: T,
-        dst: &mut BytesMut,
-    ) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: T, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let serialized = bincode::serialize::<T>(&item).or_else(|e| {
             error!("Failed to serialize {e}");
-            Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "fail serializing message"))
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "fail serializing message",
+            ))
         })?;
         dst.put(serialized.as_slice());
         Ok(())
@@ -41,10 +40,7 @@ where
     type Item = U;
     type Error = std::io::Error;
 
-    fn decode(
-        &mut self,
-        src: &mut BytesMut,
-    ) -> Result<Option<Self::Item>, Self::Error> {
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         if src.len() == 0 {
             return Ok(None);
         }
@@ -52,8 +48,14 @@ where
         let result = bincode::deserialize::<U>(&src);
         src.advance(src.len());
         match result {
-            Ok(message) => {Ok(Some(message))},
-            Err(e) => {error!("Failed to deserialize {e}"); Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "fail deserializing message"))}
+            Ok(message) => Ok(Some(message)),
+            Err(e) => {
+                error!("Failed to deserialize {e}");
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "fail deserializing message",
+                ))
+            }
         }
     }
 }

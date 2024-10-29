@@ -1,9 +1,9 @@
-use std::path::Path;
+use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use liberum_core;
+use std::path::Path;
+use tracing::{debug, error, info};
 use tracing_subscriber;
-use tracing::{info, error, debug};
-use anyhow::{Result, anyhow};
 
 #[derive(Parser)]
 struct Cli {
@@ -24,12 +24,14 @@ enum Commands {
     StartNode {
         #[arg()]
         name: String,
-    }
+    },
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).init();
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
     let path = Path::new("/tmp/liberum-core/");
     let contact = liberum_core::connect(path.join("liberum-core-socket")).await;
 
@@ -46,19 +48,22 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::NewNode { name } => {
             debug!("Creating node {name}");
-            sender.send(liberum_core::messages::DaemonRequest::NewNode { name }).await?;
+            sender
+                .send(liberum_core::messages::DaemonRequest::NewNode { name })
+                .await?;
             match receiver.recv().await {
                 Some(r) => info!("Client responds: {}", r),
                 None => {
                     error!("Failed to receive response");
                 }
             };
-            
         }
-        
+
         Commands::StartNode { name } => {
             debug!("Starting node {name}");
-            sender.send(liberum_core::messages::DaemonRequest::StartNode { name }).await?;
+            sender
+                .send(liberum_core::messages::DaemonRequest::StartNode { name })
+                .await?;
             match receiver.recv().await {
                 Some(r) => info!("Client responds: {}", r),
                 None => {

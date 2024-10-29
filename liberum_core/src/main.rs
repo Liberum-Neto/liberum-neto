@@ -1,11 +1,16 @@
-use std::{fs::{self, Permissions}, os::unix::fs::PermissionsExt, path::Path, io};
-use tracing::{ error, debug};
-use tokio::sync::mpsc;
-use daemonize::*;
-use tokio::net::UnixListener;
-use liberum_core::messages;
-use liberum_core::core_connection;
 use anyhow::{anyhow, Result};
+use daemonize::*;
+use liberum_core::core_connection;
+use liberum_core::messages;
+use std::{
+    fs::{self, Permissions},
+    io,
+    os::unix::fs::PermissionsExt,
+    path::Path,
+};
+use tokio::net::UnixListener;
+use tokio::sync::mpsc;
+use tracing::{debug, error};
 
 /// The main function of the core daemon
 #[tokio::main]
@@ -19,8 +24,8 @@ pub async fn run(path: &Path) -> Result<()> {
     let socket = path.join("liberum-core-socket");
     fs::remove_file(&socket).or_else(|e| {
         if e.kind() != io::ErrorKind::NotFound {
-            error!("Failed to remove the socket: {e}");
-            return Err(anyhow!(e))
+            error!("Failed to remove the old socket: {e}");
+            return Err(anyhow!(e));
         }
         Ok(())
     })?;
@@ -32,9 +37,12 @@ pub async fn run(path: &Path) -> Result<()> {
         error!("Failed to set permissions on the socket: {e}");
         Err(anyhow!(e))
     })?;
-    tokio::spawn(core_connection::listen(listener, daemon_request_sender.clone(), daemon_response_receiver));
+    tokio::spawn(core_connection::listen(
+        listener,
+        daemon_request_sender.clone(),
+        daemon_response_receiver,
+    ));
 
-    
     loop {
         tokio::select! {
             Some(msg) = daemon_request_receiver.recv() => {
@@ -69,38 +77,36 @@ pub async fn run(path: &Path) -> Result<()> {
             }
             else => {}
         }
-    };
-
+    }
 }
 
 /// Helper function to setup logging
 fn setup_logging() {
     tracing_subscriber::fmt()
-    .with_max_level(tracing::Level::DEBUG)
-    .with_line_number(true)
-    .with_target(true)
-    .pretty()
-    .with_file(true).init();
+        .with_max_level(tracing::Level::DEBUG)
+        .with_line_number(true)
+        .with_target(true)
+        .pretty()
+        .with_file(true)
+        .init();
 }
-
 
 /// Actual main function that starts the daemon
 /// Must be run without tokio runtime to start the daemon properly
 /// Only after the process is daemonized, the tokio runtime is started
 
-
 fn start_daemon(path: &Path) -> Result<()> {
     let uid = nix::unistd::geteuid();
     let gid = nix::unistd::getgid();
-    
+
     let daemonize = Daemonize::new()
-    .working_directory(path)
-    .pid_file(path.join("core.pid"))
-    //.chown_pid_file(true)
-    .stdout(fs::File::create(path.join("stdout.out"))?)
-    .stderr(fs::File::create(path.join("stderr.out"))?)
-    .user(uid.as_raw())
-    .group(gid.as_raw());
+        .working_directory(path)
+        .pid_file(path.join("core.pid"))
+        //.chown_pid_file(true)
+        .stdout(fs::File::create(path.join("stdout.out"))?)
+        .stderr(fs::File::create(path.join("stderr.out"))?)
+        .user(uid.as_raw())
+        .group(gid.as_raw());
     debug!("Attempting to start the daemon as user {uid} group {gid}!");
     if daemonize.start().is_err() {
         return Err(anyhow!("Failed to daemonize the process"));
@@ -112,21 +118,23 @@ fn start_daemon(path: &Path) -> Result<()> {
 fn main() -> Result<()> {
     setup_logging();
     let path = Path::new("/tmp/liberum-core/");
-    match fs::remove_dir_all(path){ 
-        Err(e) => { 
-            if e.kind() == io::ErrorKind::NotFound {
-                fs::create_dir(path)?;
+    match fs::remove_dir_all(path) {
+        Err(e) => {
+            if e.kind() != io::ErrorKind::NotFound {
+                error!("Failed to remove the directory: {e}");
+                return Err(anyhow!(e));
             }
-        },
+        }
         _ => {}
     }
+    fs::create_dir(path)?;
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 && args[1] == "--daemon" {
         start_daemon(path)?;
-    } 
+    }
 
     match run(&path) {
-        Ok(_) => {Ok(())},
+        Ok(_) => Ok(()),
         Err(e) => {
             error!("Error running the core daemon: {e}");
             std::process::exit(-1);

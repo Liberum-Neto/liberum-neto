@@ -1,11 +1,15 @@
-use libp2p::identity::Keypair;
+use anyhow::{anyhow, Result};
 use homedir;
+use libp2p::identity::Keypair;
 use serde::{Deserialize, Serialize};
-use tracing::{debug,error};
-use std::{fs, io::Write, os::unix::fs::{DirBuilderExt, PermissionsExt}, path::{self, Path, PathBuf}};
-use anyhow::{Result, anyhow};
+use std::{
+    fs,
+    io::Write,
+    os::unix::fs::{DirBuilderExt, PermissionsExt},
+    path::{self, Path, PathBuf},
+};
+use tracing::{debug, error};
 /// This module manages saving the configuration of the nodes to the disk.
-
 
 const CONFIG_DIRECTORY_NAME: &str = ".liberum-neto";
 
@@ -45,7 +49,7 @@ impl ConfigManager {
     pub fn new(base_path: Option<PathBuf>) -> Result<Self> {
         let path = path_or_default(base_path)?;
         debug!("Creating config manager at {path:?}");
-        Ok(Self{path})
+        Ok(Self { path })
     }
 
     /// Adds a new node with new Identity and the given name, returns the path
@@ -54,7 +58,7 @@ impl ConfigManager {
         debug!("Adding config {} to {:?}", &name, self.path);
         if self.node_exists(name) {
             error!("Node {name} already exists!");
-            return Err(anyhow!(format!("Node {name} already exists!")))
+            return Err(anyhow!(format!("Node {name} already exists!")));
         }
         let path = self.get_node_config_path(name);
         Config::new(&name).save(&path)?;
@@ -64,13 +68,12 @@ impl ConfigManager {
     /// Gets the config of a node, returns an error if the node does not exist
     pub fn get_node_config(&self, name: &str) -> Result<Config> {
         debug!("Getting config for node {name}");
-        if ! self.node_exists(name) {
+        if !self.node_exists(name) {
             error!("Node {name} does not exist!");
-            return Err(anyhow!(format!("Node {name} does not exist!")))
+            return Err(anyhow!(format!("Node {name} does not exist!")));
         }
         let path = self.get_node_config_path(name);
         return Config::load(path.as_path());
-
     }
 
     pub fn save_node_config(&self, config: &Config) -> Result<()> {
@@ -88,7 +91,7 @@ impl ConfigManager {
     }
 
     /// Gets the path where a node of given name should be stored
-    /// Does not care if it exists or not 
+    /// Does not care if it exists or not
     pub fn get_node_path(&self, name: &str) -> PathBuf {
         return self.path.join(name);
     }
@@ -105,28 +108,41 @@ impl Config {
     /// The name is used to identify the node
     fn new(name: &str) -> Self {
         debug!("Creating config struct for node {name}");
-        Self{name: String::from(name), identity: Keypair::generate_ed25519()}
+        Self {
+            name: String::from(name),
+            identity: Keypair::generate_ed25519(),
+        }
     }
 
     /// Saves the config to the disk at the given path
     /// Serialization
-    fn save(&self, path: &Path) -> Result<()>{
-        debug!("Saving config at {:?}",path);
+    fn save(&self, path: &Path) -> Result<()> {
+        debug!("Saving config at {:?}", path);
         if let Some(parent) = path.parent() {
-            std::fs::DirBuilder::new().recursive(true).mode(0o711).create(&parent)?
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o711)
+                .create(&parent)?
         } else {
             error!("Parent directory of {path:?} not found");
             return Err(anyhow!("Parent directory not found"));
         }
-        
+
         let mut file = fs::File::create(&path)?;
         file.set_permissions(fs::Permissions::from_mode(0o600))?;
         let serializable: ConfigSerializable = self.try_into()?;
-        file.write_all(serde_json::to_string(&serializable).or_else(|e| {
-            error!("Could not serialize config: {e}");
-            Err(anyhow!(e))
-        })?.as_bytes())?;
-        debug!("Success in writing the {serializable:?} config to {:?}", path);
+        file.write_all(
+            serde_json::to_string(&serializable)
+                .or_else(|e| {
+                    error!("Could not serialize config: {e}");
+                    Err(anyhow!(e))
+                })?
+                .as_bytes(),
+        )?;
+        debug!(
+            "Success in writing the {serializable:?} config to {:?}",
+            path
+        );
         Ok(())
     }
 
@@ -134,8 +150,8 @@ impl Config {
     /// Deserialization
     fn load(path: &Path) -> Result<Self> {
         let file = fs::File::open(&path)?;
-        let serializable = serde_json::from_reader::<fs::File, ConfigSerializable>(file).or_else(
-            |e| {
+        let serializable =
+            serde_json::from_reader::<fs::File, ConfigSerializable>(file).or_else(|e| {
                 error!("Could not read config from {path:?}: {e}");
                 Err(anyhow!(e))
             })?;
@@ -143,7 +159,6 @@ impl Config {
         debug!("Success in reading {serializable:?} from {path:?}");
         Ok(config)
     }
-
 }
 
 impl TryFrom<&ConfigSerializable> for Config {
