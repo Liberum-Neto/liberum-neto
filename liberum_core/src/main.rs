@@ -1,24 +1,37 @@
-use std::{fs::{self, Permissions}, os::unix::fs::PermissionsExt, path::Path, time::Duration, io};
-use tracing::{info, error, debug};
-use libp2p::swarm::Swarm;
+use std::{fs::{self, Permissions}, os::unix::fs::PermissionsExt, path::Path, io};
+use tracing::{ error, debug};
 use tokio::sync::mpsc;
-use liberum_core::configs::Config;
 use daemonize::*;
 use tokio::net::UnixListener;
 use liberum_core::messages;
 use liberum_core::core_connection;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 
 /// The main function of the core daemon
 #[tokio::main]
 pub async fn run(path: &Path) -> Result<()> {
     let (daemon_request_sender, mut daemon_request_receiver) = mpsc::channel(16);
-    let (daemon_response_sender, mut daemon_response_receiver) = mpsc::channel::<String>(16);
-    let config_manager = liberum_core::configs::ConfigManager::new(None)?;
+    let (daemon_response_sender, daemon_response_receiver) = mpsc::channel::<String>(16);
+    let config_manager = liberum_core::configs::ConfigManager::new(None).or_else(|e| {
+        error!("Failed to load the config manager: {e}");
+        Err(e)
+    })?;
     let socket = path.join("liberum-core-socket");
-    fs::remove_file(&socket)?;
-    let listener = UnixListener::bind(&socket)?;
-    fs::set_permissions(&socket, Permissions::from_mode(0o666))?;
+    fs::remove_file(&socket).or_else(|e| {
+        if e.kind() != io::ErrorKind::NotFound {
+            error!("Failed to remove the socket: {e}");
+            return Err(anyhow!(e))
+        }
+        Ok(())
+    })?;
+    let listener = UnixListener::bind(&socket).or_else(|e| {
+        error!("Failed to bind the socket: {e}");
+        Err(anyhow!(e))
+    })?;
+    fs::set_permissions(&socket, Permissions::from_mode(0o666)).or_else(|e| {
+        error!("Failed to set permissions on the socket: {e}");
+        Err(anyhow!(e))
+    })?;
     tokio::spawn(core_connection::listen(listener, daemon_request_sender.clone(), daemon_response_receiver));
 
     

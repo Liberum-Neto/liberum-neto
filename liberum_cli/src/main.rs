@@ -1,8 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use clap::{Parser, Subcommand};
 use liberum_core;
 use tracing_subscriber;
-use tracing::{info, warn, error, debug};
+use tracing::{info, error, debug};
 use anyhow::{Result, anyhow};
 
 #[derive(Parser)]

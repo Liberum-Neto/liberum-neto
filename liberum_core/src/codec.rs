@@ -1,4 +1,4 @@
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error};
 use serde::{de::DeserializeOwned, Serialize};
 use bytes::{Buf, BufMut, BytesMut};
 use std::marker::PhantomData;

@@ -1,6 +1,5 @@
-use std::error::Error;
 use libp2p::futures::StreamExt;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use tokio::sync::mpsc;
 use tokio::net::UnixStream;
 use std::path::PathBuf;
@@ -13,7 +12,7 @@ pub mod messages;
 pub mod core_connection;
 use messages::DaemonRequest;
 use codec::AsymmetricMessageCodec;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 
 
 /// Function for a CLI or other UI to connecto to the client daemon
@@ -24,7 +23,7 @@ pub async fn connect(socket_path: PathBuf) -> Result<(mpsc::Sender<DaemonRequest
     let encoder: AsymmetricMessageCodec<DaemonRequest, String> = AsymmetricMessageCodec::new();
     let mut daemon_socket = encoder.framed(socket);
     let (daemon_sender,mut daemon_receiver) = mpsc::channel::<DaemonRequest>(16);
-    let (ui_sender, mut ui_receiver) = mpsc::channel::<String>(16);
+    let (ui_sender, ui_receiver) = mpsc::channel::<String>(16);
     tokio::spawn (async move {
         loop {
             tokio::select! {

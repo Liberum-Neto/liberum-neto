@@ -1240,6 +1240,7 @@ dependencies = [
 name = "liberum_cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "clap_derive",
  "homedir",
@@ -1254,6 +1255,7 @@ dependencies = [
 name = "liberum_core"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bincode",
  "bytes",
  "clap",

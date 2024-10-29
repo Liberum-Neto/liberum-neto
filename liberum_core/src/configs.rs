@@ -1,10 +1,8 @@
-use bincode::config;
 use libp2p::identity::Keypair;
 use homedir;
 use serde::{Deserialize, Serialize};
 use tracing::{debug,error};
-use void::ResultVoidErrExt;
-use std::{fs, io::Write, os::unix::fs::{DirBuilderExt, PermissionsExt}, path::{self, Path, PathBuf}, string};
+use std::{fs, io::Write, os::unix::fs::{DirBuilderExt, PermissionsExt}, path::{self, Path, PathBuf}};
 use anyhow::{Result, anyhow};
 /// This module manages saving the configuration of the nodes to the disk.
 
