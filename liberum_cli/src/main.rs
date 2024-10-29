@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use liberum_core;
 use tracing_subscriber;
 use tracing::{info, warn, error, debug};
+use anyhow::{Result, anyhow};
 
 #[derive(Parser)]
 struct Cli {
@@ -27,29 +28,43 @@ enum Commands {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), String> {
+async fn main() -> Result<()> {
     tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).init();
     let path = Path::new("/tmp/liberum-core/");
     let contact = liberum_core::connect(path.join("liberum-core-socket")).await;
 
-    if let Err(e) = contact {
-        error!("Failed to connect to the core: ({e}). Make sure the client is running!");
-        return Err(e.to_string());
-    }
-    let (sender, mut receiver) = contact.unwrap();
+    let (sender, mut receiver) = match contact {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to connect to the core: ({e}). Make sure the client is running!");
+            Err(anyhow!(e))?
+        }
+    };
+
     let cli = Cli::parse();
 
     match cli.command {
         Commands::NewNode { name } => {
             debug!("Creating node {name}");
-            sender.send(liberum_core::messages::DaemonRequest::NewNode { name }).await.unwrap();
-            info!("Client responds: {}", receiver.recv().await.unwrap());
+            sender.send(liberum_core::messages::DaemonRequest::NewNode { name }).await?;
+            match receiver.recv().await {
+                Some(r) => info!("Client responds: {}", r),
+                None => {
+                    error!("Failed to receive response");
+                }
+            };
+            
         }
         
         Commands::StartNode { name } => {
             debug!("Starting node {name}");
-            sender.send(liberum_core::messages::DaemonRequest::StartNode { name }).await.unwrap();
-            info!("Client responds: {}", receiver.recv().await.unwrap());
+            sender.send(liberum_core::messages::DaemonRequest::StartNode { name }).await?;
+            match receiver.recv().await {
+                Some(r) => info!("Client responds: {}", r),
+                None => {
+                    error!("Failed to receive response");
+                }
+            };
         }
     };
 

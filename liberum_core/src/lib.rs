@@ -13,13 +13,13 @@ pub mod messages;
 pub mod core_connection;
 use messages::DaemonRequest;
 use codec::AsymmetricMessageCodec;
-
+use anyhow::{Result, anyhow};
 
 
 /// Function for a CLI or other UI to connecto to the client daemon
 /// Returns a sender and receiver for sending and receiving messages
 /// from/to the daemon
-pub async fn connect(socket_path: PathBuf) -> Result<(mpsc::Sender<DaemonRequest>, mpsc::Receiver<String>), Box<dyn Error>> {
+pub async fn connect(socket_path: PathBuf) -> Result<(mpsc::Sender<DaemonRequest>, mpsc::Receiver<String>)> {
     let socket = UnixStream::connect(&socket_path).await?;
     let encoder: AsymmetricMessageCodec<DaemonRequest, String> = AsymmetricMessageCodec::new();
     let mut daemon_socket = encoder.framed(socket);
@@ -29,10 +29,26 @@ pub async fn connect(socket_path: PathBuf) -> Result<(mpsc::Sender<DaemonRequest
         loop {
             tokio::select! {
                 Some(message) = daemon_receiver.recv() => {
-                    daemon_socket.send(message).await.unwrap();
-                    let resp = daemon_socket.next().await.unwrap().unwrap();
+                    match daemon_socket.send(message).await{
+                        Err(e)=> error!("Failed to send message to daemon: {e}"),
+                        Ok(_) => {}
+                    }
+                    let resp = match daemon_socket.next().await {
+                        Some(Ok(resp)) => resp,
+                        Some(Err(e)) => {
+                            error!("Error receiving message: {e}");
+                            break;
+                        },
+                        None => {
+                            debug!("Connection closed");
+                            break;
+                        }
+                    };
                     info!("Received: {}", resp);
-                    ui_sender.send(resp).await.unwrap();
+                    match ui_sender.send(resp).await {
+                        Err(e) => error!("Failed to send message to UI: {e}"),
+                        Ok(_) => {}
+                    }
                 }
             };
         }

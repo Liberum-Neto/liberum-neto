@@ -24,7 +24,11 @@ where
         item: T,
         dst: &mut BytesMut,
     ) -> Result<(), Self::Error> {
-        dst.put(bincode::serialize::<T>(&item).unwrap().as_slice());
+        let serialized = bincode::serialize::<T>(&item).or_else(|e| {
+            error!("Failed to serialize {e}");
+            Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "fail serializing message"))
+        })?;
+        dst.put(serialized.as_slice());
         Ok(())
     }
 }
