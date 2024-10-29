@@ -28,7 +28,7 @@ pub async fn listen(listener: UnixListener, to_daemon_sender: mpsc::Sender<messa
                         Ok(message) => {
                             to_daemon_sender.send(message).await.or_else(break);
                             let response = from_daemon_receiver.recv().await.unwrap();
-                            daemon_socket_framed.send(response).await.unwrap();
+                            let _ = daemon_socket_framed.send(response).await;
                         },
                         Err(e) => {warn!("Error receiving message: {e:?}"); break;}
                     };
@@ -37,7 +37,6 @@ pub async fn listen(listener: UnixListener, to_daemon_sender: mpsc::Sender<messa
                     break;
                 }
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
 }
