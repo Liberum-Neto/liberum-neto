@@ -6,11 +6,6 @@ use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::message::{Context, Message};
 use kameo::Actor;
 use rusqlite::OptionalExtension;
-<<<<<<< HEAD
-=======
-use tokio::sync::{mpsc, oneshot};
-use tokio::task::JoinHandle;
->>>>>>> c35ca40 (liberum_core//main.rs: Fix /tmp/ dir not always created)
 use tokio_rusqlite::Connection;
 
 use crate::fragment::key::Key;
@@ -147,7 +142,6 @@ impl Message<Get> for Vault {
 impl Message<Remove> for Vault {
     type Reply = Result<()>;
 
-<<<<<<< HEAD
     async fn handle(&mut self, _: Remove, _: Context<'_, Self, Self::Reply>) -> Self::Reply {
         todo!()
     }
@@ -164,12 +158,4 @@ mod tests {
         let vault_ref = kameo::spawn(Vault::in_memory().await.unwrap());
         vault_ref.ask(Store(Fragment::random())).send().await.unwrap();
     }
-=======
-    queries
-        .send(Query::Store { fragment, resp: tx })
-        .await
-        .map_err(|e| anyhow!(e))?;
-
-    rx.await.map_err(|e| anyhow!(e))?
->>>>>>> c35ca40 (liberum_core//main.rs: Fix /tmp/ dir not always created)
 }
