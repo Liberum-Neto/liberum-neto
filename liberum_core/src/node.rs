@@ -1,10 +1,7 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use liberum_core::configs::ConfigSerializable;
+use kameo::{message::Message, Actor};
 use libp2p::identity::Keypair;
 use serde::{Deserialize, Serialize};
 
@@ -14,18 +11,6 @@ const NODE_DIRECTORY_NAME: &str = ".liberum-neto";
 pub struct Node {
     name: String,
     keypair: Keypair,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct NodeSerializable {
-    name: String,
-    keypair: Vec<u8>,
-}
-
-#[derive(Debug)]
-pub struct NodeStore {
-    nodes_dir_path: PathBuf,
-    nodes: HashMap<String, Node>,
 }
 
 impl Node {
@@ -45,32 +30,29 @@ impl Node {
     }
 }
 
+impl TryFrom<NodeSerializable> for Node {
+    type Error = anyhow::Error;
+
+    fn try_from(value: NodeSerializable) -> Result<Node> {
+        todo!()
+    }
+}
+
+struct LoadNodes(Vec<String>);
+struct StoreNodes(Vec<Node>);
+
+
+#[derive(Debug, Actor)]
+pub struct NodeStore {
+    nodes_dir_path: PathBuf,
+}
+
 impl NodeStore {
     pub fn new() -> Result<Self> {
         todo!()
     }
 
     pub fn with_custom_nodes_dir(custom_nodes_dir_path: &Path) -> Result<Self> {
-        todo!()
-    }
-
-    pub fn add_node(&self, node: Node) -> Result<&mut Node> {
-        todo!()
-    }
-
-    pub fn get_node(&self, name: &str) -> Result<Option<&Node>> {
-        todo!()
-    }
-
-    pub fn get_node_mut(&self, name: &str) -> Result<Option<&mut Node>> {
-        todo!()
-    }
-
-    pub fn get_nodes_names_all(&self) -> Result<Vec<String>> {
-        todo!()
-    }
-
-    pub fn save_all(&self) -> Result<()> {
         todo!()
     }
 
@@ -99,12 +81,34 @@ impl NodeStore {
     }
 }
 
-impl TryFrom<NodeSerializable> for Node {
-    type Error = anyhow::Error;
+impl Message<LoadNodes> for NodeStore {
+    type Reply = Result<Option<Node>>;
 
-    fn try_from(value: NodeSerializable) -> Result<Node> {
-        todo!()
+    async fn handle(
+            &mut self,
+            LoadNodes(names): LoadNodes,
+            _: kameo::message::Context<'_, Self, Self::Reply>,
+        ) -> Self::Reply {
+            todo!()
     }
+}
+
+impl Message<StoreNodes> for NodeStore {
+    type Reply = Result<()>;
+
+    async fn handle(
+            &mut self,
+            StoreNodes(nodes): StoreNodes,
+            _: kameo::message::Context<'_, Self, Self::Reply>,
+        ) -> Self::Reply {
+            todo!()
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct NodeSerializable {
+    name: String,
+    keypair: Vec<u8>,
 }
 
 impl TryFrom<Node> for NodeSerializable {
