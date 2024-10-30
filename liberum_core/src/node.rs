@@ -46,7 +46,11 @@ impl Node {
 }
 
 impl NodeStore {
-    pub fn new(nodes_dir_path: Option<&Path>) -> Result<Self> {
+    pub fn new() -> Result<Self> {
+        todo!()
+    }
+
+    pub fn with_custom_nodes_dir(custom_nodes_dir_path: &Path) -> Result<Self> {
         todo!()
     }
 
