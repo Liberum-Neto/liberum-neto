@@ -6,6 +6,7 @@ use tracing::{error, info, warn};
 use crate::codec;
 use crate::codec::AsymmetricMessageCodec;
 use crate::messages;
+use crate::messages::DaemonResult;
 use anyhow::{anyhow, Result};
 use futures::prelude::*;
 use messages::DaemonRequest;
@@ -17,10 +18,10 @@ use tokio_util::codec::Framed;
 async fn listen_connection(
     daemon_socket_framed: &mut Framed<
         tokio::net::UnixStream,
-        AsymmetricMessageCodec<String, DaemonRequest>,
+        AsymmetricMessageCodec<DaemonResult, DaemonRequest>,
     >,
     to_daemon_sender: &mpsc::Sender<DaemonRequest>,
-    from_daemon_receiver: &mut mpsc::Receiver<String>,
+    from_daemon_receiver: &mut mpsc::Receiver<DaemonResult>,
 ) -> Result<()> {
     loop {
         tokio::select! {
@@ -45,7 +46,7 @@ async fn listen_connection(
 pub async fn listen(
     listener: UnixListener,
     to_daemon_sender: mpsc::Sender<DaemonRequest>,
-    mut from_daemon_receiver: mpsc::Receiver<String>,
+    mut from_daemon_receiver: mpsc::Receiver<DaemonResult>,
 ) -> Result<()> {
     info!("Server listening on {:?}", listener);
 
@@ -55,7 +56,7 @@ pub async fn listen(
         let to_daemon_sender = to_daemon_sender.clone();
         let mut daemon_socket_framed: Framed<
             tokio::net::UnixStream,
-            AsymmetricMessageCodec<String, DaemonRequest>,
+            AsymmetricMessageCodec<DaemonResult, DaemonRequest>,
         > = codec::AsymmetricMessageCodec::new().framed(daemon_socket);
         let connection_result = listen_connection(
             &mut daemon_socket_framed,
