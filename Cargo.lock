@@ -1240,6 +1240,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum",
+ "thiserror",
  "tokio",
  "tokio-util",
  "tracing",
