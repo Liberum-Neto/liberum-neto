@@ -12,19 +12,19 @@ pub mod core_connection;
 pub mod messages;
 use anyhow::Result;
 use codec::AsymmetricMessageCodec;
-use messages::DaemonRequest;
+use messages::{DaemonRequest, DaemonResult};
 
 /// Function for a CLI or other UI to connecto to the client daemon
 /// Returns a sender and receiver for sending and receiving messages
 /// from/to the daemon
 pub async fn connect(
     socket_path: PathBuf,
-) -> Result<(mpsc::Sender<DaemonRequest>, mpsc::Receiver<String>)> {
+) -> Result<(mpsc::Sender<DaemonRequest>, mpsc::Receiver<DaemonResult>)> {
     let socket = UnixStream::connect(&socket_path).await?;
-    let encoder: AsymmetricMessageCodec<DaemonRequest, String> = AsymmetricMessageCodec::new();
+    let encoder: AsymmetricMessageCodec<DaemonRequest, DaemonResult> = AsymmetricMessageCodec::new();
     let mut daemon_socket = encoder.framed(socket);
     let (daemon_sender, mut daemon_receiver) = mpsc::channel::<DaemonRequest>(16);
-    let (ui_sender, ui_receiver) = mpsc::channel::<String>(16);
+    let (ui_sender, ui_receiver) = mpsc::channel::<DaemonResult>(16);
     tokio::spawn(async move {
         loop {
             tokio::select! {
@@ -44,7 +44,7 @@ pub async fn connect(
                             break;
                         }
                     };
-                    info!("Received: {}", resp);
+                    info!("Received: {:?}", resp);
                     match ui_sender.send(resp).await {
                         Err(e) => error!("Failed to send message to UI: {e}"),
                         Ok(_) => {}

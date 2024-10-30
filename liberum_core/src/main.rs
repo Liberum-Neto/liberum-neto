@@ -3,7 +3,7 @@ mod node;
 use anyhow::{anyhow, Result};
 use daemonize::*;
 use liberum_core::core_connection;
-use liberum_core::messages;
+use liberum_core::messages::{DaemonError, DaemonRequest, DaemonResponse, DaemonResult};
 use std::{
     fs::{self, Permissions},
     io,
@@ -18,7 +18,7 @@ use tracing::{debug, error};
 #[tokio::main]
 pub async fn run(path: &Path) -> Result<()> {
     let (daemon_request_sender, mut daemon_request_receiver) = mpsc::channel(16);
-    let (daemon_response_sender, daemon_response_receiver) = mpsc::channel::<String>(16);
+    let (daemon_result_sender, daemon_result_receiver) = mpsc::channel::<DaemonResult>(16);
     let config_manager = liberum_core::configs::ConfigManager::new(None).or_else(|e| {
         error!("Failed to load the config manager: {e}");
         Err(e)
@@ -42,40 +42,41 @@ pub async fn run(path: &Path) -> Result<()> {
     tokio::spawn(core_connection::listen(
         listener,
         daemon_request_sender.clone(),
-        daemon_response_receiver,
+        daemon_result_receiver,
     ));
 
     loop {
         tokio::select! {
             Some(msg) = daemon_request_receiver.recv() => {
                 debug!("Core received a message {msg:?}");
-                match msg {
-                    messages::DaemonRequest::NewNode{ name } => {
-                        match config_manager.add_config(&name) {
-                            Ok(path) => {
-                                daemon_response_sender.send(format!("Config generated config at {path:?}")).await?;
-                            },
-                            Err(e) => {
-                                let e = format!("Failed to generate config at {path:?}: {e}");
-                                daemon_response_sender.send(e.clone()).await?;
-                                error!(e);
-                            }
-                        };
-                    },
-                    messages::DaemonRequest::StartNode{ name } => {
-                        if let Ok(c) = config_manager.get_node_config(&name) {
-                            let path = config_manager.get_node_config_path(&name);
-                            debug!("Successfully loaded the config of {}", c.name);
-                            daemon_response_sender.send(format!("Config loaded from {path:?}")).await?;
-                            // TODO Build a swarm here and start a task that will run
-                            // the swarm
-                            // TODO how to communicate with the node task you want
-                            // when there are multiple tasks running?
-                        } else {
-                            error!("Error loading the config at {path:?}");
-                        }
-                    },
-                }
+                daemon_result_sender.send(Err(DaemonError::Other("Unimplemented".to_string()))).await?;
+                //match msg {
+                //     DaemonRequest::NewNode{ name } => {
+                //         match config_manager.add_config(&name) {
+                //             Ok(path) => {
+                //                 daemon_response_sender.send(format!("Config generated config at {path:?}")).await?;
+                //             },
+                //             Err(e) => {
+                //                 let e = format!("Failed to generate config at {path:?}: {e}");
+                //                 daemon_response_sender.send(e.clone()).await?;
+                //                 error!(e);
+                //             }
+                //         };
+                //     },
+                //     DaemonRequest::StartNode{ name } => {
+                //         if let Ok(c) = config_manager.get_node_config(&name) {
+                //             let path = config_manager.get_node_config_path(&name);
+                //             debug!("Successfully loaded the config of {}", c.name);
+                //             daemon_response_sender.send(format!("Config loaded from {path:?}")).await?;
+                //             // TODO Build a swarm here and start a task that will run
+                //             // the swarm
+                //             // TODO how to communicate with the node task you want
+                //             // when there are multiple tasks running?
+                //         } else {
+                //             error!("Error loading the config at {path:?}");
+                //         }
+                //     },
+                // }
             }
             else => {}
         }
