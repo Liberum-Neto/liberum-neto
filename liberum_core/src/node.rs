@@ -4,6 +4,7 @@ use anyhow::Result;
 use kameo::{message::Message, Actor};
 use libp2p::identity::Keypair;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 const NODE_DIRECTORY_NAME: &str = ".liberum-neto";
 
@@ -41,6 +42,18 @@ impl TryFrom<NodeSerializable> for Node {
 struct LoadNodes(Vec<String>);
 struct StoreNodes(Vec<Node>);
 
+
+#[derive(Error, Debug)]
+pub enum NodeStoreError {
+    #[error("failed to load node, name: {name}")]
+    LoadError{
+        name: String,
+    },
+    #[error("failed to store node, name: {name}")]
+    StoreError{
+        name: String,
+    },
+}
 
 #[derive(Debug, Actor)]
 pub struct NodeStore {
@@ -82,26 +95,26 @@ impl NodeStore {
 }
 
 impl Message<LoadNodes> for NodeStore {
-    type Reply = Result<Option<Node>>;
+    type Reply = Result<Option<Node>, NodeStoreError>;
 
     async fn handle(
             &mut self,
             LoadNodes(names): LoadNodes,
             _: kameo::message::Context<'_, Self, Self::Reply>,
         ) -> Self::Reply {
-            todo!()
+            Err(NodeStoreError::LoadError { name: "TODO".to_string() })
     }
 }
 
 impl Message<StoreNodes> for NodeStore {
-    type Reply = Result<()>;
+    type Reply = Result<(), NodeStoreError>;
 
     async fn handle(
             &mut self,
             StoreNodes(nodes): StoreNodes,
             _: kameo::message::Context<'_, Self, Self::Reply>,
         ) -> Self::Reply {
-            todo!()
+            Err(NodeStoreError::StoreError { name: "TODO".to_string() })
     }
 }
 
