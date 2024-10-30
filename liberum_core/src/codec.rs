@@ -1,9 +1,8 @@
 use bytes::{Buf, BufMut, BytesMut};
 use serde::{de::DeserializeOwned, Serialize};
-use std::any::type_name;
 use std::marker::PhantomData;
 use tokio_util::codec::{Decoder, Encoder};
-use tracing::{debug, error};
+use tracing::error;
 
 /// A codec to use a byte stream to encode and decode messages of different types
 /// - create a stream of structs from a stream of bytes
@@ -44,7 +43,7 @@ where
         if src.len() == 0 {
             return Ok(None);
         }
-        debug!("Decoding {} bytes of {}", src.len(), type_name::<U>());
+        //debug!("Decoding {} bytes of {}", src.len(), type_name::<U>());
         let result = bincode::deserialize::<U>(&src);
         src.advance(src.len());
         match result {
