@@ -58,7 +58,9 @@ impl ConfigManager {
         debug!("Adding config {} to {:?}", &name, self.path);
         if self.node_exists(name) {
             error!("Node {name} already exists!");
-            return Err(anyhow!(format!("Node {name} already exists!")));
+            let e = std::io::ErrorKind::from(std::io::ErrorKind::AlreadyExists);
+            let e = anyhow!(e).context(format!("Node {name} already exists!"));
+            return Err(e);
         }
         let path = self.get_node_config_path(name);
         Config::new(&name).save(&path)?;
