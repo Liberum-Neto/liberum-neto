@@ -1,4 +1,3 @@
-use std::{path::PathBuf, fmt::Display, fmt, fmt::Formatter};
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
 use strum::Display;
@@ -25,10 +24,10 @@ pub enum DaemonResponse {
 /// Messages related to nodes
 #[derive(Serialize, Deserialize, Debug, Display)]
 pub enum NodeResponse {
-    NodesCreated,
-    NodesStarted,
-    NodesStopped,
-    ListNodes(Vec<String>),
+    Created,
+    Started,
+    Stopped,
+    List(Vec<String>),
 }
 
 /// Errors that can be returned by the daemon

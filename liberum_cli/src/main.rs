@@ -4,7 +4,6 @@ use liberum_core;
 use std::path::Path;
 use tracing::{debug, error, info};
 use tracing_subscriber;
-
 #[derive(Parser)]
 struct Cli {
     #[command(subcommand)]
@@ -72,6 +71,5 @@ async fn main() -> Result<()> {
             };
         }
     };
-
     Ok(())
 }
