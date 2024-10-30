@@ -2,13 +2,12 @@ use libp2p::futures::StreamExt;
 use std::path::PathBuf;
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 use futures::prelude::*;
 use tokio_util::codec::Decoder;
 pub mod codec;
 pub mod configs;
-pub mod core_connection;
 pub mod messages;
 use anyhow::Result;
 use codec::AsymmetricMessageCodec;
@@ -44,7 +43,7 @@ pub async fn connect(
                             break;
                         }
                     };
-                    info!("Received: {:?}", resp);
+                    //info!("Received: {:?}", resp);
                     match ui_sender.send(resp).await {
                         Err(e) => error!("Failed to send message to UI: {e}"),
                         Ok(_) => {}

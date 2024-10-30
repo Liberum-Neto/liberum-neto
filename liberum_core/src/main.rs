@@ -2,8 +2,7 @@ mod node;
 
 use anyhow::{anyhow, Result};
 use daemonize::*;
-use liberum_core::core_connection;
-use liberum_core::messages::{DaemonError, DaemonRequest, DaemonResponse, DaemonResult};
+mod core_connection;
 use std::{
     fs::{self, Permissions},
     io,
@@ -11,18 +10,11 @@ use std::{
     path::Path,
 };
 use tokio::net::UnixListener;
-use tokio::sync::mpsc;
 use tracing::{debug, error};
 
 /// The main function of the core daemon
 #[tokio::main]
 pub async fn run(path: &Path) -> Result<()> {
-    let (daemon_request_sender, mut daemon_request_receiver) = mpsc::channel(16);
-    let (daemon_result_sender, daemon_result_receiver) = mpsc::channel::<DaemonResult>(16);
-    let config_manager = liberum_core::configs::ConfigManager::new(None).or_else(|e| {
-        error!("Failed to load the config manager: {e}");
-        Err(e)
-    })?;
     let socket = path.join("liberum-core-socket");
     fs::remove_file(&socket).or_else(|e| {
         if e.kind() != io::ErrorKind::NotFound {
@@ -39,48 +31,10 @@ pub async fn run(path: &Path) -> Result<()> {
         error!("Failed to set permissions on the socket: {e}");
         Err(anyhow!(e))
     })?;
-    tokio::spawn(core_connection::listen(
-        listener,
-        daemon_request_sender.clone(),
-        daemon_result_receiver,
-    ));
-
-    loop {
-        tokio::select! {
-            Some(msg) = daemon_request_receiver.recv() => {
-                debug!("Core received a message {msg:?}");
-                daemon_result_sender.send(Err(DaemonError::Other("Unimplemented".to_string()))).await?;
-                //match msg {
-                //     DaemonRequest::NewNode{ name } => {
-                //         match config_manager.add_config(&name) {
-                //             Ok(path) => {
-                //                 daemon_response_sender.send(format!("Config generated config at {path:?}")).await?;
-                //             },
-                //             Err(e) => {
-                //                 let e = format!("Failed to generate config at {path:?}: {e}");
-                //                 daemon_response_sender.send(e.clone()).await?;
-                //                 error!(e);
-                //             }
-                //         };
-                //     },
-                //     DaemonRequest::StartNode{ name } => {
-                //         if let Ok(c) = config_manager.get_node_config(&name) {
-                //             let path = config_manager.get_node_config_path(&name);
-                //             debug!("Successfully loaded the config of {}", c.name);
-                //             daemon_response_sender.send(format!("Config loaded from {path:?}")).await?;
-                //             // TODO Build a swarm here and start a task that will run
-                //             // the swarm
-                //             // TODO how to communicate with the node task you want
-                //             // when there are multiple tasks running?
-                //         } else {
-                //             error!("Error loading the config at {path:?}");
-                //         }
-                //     },
-                // }
-            }
-            else => {}
-        }
-    }
+    core_connection::listen(
+        listener
+    ).await?;
+    Ok(())
 }
 
 /// Helper function to setup logging
@@ -89,14 +43,10 @@ fn setup_logging() {
         .with_max_level(tracing::Level::DEBUG)
         .with_line_number(true)
         .with_target(true)
-        .pretty()
+        .compact()
         .with_file(true)
         .init();
 }
-
-/// Actual main function that starts the daemon
-/// Must be run without tokio runtime to start the daemon properly
-/// Only after the process is daemonized, the tokio runtime is started
 
 fn start_daemon(path: &Path) -> Result<()> {
     let uid = nix::unistd::geteuid();
