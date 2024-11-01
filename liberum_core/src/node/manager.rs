@@ -25,6 +25,14 @@ impl NodeManager {
             actor_ref: None,
         }
     }
+
+    async fn stop_all(&self) -> Result<()> {
+        for (_, n_ref) in self.nodes.iter() {
+            n_ref.stop_gracefully().await?;
+        }
+
+        Ok(())
+    }
 }
 
 impl Actor for NodeManager {
@@ -36,6 +44,15 @@ impl Actor for NodeManager {
     ) -> std::result::Result<(), kameo::error::BoxError> {
         self.actor_ref = Some(actor_ref);
         Ok(())
+    }
+
+    async fn on_stop(
+            self,
+            _: kameo::actor::WeakActorRef<Self>,
+            _: kameo::error::ActorStopReason,
+        ) -> std::result::Result<(), kameo::error::BoxError> {
+            self.stop_all().await?;
+            Ok(())
     }
 }
 
@@ -112,10 +129,7 @@ impl Message<StopAll> for NodeManager {
             _: StopAll,
             _: kameo::message::Context<'_, Self, Self::Reply>,
         ) -> Self::Reply {
-            for (_, n_ref) in &self.nodes {
-                n_ref.stop_gracefully().await?;
-            }
-
+            self.stop_all().await?;
             Ok(())
     }
 }
