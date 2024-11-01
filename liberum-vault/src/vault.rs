@@ -156,6 +156,10 @@ mod tests {
     #[tokio::test]
     async fn basic_test() {
         let vault_ref = kameo::spawn(Vault::in_memory().await.unwrap());
-        vault_ref.ask(Store(Fragment::random())).send().await.unwrap();
+        vault_ref
+            .ask(Store(Fragment::random()))
+            .send()
+            .await
+            .unwrap();
     }
 }
