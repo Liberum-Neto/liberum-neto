@@ -35,15 +35,20 @@ impl NodeStore {
         let store_dir_path = NodeStore::resolve_store_dir_path(None)
             .inspect_err(|e| error!(err = e.to_string(), "could not resolve store dir path"))?;
         debug!("creating a node store with a default dir");
-        NodeStore::new(&store_dir_path).await
+        NodeStore::new(&store_dir_path)
+            .await
             .inspect_err(|e| error!(err = e.to_string(), "could not create a node store"))
     }
 
     pub async fn with_custom_nodes_dir(path: &Path) -> Result<Self> {
         let store_dir_path = NodeStore::resolve_store_dir_path(Some(path))
             .inspect_err(|e| error!(err = e.to_string(), "could not resolve store dir path"))?;
-        debug!(path = &store_dir_path.display().to_string(), "creating a node store with a custom dir");
-        NodeStore::new(&store_dir_path).await
+        debug!(
+            path = &store_dir_path.display().to_string(),
+            "creating a node store with a custom dir"
+        );
+        NodeStore::new(&store_dir_path)
+            .await
             .inspect_err(|e| error!(err = e.to_string(), "could not create a node store"))
     }
 
@@ -106,7 +111,8 @@ impl NodeStore {
 
     fn resolve_store_dir_path(path_override: Option<&Path>) -> Result<PathBuf> {
         let home_dir_path = homedir::my_home()?.ok_or(anyhow!("no home directory"))?;
-        let store_dir_name = path_override.unwrap_or(Path::new(NodeStore::DEFAULT_NODES_DIRECTORY_NAME));
+        let store_dir_name =
+            path_override.unwrap_or(Path::new(NodeStore::DEFAULT_NODES_DIRECTORY_NAME));
         Ok(home_dir_path.join(store_dir_name))
     }
 }
