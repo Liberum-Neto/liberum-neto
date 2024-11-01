@@ -1,13 +1,12 @@
-mod store;
 mod config;
+mod store;
 
-use std::path::Path;
 use anyhow::{anyhow, bail, Result};
 use config::NodeConfig;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::{fmt, path::Path};
 
-#[derive(Debug)]
 pub struct Node {
     pub name: String,
     pub keypair: Keypair,
@@ -35,7 +34,9 @@ impl Node {
         let keypair = Keypair::from_protobuf_encoding(&key_bytes)?;
         let node_name = node_dir_path
             .file_name()
-            .ok_or(anyhow!("incorrect node dir path, it should not end with .."))?
+            .ok_or(anyhow!(
+                "incorrect node dir path, it should not end with .."
+            ))?
             .to_str()
             .ok_or(anyhow!("node dir path is not valid utf-8 string"))?
             .to_string();
@@ -61,7 +62,16 @@ impl Node {
         tokio::fs::write(key_path, key_bytes).await?;
         tokio::fs::write(config_path, serde_json::to_string(&config)?).await?;
 
-        todo!()
+        Ok(())
+    }
+}
+
+impl fmt::Debug for Node {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Node")
+            .field("name", &self.name)
+            .field("boostrap_nodes", &self.bootstrap_nodes)
+            .finish()
     }
 }
 
@@ -96,41 +106,40 @@ impl NodeBuilder {
 
     pub fn build(self) -> Result<Node> {
         return Ok(Node {
-            name: self.name.ok_or(anyhow!("node name is required"))?, 
+            name: self.name.ok_or(anyhow!("node name is required"))?,
             keypair: self.keypair.ok_or(anyhow!("keypair is required"))?,
-            bootstrap_nodes: self.bootstrap_nodes, 
+            bootstrap_nodes: self.bootstrap_nodes,
         });
     }
 }
 
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BootstrapNode {
-    #[serde(serialize_with = "serialize_peer_id", deserialize_with = "deserialize_peer_id")]
+    #[serde(
+        serialize_with = "serialize_peer_id",
+        deserialize_with = "deserialize_peer_id"
+    )]
     id: PeerId,
     addr: Multiaddr,
 }
 
 impl BootstrapNode {
     pub fn new(peer_id: PeerId, addr: Multiaddr) -> Self {
-        BootstrapNode{
-            id: peer_id,
-            addr,
-        }
+        BootstrapNode { id: peer_id, addr }
     }
 }
 
-fn serialize_peer_id<S>(peer_id: &PeerId, serializer: S) -> Result<S::Ok, S::Error> 
+fn serialize_peer_id<S>(peer_id: &PeerId, serializer: S) -> Result<S::Ok, S::Error>
 where
-    S: Serializer
+    S: Serializer,
 {
     let peer_id_bytes = peer_id.to_bytes();
     serializer.serialize_bytes(&peer_id_bytes)
 }
 
 fn deserialize_peer_id<'de, D>(deserializer: D) -> Result<PeerId, D::Error>
-where 
-    D: Deserializer<'de>
+where
+    D: Deserializer<'de>,
 {
     let peer_id_bytes = <Vec<u8>>::deserialize(deserializer)?;
     PeerId::from_bytes(&peer_id_bytes)
