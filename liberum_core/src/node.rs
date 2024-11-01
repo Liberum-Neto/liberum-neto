@@ -6,6 +6,7 @@ use config::NodeConfig;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, path::Path};
+use tracing::{error, debug};
 
 pub struct Node {
     pub name: String,
@@ -23,6 +24,7 @@ impl Node {
 
     async fn load(node_dir_path: &Path) -> Result<Node> {
         if !node_dir_path.is_dir() {
+            error!(dir_path = node_dir_path.display().to_string(), "node dir path not a directory");
             bail!("node_dir_path is not a directory");
         }
 
