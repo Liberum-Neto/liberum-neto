@@ -3,11 +3,13 @@ pub mod store;
 
 use anyhow::{anyhow, bail, Result};
 use config::NodeConfig;
+use kameo::Actor;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, path::Path};
 use tracing::error;
 
+#[derive(Actor)]
 pub struct Node {
     pub name: String,
     pub keypair: Keypair,
