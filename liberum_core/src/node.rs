@@ -1,10 +1,12 @@
 pub mod config;
+pub mod manager;
 pub mod store;
 
 use anyhow::{anyhow, bail, Result};
 use config::NodeConfig;
-use kameo::Actor;
+use kameo::{actor::ActorRef, Actor};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
+use manager::NodeManager;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, path::Path};
 use tracing::error;
@@ -14,6 +16,7 @@ pub struct Node {
     pub name: String,
     pub keypair: Keypair,
     pub bootstrap_nodes: Vec<BootstrapNode>,
+    pub manager_ref: Option<ActorRef<NodeManager>>,
 }
 
 impl Node {
@@ -131,6 +134,7 @@ impl NodeBuilder {
             name: self.name.ok_or(anyhow!("node name is required"))?,
             keypair: self.keypair.ok_or(anyhow!("keypair is required"))?,
             bootstrap_nodes: self.bootstrap_nodes,
+            manager_ref: None,
         });
     }
 }
