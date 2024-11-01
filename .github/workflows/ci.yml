@@ -17,3 +17,5 @@ jobs:
       run: cargo build --quiet
     - name: Check formatting
       run: cargo fmt --check
+    - name: Run tests
+      run: cargo test
