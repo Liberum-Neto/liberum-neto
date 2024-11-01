@@ -47,6 +47,8 @@ struct StopNode {
     name: String,
 }
 
+struct StopAll {}
+
 struct GetNode {
     name: String,
 }
@@ -99,6 +101,22 @@ impl Message<StopNode> for NodeManager {
         node.stop_gracefully().await?;
 
         Ok(())
+    }
+}
+
+impl Message<StopAll> for NodeManager {
+    type Reply = Result<()>;
+
+    async fn handle(
+            &mut self,
+            _: StopAll,
+            _: kameo::message::Context<'_, Self, Self::Reply>,
+        ) -> Self::Reply {
+            for (_, n_ref) in &self.nodes {
+                n_ref.stop_gracefully().await?;
+            }
+
+            Ok(())
     }
 }
 
