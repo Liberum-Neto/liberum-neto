@@ -1,9 +1,8 @@
-mod node;
-
+pub mod node;
+pub mod connection;
 use anyhow::{anyhow, Result};
 use daemonize::*;
-mod connection;
-
+use connection::listen;
 use std::{
     fs::{self, Permissions},
     io,
@@ -32,9 +31,8 @@ pub async fn run(path: &Path) -> Result<()> {
         error!("Failed to set permissions on the socket: {e}");
         Err(anyhow!(e))
     })?;
-    connection::listen(
-        listener
-    ).await?;
+
+    listen(listener);
     Ok(())
 }
 

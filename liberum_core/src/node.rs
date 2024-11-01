@@ -1,11 +1,14 @@
+mod config;
+mod store;
 use std::path::{self, Path, PathBuf};
+use kameo::{message::Message, Actor};
+use thiserror::Error;
 use tracing::{debug, info, warn, error};
 use anyhow::{anyhow, bail, Result};
 use config::NodeConfig;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::{fmt, path::Path};
-use tracing::error;
+use std::fmt;
 
 pub struct Node {
     pub name: String,
