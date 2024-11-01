@@ -39,6 +39,7 @@ impl NodeStore {
 
     async fn save_node(&self, node: &Node) -> Result<()> {
         let node_dir_path = self.resolve_node_dir_path(&node.name);
+        self.ensure_node_dir_path(&node.name).await?;
         Node::save(node, &node_dir_path).await.map_err(|e| anyhow!("{}", e))
     }
 
