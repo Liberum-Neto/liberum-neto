@@ -6,7 +6,7 @@ use config::NodeConfig;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, path::Path};
-use tracing::{error, debug};
+use tracing::{debug, error};
 
 pub struct Node {
     pub name: String,
@@ -24,15 +24,23 @@ impl Node {
 
     async fn load(node_dir_path: &Path) -> Result<Node> {
         if !node_dir_path.is_dir() {
-            error!(dir_path = node_dir_path.display().to_string(), "node dir path not a directory");
+            error!(
+                dir_path = node_dir_path.display().to_string(),
+                "node dir path not a directory"
+            );
             bail!("node_dir_path is not a directory");
         }
 
         let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
-        let config_bytes = tokio::fs::read(config_path).await?;
-        let config: NodeConfig = serde_json::from_slice(&config_bytes)?;
+        let config_bytes = tokio::fs::read(config_path)
+            .await
+            .inspect_err(|e| error!(err = e.to_string(), "could not read node config from file"))?;
+        let config: NodeConfig = serde_json::from_slice(&config_bytes)
+            .inspect_err(|e| error!(err = e.to_string(), "could not parse node config JSON"))?;
         let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
-        let key_bytes = tokio::fs::read(key_path).await?;
+        let key_bytes = tokio::fs::read(key_path)
+            .await
+            .inspect_err(|e| error!(err = e.to_string(), "could not read node keypair bytes"))?;
         let keypair = Keypair::from_protobuf_encoding(&key_bytes)?;
         let node_name = node_dir_path
             .file_name()
@@ -40,29 +48,39 @@ impl Node {
                 "incorrect node dir path, it should not end with .."
             ))?
             .to_str()
-            .ok_or(anyhow!("node dir path is not valid utf-8 string"))?
+            .ok_or(anyhow!("node dir path is not valid utf-8 string"))
+            .inspect_err(|e| error!(err = e.to_string(), "could not resolve node name"))?
             .to_string();
         let node = Node::builder()
             .name(node_name)
             .config(config)
             .keypair(keypair)
-            .build()?;
+            .build()
+            .inspect_err(|e| error!(err = e.to_string(), "error while building node"))?;
 
         Ok(node)
     }
 
     async fn save(&self, node_dir_path: &Path) -> Result<()> {
         if !node_dir_path.is_dir() {
+            error!("node dir path is not a directory");
             bail!("node_dir_path is not a directory");
         }
 
         let config: NodeConfig = self.into();
         let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
-        let key_bytes = self.keypair.to_protobuf_encoding()?;
+        let key_bytes = self
+            .keypair
+            .to_protobuf_encoding()
+            .inspect_err(|e| error!(err = e.to_string(), "could not convert keypair to bytes"))?;
         let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
 
-        tokio::fs::write(key_path, key_bytes).await?;
-        tokio::fs::write(config_path, serde_json::to_string(&config)?).await?;
+        tokio::fs::write(key_path, key_bytes)
+            .await
+            .inspect_err(|e| error!(err = e.to_string(), "could not write node keypair"))?;
+        tokio::fs::write(config_path, serde_json::to_string(&config)?)
+            .await
+            .inspect_err(|e| error!(err = e.to_string(), "could not write node config"))?;
 
         Ok(())
     }
