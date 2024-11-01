@@ -177,17 +177,8 @@ mod tests {
 
     use super::*;
 
-    fn init_tracing() {
-        let _ = tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::DEBUG)
-            .with_line_number(true)
-            .with_file(true)
-            .try_init();
-    }
-
     #[tokio::test]
     async fn basic_test() {
-        init_tracing();
         let tmp_dir = TempDir::new("liberum_tests").unwrap();
         let node_store = NodeStore::with_custom_nodes_dir(tmp_dir.path())
             .await
@@ -213,8 +204,6 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_not_directory() {
-        init_tracing();
-
         let tmp_dir = TempDir::new("liberum_tests").unwrap();
         let non_dir_path = tmp_dir.path().join("test_file");
 
