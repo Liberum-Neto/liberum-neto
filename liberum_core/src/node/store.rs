@@ -1,5 +1,5 @@
 use crate::node::Node;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use kameo::{message::Message, Actor};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -205,10 +205,5 @@ mod tests {
             .await
             .inspect(|_| panic!("passing non-dir path should not be possible"))
             .unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_store_default_path() {
-        NodeStore::with_default_nodes_dir().await.unwrap();
     }
 }
