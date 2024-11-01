@@ -1,0 +1,19 @@
+name: Build and check formatting
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_check_formatting:
+    name: Build and check formatting
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build --quiet
+    - name: Check formatting
+      run: cargo fmt --check
