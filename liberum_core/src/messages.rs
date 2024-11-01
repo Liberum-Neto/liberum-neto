@@ -1,10 +1,9 @@
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
-use strum::Display;
-
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 /// Messages that can be sent from the UI to the daemon
-#[derive(Serialize, Deserialize, Debug, Display)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum DaemonRequest {
     NewNodes { names: Vec<String> },
     StartNodes { names: Vec<String> },
@@ -16,34 +15,22 @@ pub enum DaemonRequest {
 /// An enum of enums - categorizes the responses
 pub type DaemonResult = Result<DaemonResponse, DaemonError>;
 
-#[derive(Serialize, Deserialize, Debug, Display)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum DaemonResponse {
-    NodeResponse(NodeResponse),
-}
-
-/// Messages related to nodes
-#[derive(Serialize, Deserialize, Debug, Display)]
-pub enum NodeResponse {
-    Created,
-    Started,
-    Stopped,
-    List(Vec<String>),
+    NodeCreated,
+    NodeStarted,
+    NodeStopped,
+    NodeList(Vec<String>),
 }
 
 /// Errors that can be returned by the daemon
 /// An enum of enums - categorizes the errors, just like responses
-#[derive(Serialize, Deserialize, Debug, Display)]
+#[derive(Serialize, Deserialize, Debug, Error)]
 pub enum DaemonError {
-    Node(NodeError),
-    Other(String)
+    #[error("Nodes already exist: {0:?}")]
+    NodesAlreadyExist(Vec<String>),
+    #[error("Nodes don't exist: {0:?}")]
+    NodesDoesNotExist(Vec<String>),
+    #[error("Other error: {0}")]
+    Other(String),
 }
-impl std::error::Error for DaemonError {}
-
-/// Errors related to nodes
-#[derive(Serialize, Deserialize, Debug, Display)]
-pub enum NodeError {
-    AlreadyExists(Vec<String>),
-    DoesNotExist(Vec<String>),
-    Other(String)
-}
-impl std::error::Error for NodeError {}

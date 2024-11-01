@@ -19,7 +19,8 @@ pub async fn connect(
     socket_path: PathBuf,
 ) -> Result<(mpsc::Sender<DaemonRequest>, mpsc::Receiver<DaemonResult>)> {
     let socket = UnixStream::connect(&socket_path).await?;
-    let encoder: AsymmetricMessageCodec<DaemonRequest, DaemonResult> = AsymmetricMessageCodec::new();
+    let encoder: AsymmetricMessageCodec<DaemonRequest, DaemonResult> =
+        AsymmetricMessageCodec::new();
     let mut daemon_socket = encoder.framed(socket);
     let (daemon_sender, mut daemon_receiver) = mpsc::channel::<DaemonRequest>(16);
     let (ui_sender, ui_receiver) = mpsc::channel::<DaemonResult>(16);
@@ -28,13 +29,13 @@ pub async fn connect(
             tokio::select! {
                 Some(message) = daemon_receiver.recv() => {
                     match daemon_socket.send(message).await{
-                        Err(e)=> error!("Failed to send message to daemon: {e}"),
+                        Err(e)=> error!(err=e.to_string(),"Failed to send message to daemon"),
                         Ok(_) => {}
                     }
                     let resp = match daemon_socket.next().await {
                         Some(Ok(resp)) => resp,
                         Some(Err(e)) => {
-                            error!("Error receiving message: {e}");
+                            error!(err=e.to_string(), "Error receiving message");
                             break;
                         },
                         None => {
@@ -42,9 +43,8 @@ pub async fn connect(
                             break;
                         }
                     };
-                    //info!("Received: {:?}", resp);
                     match ui_sender.send(resp).await {
-                        Err(e) => error!("Failed to send message to UI: {e}"),
+                        Err(e) => error!(err=e.to_string(), "Failed to send message to UI"),
                         Ok(_) => {}
                     }
                 }

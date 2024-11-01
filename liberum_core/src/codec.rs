@@ -20,7 +20,7 @@ where
 
     fn encode(&mut self, item: T, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let serialized = bincode::serialize::<T>(&item).or_else(|e| {
-            error!("Failed to serialize {e}");
+            error!(err = e.to_string(), "Failed to serialize");
             Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "fail serializing message",
@@ -43,13 +43,12 @@ where
         if src.len() == 0 {
             return Ok(None);
         }
-        //debug!("Decoding {} bytes of {}", src.len(), type_name::<U>());
         let result = bincode::deserialize::<U>(&src);
         src.advance(src.len());
         match result {
             Ok(message) => Ok(Some(message)),
             Err(e) => {
-                error!("Failed to deserialize {e}");
+                error!(err = e.to_string(), "Failed to deserialize");
                 Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     "fail deserializing message",

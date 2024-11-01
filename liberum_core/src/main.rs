@@ -1,14 +1,9 @@
-pub mod node;
 pub mod connection;
+pub mod node;
 use anyhow::{anyhow, Result};
-use daemonize::*;
 use connection::listen;
-use std::{
-    fs::{self, Permissions},
-    io,
-    os::unix::fs::PermissionsExt,
-    path::Path,
-};
+use daemonize::*;
+use std::{fs::Permissions, io, os::unix::fs::PermissionsExt, path::Path};
 use tokio::net::UnixListener;
 use tracing::{debug, error};
 
@@ -16,23 +11,18 @@ use tracing::{debug, error};
 #[tokio::main]
 pub async fn run(path: &Path) -> Result<()> {
     let socket = path.join("liberum-core-socket");
-    fs::remove_file(&socket).or_else(|e| {
-        if e.kind() != io::ErrorKind::NotFound {
-            error!("Failed to remove the old socket: {e}");
-            return Err(anyhow!(e));
-        }
-        Ok(())
-    })?;
-    let listener = UnixListener::bind(&socket).or_else(|e| {
-        error!("Failed to bind the socket: {e}");
-        Err(anyhow!(e))
-    })?;
-    fs::set_permissions(&socket, Permissions::from_mode(0o666)).or_else(|e| {
-        error!("Failed to set permissions on the socket: {e}");
-        Err(anyhow!(e))
-    })?;
+    let listener = UnixListener::bind(&socket)
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to bind the socket"))?;
+    tokio::fs::set_permissions(&socket, Permissions::from_mode(0o666))
+        .await
+        .inspect_err(|e| {
+            error!(
+                err = e.to_string(),
+                "Failed to set permissions on the socket"
+            )
+        })?;
 
-    listen(listener);
+    listen(listener).await?;
     Ok(())
 }
 
@@ -54,32 +44,35 @@ fn start_daemon(path: &Path) -> Result<()> {
     let daemonize = Daemonize::new()
         .working_directory(path)
         .pid_file(path.join("core.pid"))
-        //.chown_pid_file(true)
-        .stdout(fs::File::create(path.join("stdout.out"))?)
-        .stderr(fs::File::create(path.join("stderr.out"))?)
+        .stdout(std::fs::File::create(path.join("stdout.out"))?)
+        .stderr(std::fs::File::create(path.join("stderr.out"))?)
         .user(uid.as_raw())
         .group(gid.as_raw());
-    debug!("Attempting to start the daemon as user {uid} group {gid}!");
+    debug!(
+        uid = uid.as_raw(),
+        gid = gid.as_raw(),
+        "Attempting to start the daemon!"
+    );
     if daemonize.start().is_err() {
         return Err(anyhow!("Failed to daemonize the process"));
     }
-    debug!("Daemon starts as user {uid} group {gid}!");
+    debug!(uid = uid.as_raw(), gid = gid.as_raw(), "Daemon starts!");
     Ok(())
 }
 
 fn main() -> Result<()> {
     setup_logging();
     let path = Path::new("/tmp/liberum-core/");
-    match fs::remove_dir_all(path) {
+    match std::fs::remove_dir_all(path) {
         Err(e) => {
             if e.kind() != io::ErrorKind::NotFound {
-                error!("Failed to remove the directory: {e}");
+                error!(err = e.to_string(), "Failed to remove the directory");
                 return Err(anyhow!(e));
             }
         }
         _ => {}
     }
-    fs::create_dir(path)?;
+    std::fs::create_dir(path)?;
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 && args[1] == "--daemon" {
         start_daemon(path)?;
@@ -88,7 +81,7 @@ fn main() -> Result<()> {
     match run(&path) {
         Ok(_) => Ok(()),
         Err(e) => {
-            error!("Error running the core daemon: {e}");
+            error!(err = e.to_string(), "Error running the core daemon");
             std::process::exit(-1);
         }
     }
