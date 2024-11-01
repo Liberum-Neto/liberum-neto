@@ -1,5 +1,5 @@
 use crate::node::Node;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use kameo::{message::Message, Actor};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -17,6 +17,14 @@ impl NodeStore {
     const DEFAULT_NODES_DIRECTORY_NAME: &'static str = ".liberum-neto";
 
     pub async fn new(nodes_dir_path: &Path) -> Result<Self> {
+        if !nodes_dir_path.is_dir() {
+            error!(
+                path = nodes_dir_path.display().to_string(),
+                "nodes dir path is not a directory",
+            );
+            bail!("provided nodes_dir_path is not a directory");
+        }
+
         NodeStore::ensure_nodes_dir_path(nodes_dir_path)
             .await
             .inspect_err(|e| {
@@ -163,16 +171,15 @@ mod tests {
     use kameo::request::MessageSend;
     use libp2p::identity::Keypair;
     use tempdir::TempDir;
-    use tracing::{span, Instrument, Level};
 
     use super::*;
 
     fn init_tracing() {
-        tracing_subscriber::fmt()
+        let _ = tracing_subscriber::fmt()
             .with_max_level(tracing::Level::DEBUG)
             .with_line_number(true)
             .with_file(true)
-            .init();
+            .try_init();
     }
 
     #[tokio::test]
@@ -180,7 +187,6 @@ mod tests {
         init_tracing();
         let tmp_dir = TempDir::new("liberum_tests").unwrap();
         let node_store = NodeStore::with_custom_nodes_dir(tmp_dir.path())
-            .instrument(span!(Level::INFO, ""))
             .await
             .unwrap();
         let node_store = kameo::spawn(node_store);
@@ -198,6 +204,22 @@ mod tests {
             .ask(LoadNodes(vec!["test_node".to_string()]))
             .send()
             .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic]
+    async fn test_not_directory() {
+        init_tracing();
+
+        let tmp_dir = TempDir::new("liberum_tests").unwrap();
+        let non_dir_path = tmp_dir.path().join("test_file");
+
+        tokio::fs::write(&non_dir_path, "abc").await.unwrap();
+
+        NodeStore::with_custom_nodes_dir(&non_dir_path)
+            .await
+            .inspect(|_| panic!("passing non-dir path should not be possible"))
             .unwrap();
     }
 }
