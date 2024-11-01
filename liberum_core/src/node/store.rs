@@ -38,23 +38,19 @@ impl NodeStore {
     }
 
     async fn save_node(&self, node: &Node) -> Result<()> {
-        let node_dir_path = self.resolve_node_dir_path(&node.name);
-        self.ensure_node_dir_path(&node.name).await?;
+        let node_dir_path = self.ensure_node_dir_path(&node.name).await?;
         Node::save(node, &node_dir_path).await.map_err(|e| anyhow!("{}", e))
     }
 
-    fn node_dir_exists(&self, name: &str) -> bool {
+    async fn ensure_node_dir_path(&self, name: &str) -> Result<PathBuf> {
         let node_dir_path = self.resolve_node_dir_path(name);
-        node_dir_path.exists()
-    }
 
-    async fn ensure_node_dir_path(&self, name: &str) -> Result<()> {
-        if !self.node_dir_exists(name) {
+        if !node_dir_path.exists() {
             let node_dir_path = self.resolve_node_dir_path(name);
             tokio::fs::create_dir(node_dir_path).await?;
         }
 
-        Ok(())
+        Ok(node_dir_path)
     }
 
     fn resolve_node_dir_path(&self, name: &str) -> PathBuf {
