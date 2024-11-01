@@ -186,11 +186,14 @@ mod tests {
             .send()
             .await
             .unwrap();
-        node_store
+        let got_node_name = node_store
             .ask(LoadNodes(vec!["test_node".to_string()]))
             .send()
             .await
-            .unwrap();
+            .unwrap()
+            .remove(0)
+            .name;
+        assert_eq!(got_node_name, "test_node");
     }
 
     #[tokio::test]
