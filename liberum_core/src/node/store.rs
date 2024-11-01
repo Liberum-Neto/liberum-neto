@@ -122,19 +122,16 @@ impl Message<LoadNodes> for NodeStore {
 
     #[instrument(skip_all, name = "LoadNodes")]
     async fn handle(
-        &mut self,
-        LoadNodes(names): LoadNodes,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        let mut result: Vec<Node> = Vec::new();
-
-        for name in names {
-            let node = self
-                .load_node(&name)
-                .await
-                .map_err(|_| NodeStoreError::LoadError { name })?;
-            result.push(node);
-        }
+            &mut self,
+            LoadNodes{ names }: LoadNodes,
+            _: kameo::message::Context<'_, Self, Self::Reply>,
+        ) -> Self::Reply {
+            let mut result: Vec<Node> = Vec::new();
+            
+            for name in names {
+                let node = self.load_node(&name).await.map_err(|_| NodeStoreError::LoadError { name })?;
+                result.push(node);
+            }
 
         Ok(result)
     }
@@ -145,15 +142,13 @@ impl Message<StoreNodes> for NodeStore {
 
     #[instrument(skip_all, name = "StoreNodes")]
     async fn handle(
-        &mut self,
-        StoreNodes(nodes): StoreNodes,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        for node in nodes {
-            self.save_node(&node)
-                .await
-                .map_err(|_| NodeStoreError::StoreError { name: node.name })?;
-        }
+            &mut self,
+            StoreNodes{ nodes }: StoreNodes,
+            _: kameo::message::Context<'_, Self, Self::Reply>,
+        ) -> Self::Reply {
+            for node in nodes {
+                self.save_node(&node).await.map_err(|_| NodeStoreError::StoreError { name: node.name })?;
+            }
 
         Ok(())
     }
@@ -188,12 +183,12 @@ mod tests {
             .build()
             .unwrap();
         node_store
-            .ask(StoreNodes(vec![new_node]))
+            .ask(StoreNodes{ nodes: vec![new_node] })
             .send()
             .await
             .unwrap();
         let got_node_name = node_store
-            .ask(LoadNodes(vec!["test_node".to_string()]))
+            .ask(LoadNodes{names: vec!["test_node".to_string()]})
             .send()
             .await
             .unwrap()
