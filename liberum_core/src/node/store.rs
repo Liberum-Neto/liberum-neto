@@ -20,7 +20,7 @@ impl NodeStore {
         NodeStore::ensure_nodes_dir_path(nodes_dir_path)
             .await
             .inspect_err(|e| {
-                debug!(
+                error!(
                     path = nodes_dir_path.display().to_string(),
                     err = e.to_string(),
                     "failed to ensure nodes dir"
@@ -99,8 +99,7 @@ impl NodeStore {
 
     async fn ensure_nodes_dir_path(path: &Path) -> Result<()> {
         debug!(path = path.display().to_string(), "ensuring nodes dir");
-        tokio::fs::create_dir_all(path).await
-            .inspect_err(|e| debug!(err = e.to_string(), "could not create nodes dir"))?;
+        tokio::fs::create_dir_all(path).await?;
         Ok(())
     }
 
