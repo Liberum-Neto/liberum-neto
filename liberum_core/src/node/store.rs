@@ -43,6 +43,7 @@ impl NodeStore {
         let nodes_dir_path = NodeStore::resolve_nodes_dir_path(None);
         debug!("creating a node store with a default dir");
         NodeStore::new(nodes_dir_path).await
+            .inspect_err(|e| error!(err = e.to_string(), "could not create a node store"))
     }
 
     pub async fn with_custom_nodes_dir(path: &Path) -> Result<Self> {
@@ -52,6 +53,7 @@ impl NodeStore {
             "creating a node store with a custom dir"
         );
         NodeStore::new(nodes_dir_path).await
+            .inspect_err(|e| error!(err = e.to_string(), "could not create a node store"))
     }
 
     async fn load_node(&self, name: &str) -> Result<Node> {
