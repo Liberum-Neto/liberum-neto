@@ -51,6 +51,8 @@ struct GetNode {
     name: String,
 }
 
+struct GetAll {}
+
 impl Message<StartNode> for NodeManager {
     type Reply = Result<ActorRef<Node>>;
 
@@ -115,5 +117,17 @@ impl Message<GetNode> for NodeManager {
             .clone();
 
         Ok(node_ref)
+    }
+}
+
+impl Message<GetAll> for NodeManager {
+    type Reply = HashMap<String, ActorRef<Node>>;
+
+    async fn handle(
+            &mut self,
+            _: GetAll,
+            _: kameo::message::Context<'_, Self, Self::Reply>,
+        ) -> Self::Reply {
+            self.nodes.clone()
     }
 }
