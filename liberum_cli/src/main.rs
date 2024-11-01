@@ -37,21 +37,25 @@ async fn main() -> Result<()> {
     let (request_sender, mut response_receiver) = match contact {
         Ok(c) => c,
         Err(e) => {
-            error!("Failed to connect to the core: ({e}). Make sure the client is running!");
+            error!(
+                err = e.to_string(),
+                "Failed to connect to the core. Make sure the client is running!"
+            );
             Err(anyhow!(e))?
         }
     };
-    
+
     let cli = Cli::parse();
 
     match cli.command {
         Commands::NewNode { name } => {
             debug!("Creating node {name}");
             request_sender
-                .send(liberum_core::messages::DaemonRequest::NewNodes { names: vec![name]  })
-                .await?;
+                .send(liberum_core::messages::DaemonRequest::NewNodes { names: vec![name] })
+                .await
+                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
             match response_receiver.recv().await {
-                Some(r) => info!("Daemon responds: {:?}", r),
+                Some(r) => info!(response = format!("{r:?}"), "Daemon responds: {:?}", r),
                 None => {
                     error!("Failed to receive response");
                 }
@@ -61,10 +65,11 @@ async fn main() -> Result<()> {
         Commands::StartNode { name } => {
             debug!("Starting node {name}");
             request_sender
-                .send(liberum_core::messages::DaemonRequest::StartNodes { names: vec![name] } )
-                .await?;
+                .send(liberum_core::messages::DaemonRequest::StartNodes { names: vec![name] })
+                .await
+                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message: {e}"))?;
             match response_receiver.recv().await {
-                Some(r) => info!("Client responds: {:?}", r),
+                Some(r) => info!(response = format!("{r:?}"), "Client responds"),
                 None => {
                     error!("Failed to receive response");
                 }

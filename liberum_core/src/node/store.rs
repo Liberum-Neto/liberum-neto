@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{debug, error, instrument};
 
-struct LoadNodes(Vec<String>);
-struct StoreNodes(Vec<Node>);
+pub struct LoadNodes(pub Vec<String>);
+pub struct StoreNodes(pub Vec<Node>);
 
 #[derive(Debug, Actor)]
 pub struct NodeStore {

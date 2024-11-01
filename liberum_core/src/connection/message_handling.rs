@@ -1,50 +1,62 @@
+use crate::connection::ConnectionContext;
+use crate::node::{self, Node};
 use kameo::request::MessageSend;
 use liberum_core::messages::*;
-use crate::node::{self, Node};
 use libp2p::identity::Keypair;
-use crate::connection::ConnectionContext;
-
+use node::store::*;
+use tracing::debug;
 
 pub async fn handle_new_nodes(names: Vec<String>, context: &mut ConnectionContext) -> DaemonResult {
-    //match config_manager.add_config(&name) {
     let mut nodes = Vec::with_capacity(names.len());
     for name in names {
         let node = Node::builder()
-        .name(name)
-        .keypair(Keypair::generate_ed25519())
-        .build();
-        if node.is_err() {
-            return Err(DaemonError::Node(NodeError::Other(node.unwrap_err().to_string())));
+            .name(name)
+            .keypair(Keypair::generate_ed25519())
+            .build();
+
+        match node {
+            Err(e) => {
+                return Err(DaemonError::Other(e.to_string()));
+            }
+            Ok(node) => {
+                nodes.push(node);
+            }
         }
-        nodes.push(node.unwrap());
     }
 
-    let resp = context.node_store.ask(node::StoreNodes{0: nodes}).send().await;
-    if resp.is_err() {
-        return Err(DaemonError::Node(NodeError::Other(resp.unwrap_err().to_string())));
+    let resp = context.node_store.ask(StoreNodes(nodes)).send().await;
+    match resp {
+        Err(e) => Err(DaemonError::Other(e.to_string())),
+        Ok(_resp) => Ok(DaemonResponse::NodeCreated),
     }
-    Ok(DaemonResponse::NodeResponse(NodeResponse::Created))
 }
 
-
-pub async fn handle_start_nodes(names: Vec<String>, context: &mut ConnectionContext) -> DaemonResult {
-    let resp = context.node_store.ask(node::LoadNodes{0:names}).send().await;
-    if resp.is_err() {
-        return Err(DaemonError::Node(NodeError::Other(resp.unwrap_err().to_string())));
+pub async fn handle_start_nodes(
+    names: Vec<String>,
+    context: &mut ConnectionContext,
+) -> DaemonResult {
+    let resp = context.node_store.ask(LoadNodes(names)).send().await;
+    match resp {
+        Err(e) => Err(DaemonError::Other(e.to_string())),
+        Ok(nodes) => {
+            for node in nodes {
+                debug!(node = node.name, "Node loaded!");
+            }
+            Ok(DaemonResponse::NodeStarted)
+        }
     }
-    let nodes = resp.unwrap();
-    for node in nodes {
-        println!("Node {} laoded!", node.name);
-    }
-    Ok(DaemonResponse::NodeResponse(NodeResponse::Started))
 }
 
-
-pub async fn handle_stop_nodes(_context: &mut ConnectionContext) -> DaemonResult {
-    Ok(DaemonResponse::NodeResponse(NodeResponse::Stopped))
+pub async fn handle_stop_nodes(
+    names: Vec<String>,
+    _context: &mut ConnectionContext,
+) -> DaemonResult {
+    for name in names {
+        debug!(node = name, "Node stopped!");
+    }
+    Ok(DaemonResponse::NodeStopped)
 }
-
 
 pub async fn handle_list_nodes(_context: &mut ConnectionContext) -> DaemonResult {
-    Ok(DaemonResponse::NodeResponse(NodeResponse::List(vec![])))
+    Ok(DaemonResponse::NodeList(vec![]))
 }

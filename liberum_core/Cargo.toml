@@ -15,11 +15,9 @@ release = false
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1"
 tokio = {version = "1.40", features = ["full"] }
-clap = { version = "4.5.6", features = ["derive"] }
 libp2p = { version = "0.54", features = [ "tokio", "ping", "macros", "quic"] }
 tracing = { version = "0.1"}
 tracing-subscriber = { version = "0.3.18"}
-void = "1.0.2"
 daemonize = "0.5.0"
 tokio-util = {version="0.7", features=["codec"]}
 bytes = "1.8"
@@ -31,4 +29,3 @@ anyhow = "1.0"
 kameo = "0.12.2"
 thiserror = "1.0.65"
 tempdir = "0.3.7"
-strum={version="0.26", features=["derive"]}
