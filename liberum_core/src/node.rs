@@ -6,7 +6,7 @@ use config::NodeConfig;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, path::Path};
-use tracing::{debug, error};
+use tracing::error;
 
 pub struct Node {
     pub name: String,
