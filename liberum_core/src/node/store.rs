@@ -40,19 +40,18 @@ impl NodeStore {
     }
 
     pub async fn with_default_nodes_dir() -> Result<Self> {
-        let nodes_dir_path = NodeStore::resolve_nodes_dir_path(None);
+        let nodes_dir_path = NodeStore::resolve_nodes_dir_path(None)
+            .inspect_err(|e| error!(err = e.to_string(), "could not resolve nodes dir path"))?;
         debug!("creating a node store with a default dir");
-        NodeStore::new(nodes_dir_path).await
+        NodeStore::new(&nodes_dir_path).await
             .inspect_err(|e| error!(err = e.to_string(), "could not create a node store"))
     }
 
     pub async fn with_custom_nodes_dir(path: &Path) -> Result<Self> {
-        let nodes_dir_path = NodeStore::resolve_nodes_dir_path(Some(path));
-        debug!(
-            path = nodes_dir_path.display().to_string(),
-            "creating a node store with a custom dir"
-        );
-        NodeStore::new(nodes_dir_path).await
+        let nodes_dir_path = NodeStore::resolve_nodes_dir_path(Some(path))
+            .inspect_err(|e| error!(err = e.to_string(), "could not resolve nodes dir path"))?;
+        debug!(path = &nodes_dir_path.display().to_string(), "creating a node store with a custom dir");
+        NodeStore::new(&nodes_dir_path).await
             .inspect_err(|e| error!(err = e.to_string(), "could not create a node store"))
     }
 
@@ -113,8 +112,10 @@ impl NodeStore {
         Ok(())
     }
 
-    fn resolve_nodes_dir_path(path_override: Option<&Path>) -> &Path {
-        path_override.unwrap_or(Path::new(NodeStore::DEFAULT_NODES_DIRECTORY_NAME))
+    fn resolve_nodes_dir_path(path_override: Option<&Path>) -> Result<PathBuf> {
+        let home_dir_path = homedir::my_home()?.ok_or(anyhow!("no home directory"))?;
+        let nodes_dir_name = path_override.unwrap_or(Path::new(NodeStore::DEFAULT_NODES_DIRECTORY_NAME));
+        Ok(home_dir_path.join(nodes_dir_name))
     }
 }
 
@@ -223,5 +224,10 @@ mod tests {
             .await
             .inspect(|_| panic!("passing non-dir path should not be possible"))
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_store_default_path() {
+        NodeStore::with_default_nodes_dir().await.unwrap();
     }
 }
