@@ -99,7 +99,8 @@ impl NodeStore {
 
     async fn ensure_nodes_dir_path(path: &Path) -> Result<()> {
         debug!(path = path.display().to_string(), "ensuring nodes dir");
-        tokio::fs::create_dir_all(path).await?;
+        tokio::fs::create_dir_all(path).await
+            .inspect_err(|e| debug!(err = e.to_string(), "could not create nodes dir"))?;
         Ok(())
     }
 
@@ -111,7 +112,7 @@ impl NodeStore {
 impl Message<LoadNodes> for NodeStore {
     type Reply = Result<Vec<Node>, NodeStoreError>;
 
-    #[instrument(name = "LoadNodes", skip_all, fields(names))]
+    #[instrument(skip_all, name = "LoadNodes")]
     async fn handle(
         &mut self,
         LoadNodes(names): LoadNodes,
@@ -134,7 +135,7 @@ impl Message<LoadNodes> for NodeStore {
 impl Message<StoreNodes> for NodeStore {
     type Reply = Result<(), NodeStoreError>;
 
-    #[instrument(name = "StoreNodes")]
+    #[instrument(skip_all, name = "StoreNodes")]
     async fn handle(
         &mut self,
         StoreNodes(nodes): StoreNodes,
@@ -163,12 +164,15 @@ mod tests {
     use kameo::request::MessageSend;
     use libp2p::identity::Keypair;
     use tempdir::TempDir;
+    use tracing::{span, Instrument, Level};
 
     use super::*;
 
     fn init_tracing() {
         tracing_subscriber::fmt()
             .with_max_level(tracing::Level::DEBUG)
+            .with_line_number(true)
+            .with_file(true)
             .init();
     }
 
@@ -177,6 +181,7 @@ mod tests {
         init_tracing();
         let tmp_dir = TempDir::new("liberum_tests").unwrap();
         let node_store = NodeStore::with_custom_nodes_dir(tmp_dir.path())
+            .instrument(span!(Level::INFO, ""))
             .await
             .unwrap();
         let node_store = kameo::spawn(node_store);
