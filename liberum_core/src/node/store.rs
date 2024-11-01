@@ -67,11 +67,7 @@ impl NodeStore {
     }
 
     fn resolve_nodes_dir_path(path_override: Option<&Path>) -> &Path {
-        if let Some(path_override) = path_override {
-            return path_override;
-        } else {
-            return Path::new(NodeStore::DEFAULT_NODES_DIRECTORY_NAME);
-        }
+        path_override.unwrap_or(Path::new(NodeStore::DEFAULT_NODES_DIRECTORY_NAME))
     }
 }
 
