@@ -17,14 +17,6 @@ impl NodeStore {
     const DEFAULT_NODES_DIRECTORY_NAME: &'static str = ".liberum-neto";
 
     pub async fn new(nodes_dir_path: &Path) -> Result<Self> {
-        if !nodes_dir_path.is_dir() {
-            error!(
-                path = nodes_dir_path.display().to_string(),
-                "nodes dir path is not a directory",
-            );
-            bail!("provided nodes_dir_path is not a directory");
-        }
-
         NodeStore::ensure_nodes_dir_path(nodes_dir_path)
             .await
             .inspect_err(|e| {
