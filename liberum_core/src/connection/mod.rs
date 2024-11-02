@@ -15,7 +15,7 @@ use tracing::{debug, info, warn};
 /// Used by the core daemon to listen for incoming connections from UI
 /// Only one UI connection is possible at a time
 
-async fn handle_message(message: DaemonRequest, context: &mut ConnectionContext) -> DaemonResult {
+async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonResult {
     match message {
         DaemonRequest::NewNodes { names } => handle_new_nodes(names, context).await,
         DaemonRequest::StartNodes { names } => handle_start_nodes(names, context).await,
@@ -24,12 +24,13 @@ async fn handle_message(message: DaemonRequest, context: &mut ConnectionContext)
     }
 }
 
-struct ConnectionContext {
+#[derive(Clone)]
+struct AppContext {
     node_manager: ActorRef<NodeManager>,
 }
-impl ConnectionContext {
+impl AppContext {
     fn new(node_store: ActorRef<NodeStore>) -> Self {
-        ConnectionContext {
+        AppContext {
             node_manager: kameo::spawn(NodeManager::new(node_store.clone())),
         }
     }
@@ -41,17 +42,15 @@ async fn handle_connection(
         AsymmetricMessageCodec<DaemonResult, DaemonRequest>,
     >,
     id: u64,
+    app_context: AppContext,
 ) -> Result<()> {
-    let mut connection_context =
-        ConnectionContext::new(kameo::spawn(NodeStore::with_default_nodes_dir().await?));
-
     loop {
         tokio::select! {
             Some(message) = daemon_socket_framed.next() => {
                 info!("Received: {message:?} at {id}");
                 match message {
                     Ok(message) => {
-                        let response = handle_message(message, &mut connection_context).await;
+                        let response = handle_message(message, &app_context).await;
                         daemon_socket_framed.send(response).await?;
                     },
                     Err(e) => {warn!(err=e.to_string(), "Error receiving message"); break;}
@@ -69,6 +68,7 @@ async fn handle_connection(
 pub async fn listen(listener: UnixListener) -> Result<()> {
     info!("Server listening on {:?}", listener);
     let mut id = 0;
+    let mut app_context = AppContext::new(kameo::spawn(NodeStore::with_default_nodes_dir().await?));
     loop {
         let (daemon_socket, _) = listener.accept().await?;
         info!(conn_id = id, "Handling a new connection");
@@ -76,7 +76,11 @@ pub async fn listen(listener: UnixListener) -> Result<()> {
             tokio::net::UnixStream,
             AsymmetricMessageCodec<DaemonResult, DaemonRequest>,
         > = AsymmetricMessageCodec::new().framed(daemon_socket);
-        tokio::spawn(handle_connection(daemon_socket_framed, id.clone()));
+        tokio::spawn(handle_connection(
+            daemon_socket_framed,
+            id.clone(),
+            app_context.clone(),
+        ));
         id = id.wrapping_add(1);
     }
 }

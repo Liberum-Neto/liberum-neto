@@ -1,12 +1,12 @@
-use crate::connection::ConnectionContext;
-use crate::node::manager::{CreateNodes, StartNodes};
+use crate::connection::AppContext;
+use crate::node::manager::{CreateNodes, StartNodes, StopNodes};
 use crate::node::Node;
 use kameo::request::MessageSend;
 use liberum_core::messages::*;
 use libp2p::identity::Keypair;
 use tracing::debug;
 
-pub async fn handle_new_nodes(names: Vec<String>, context: &mut ConnectionContext) -> DaemonResult {
+pub async fn handle_new_nodes(names: Vec<String>, context: &AppContext) -> DaemonResult {
     let mut nodes = Vec::with_capacity(names.len());
     for name in names {
         let node = Node::builder()
@@ -33,7 +33,7 @@ pub async fn handle_new_nodes(names: Vec<String>, context: &mut ConnectionContex
 
 pub async fn handle_start_nodes(
     names: Vec<String>,
-    context: &mut ConnectionContext,
+    context: &AppContext,
 ) -> DaemonResult {
     let resp = context.node_manager.ask(StartNodes { names }).send().await;
     match resp {
@@ -47,16 +47,19 @@ pub async fn handle_start_nodes(
     }
 }
 
-pub async fn handle_stop_nodes(
-    names: Vec<String>,
-    _context: &mut ConnectionContext,
-) -> DaemonResult {
-    for name in names {
-        debug!(node = name, "Node stopped!");
+pub async fn handle_stop_nodes(names: Vec<String>, context: &AppContext) -> DaemonResult {
+    let resp = context
+        .node_manager
+        .ask(StopNodes { names })
+        .send()
+        .await
+        .map_err(|e| DaemonError::Other(e.to_string()));
+    match resp {
+        Err(e) => Err(DaemonError::Other(e.to_string())),
+        Ok(_nodes) => Ok(DaemonResponse::NodeStopped),
     }
-    Ok(DaemonResponse::NodeStopped)
 }
 
-pub async fn handle_list_nodes(_context: &mut ConnectionContext) -> DaemonResult {
+pub async fn handle_list_nodes(_context: &AppContext) -> DaemonResult {
     Ok(DaemonResponse::NodeList(vec![]))
 }
