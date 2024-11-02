@@ -12,7 +12,7 @@ use kameo::{
 use crate::node::store::LoadNodes;
 
 use super::{
-    store::{ListNodes, NodeStore},
+    store::{ListNodes, NodeStore, StoreNodes},
     Node,
 };
 
@@ -32,10 +32,42 @@ impl NodeManager {
         }
     }
 
-    async fn stop_all(&self) -> Result<()> {
-        for (_, n_ref) in self.nodes.iter() {
+    fn get_nodes_refs(&self, names: Vec<&String>) -> Result<Vec<&ActorRef<Node>>> {
+        let node_refs = names.into_iter()
+            .map(|name| {
+                self.nodes.get(name).ok_or(anyhow!("node {name} is not started"))
+            })
+            .collect::<Result<Vec<&ActorRef<Node>>>>()?;
+
+        Ok(node_refs)
+    }
+
+    async fn save_nodes(&self, nodes_refs: Vec<&ActorRef<Node>>) -> Result<()> {
+        let mut snapshots = Vec::new();
+
+        for n_ref in nodes_refs {
+            snapshots.push(n_ref.ask(super::GetSnapshot).send().await?);
+        }
+
+        self.store.ask(StoreNodes{nodes: snapshots});
+
+        Ok(())
+    }
+
+    async fn stop_nodes(&self, names: Vec<&String>) -> Result<()> {
+        let nodes_refs = self.get_nodes_refs(names)?;
+        self.save_nodes(nodes_refs.clone()).await?;
+
+        for n_ref in nodes_refs {
             n_ref.stop_gracefully().await?;
         }
+
+        Ok(())
+    }
+
+    async fn stop_all(&self) -> Result<()> {
+        let names = self.nodes.keys().collect::<Vec<&String>>();
+        self.stop_nodes(names).await?;
 
         Ok(())
     }
