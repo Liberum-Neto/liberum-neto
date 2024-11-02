@@ -95,7 +95,8 @@ impl NodeManager {
         self.store
             .ask(StoreNodes { nodes: snapshots })
             .send()
-            .await?;
+            .await
+            .map_err(|e| NodeManagerError::OtherError(e.into()))?;
 
         Ok(())
     }
@@ -170,7 +171,8 @@ impl Message<CreateNodes> for NodeManager {
         CreateNodes { nodes }: CreateNodes,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        self.store.ask(StoreNodes { nodes }).send().await?;
+        self.store.ask(StoreNodes { nodes }).send().await
+        .map_err(|e| NodeManagerError::OtherError(e.into()));
 
         Ok(())
     }
