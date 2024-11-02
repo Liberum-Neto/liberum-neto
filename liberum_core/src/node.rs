@@ -4,19 +4,40 @@ pub mod store;
 
 use anyhow::{anyhow, bail, Result};
 use config::NodeConfig;
-use kameo::{actor::ActorRef, message::Message, Actor};
+use kameo::{actor::ActorRef, message::Message, request::MessageSend, Actor};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
+use kameo::mailbox::bounded::BoundedMailbox;
+use libp2p::{StreamProtocol, SwarmBuilder};
 use manager::NodeManager;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, path::Path};
 use tracing::error;
+use crate::swarm::start_swarm;
 
-#[derive(Actor)]
 pub struct Node {
     pub name: String,
     pub keypair: Keypair,
     pub bootstrap_nodes: Vec<BootstrapNode>,
     pub manager_ref: Option<ActorRef<NodeManager>>,
+    pub external_addresses: Vec<Multiaddr>,
+}
+
+impl Actor for Node {
+    type Mailbox = BoundedMailbox<Self>;
+
+    async fn on_start(
+        &mut self,
+        actor_ref: ActorRef<Self>,
+    ) -> std::result::Result<(), kameo::error::BoxError> {
+        if let Some(manager_ref) = &self.manager_ref {
+            let myself = manager_ref
+            .ask(manager::GetNodes{names: vec![self.name.clone()]}).send().await?
+            .get(&self.name).unwrap().to_owned();
+            tokio::spawn(start_swarm(myself));
+        }
+
+        Ok(())
+    }
 }
 
 impl Node {
@@ -102,7 +123,10 @@ impl fmt::Debug for Node {
 
 impl Into<NodeConfig> for &Node {
     fn into(self) -> NodeConfig {
-        NodeConfig::new(self.bootstrap_nodes.clone())
+        NodeConfig::new(
+            self.bootstrap_nodes.clone(),
+            self.external_addresses.clone(),
+        )
     }
 }
 
@@ -113,11 +137,12 @@ impl Clone for Node {
             keypair: self.keypair.clone(),
             bootstrap_nodes: self.bootstrap_nodes.clone(),
             manager_ref: None,
+            external_addresses: self.external_addresses.clone(),
         }
     }
 }
 
-struct GetSnapshot;
+pub struct GetSnapshot;
 
 impl Message<GetSnapshot> for Node {
     type Reply = Result<Node, kameo::error::Infallible>;
@@ -136,6 +161,7 @@ pub struct NodeBuilder {
     name: Option<String>,
     keypair: Option<Keypair>,
     bootstrap_nodes: Vec<BootstrapNode>,
+    external_addresses: Vec<Multiaddr>,
 }
 
 impl NodeBuilder {
@@ -151,15 +177,20 @@ impl NodeBuilder {
 
     pub fn config(mut self, config: NodeConfig) -> Self {
         self.bootstrap_nodes = config.bootstrap_nodes;
+        self.external_addresses = config.external_addresses;
         self
     }
 
     pub fn build(self) -> Result<Node> {
+        let keypair = self.keypair.ok_or(anyhow!("keypair is required"))?;
+        let id = PeerId::from_public_key(&keypair.public());
+
         return Ok(Node {
             name: self.name.ok_or(anyhow!("node name is required"))?,
-            keypair: self.keypair.ok_or(anyhow!("keypair is required"))?,
+            keypair: keypair,
             bootstrap_nodes: self.bootstrap_nodes,
             manager_ref: None,
+            external_addresses: self.external_addresses,
         });
     }
 }
