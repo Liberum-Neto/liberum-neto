@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use crate::connection::ConnectionContext;
 use crate::node::{self, Node};
 use kameo::request::MessageSend;
@@ -24,7 +26,7 @@ pub async fn handle_new_nodes(names: Vec<String>, context: &mut ConnectionContex
         }
     }
 
-    let resp = context.node_store.ask(StoreNodes(nodes)).send().await;
+    let resp = context.node_store.ask(StoreNodes { nodes }).send().await;
     match resp {
         Err(e) => Err(DaemonError::Other(e.to_string())),
         Ok(_resp) => Ok(DaemonResponse::NodeCreated),
@@ -35,7 +37,7 @@ pub async fn handle_start_nodes(
     names: Vec<String>,
     context: &mut ConnectionContext,
 ) -> DaemonResult {
-    let resp = context.node_store.ask(LoadNodes(names)).send().await;
+    let resp = context.node_store.ask(LoadNodes { names }).send().await;
     match resp {
         Err(e) => Err(DaemonError::Other(e.to_string())),
         Ok(nodes) => {
