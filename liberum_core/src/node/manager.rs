@@ -11,7 +11,10 @@ use kameo::{
 
 use crate::node::store::LoadNodes;
 
-use super::{store::NodeStore, Node};
+use super::{
+    store::{self, ListNodes, NodeStore},
+    Node,
+};
 
 #[derive(Debug)]
 pub struct NodeManager {
@@ -63,23 +66,19 @@ impl Actor for NodeManager {
     }
 }
 
-struct StartNodes {
-    names: Vec<String>,
+pub struct StartNodes {
+    pub names: Vec<String>,
 }
+pub struct StartAll {}
 
-struct StopNodes {
-    names: Vec<String>,
+pub struct StopNodes {
+    pub names: Vec<String>,
 }
+pub struct StopAll {}
 
-struct StopAll {}
-
-struct GetNode {
-    name: String,
+pub struct GetNodes {
+    pub names: Vec<String>,
 }
-struct GetNodes {
-    names: Vec<String>,
-}
-
 struct GetAll {}
 
 impl Message<StartNodes> for NodeManager {
@@ -112,6 +111,30 @@ impl Message<StartNodes> for NodeManager {
             .collect();
 
         Ok(node_refs)
+    }
+}
+
+impl Message<StartAll> for NodeManager {
+    type Reply = Result<Vec<ActorRef<Node>>>;
+
+    async fn handle(
+        &mut self,
+        _: StartAll,
+        _: kameo::message::Context<'_, Self, Self::Reply>,
+    ) -> Self::Reply {
+        let names = self.store.ask(ListNodes {}).send().await?;
+        let mut nodes = self.store.ask(LoadNodes { names }).send().await?;
+        let nodes = nodes
+            .drain(0..)
+            .map(|node| {
+                let name = node.name.clone();
+                let actor_ref = kameo::spawn(node);
+                self.nodes.insert(name, actor_ref.clone());
+                actor_ref
+            })
+            .collect();
+
+        Ok(nodes)
     }
 }
 
