@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, bail, Result};
 use kameo::{
-    actor::{self, ActorRef},
+    actor::ActorRef,
     mailbox::bounded::BoundedMailbox,
     message::Message,
     request::MessageSend,
@@ -12,7 +12,7 @@ use kameo::{
 use crate::node::store::LoadNodes;
 
 use super::{
-    store::{self, ListNodes, NodeStore},
+    store::{ListNodes, NodeStore},
     Node,
 };
 
@@ -65,17 +65,17 @@ impl Actor for NodeManager {
 pub struct StartNodes {
     pub names: Vec<String>,
 }
-pub struct StartAll {}
+pub struct StartAll;
 
 pub struct StopNodes {
     pub names: Vec<String>,
 }
-pub struct StopAll {}
+pub struct StopAll;
 
 pub struct GetNodes {
     pub names: Vec<String>,
 }
-struct GetAll {}
+struct GetAll;
 
 impl Message<StartNodes> for NodeManager {
     type Reply = Result<Vec<ActorRef<Node>>>;
@@ -119,7 +119,7 @@ impl Message<StartAll> for NodeManager {
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
         let names = self.store.ask(ListNodes {}).send().await?;
-        let mut nodes = self.store.ask(LoadNodes { names }).send().await?;
+        let nodes = self.store.ask(LoadNodes { names }).send().await?;
         let nodes = nodes
             .into_iter()
             .map(|node| {
