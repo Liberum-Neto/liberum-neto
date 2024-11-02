@@ -97,7 +97,7 @@ impl Message<StartNodes> for NodeManager {
             .iter_mut()
             .for_each(|n| n.manager_ref = self.actor_ref.clone());
         let node_refs: Vec<ActorRef<Node>> = nodes
-            .drain(0..)
+            .into_iter()
             .map(|n| {
                 let name = n.name.clone();
                 let actor_ref = kameo::spawn(n);
@@ -121,7 +121,7 @@ impl Message<StartAll> for NodeManager {
         let names = self.store.ask(ListNodes {}).send().await?;
         let mut nodes = self.store.ask(LoadNodes { names }).send().await?;
         let nodes = nodes
-            .drain(0..)
+            .into_iter()
             .map(|node| {
                 let name = node.name.clone();
                 let actor_ref = kameo::spawn(node);
