@@ -32,10 +32,6 @@ impl NodeManager {
         }
     }
 
-    pub fn get_store(&self) -> ActorRef<NodeStore> {
-        self.store.clone()
-    }
-
     async fn stop_all(&self) -> Result<()> {
         for (_, n_ref) in self.nodes.iter() {
             n_ref.stop_gracefully().await?;
