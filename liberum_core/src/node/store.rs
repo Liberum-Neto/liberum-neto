@@ -11,6 +11,7 @@ pub struct LoadNodes {
 pub struct StoreNodes {
     pub nodes: Vec<Node>,
 }
+pub struct ListNodes {}
 
 #[derive(Debug, Actor)]
 pub struct NodeStore {
@@ -160,6 +161,29 @@ impl Message<StoreNodes> for NodeStore {
         }
 
         Ok(())
+    }
+}
+
+impl Message<ListNodes> for NodeStore {
+    type Reply = Result<Vec<String>, NodeStoreError>;
+
+    #[instrument(skip_all, name = "ListNodes")]
+    async fn handle(
+        &mut self,
+        _: ListNodes,
+        _: kameo::message::Context<'_, Self, Self::Reply>,
+    ) -> Self::Reply {
+        let mut names = Vec::new();
+        let mut dir = tokio::fs::read_dir(&self.store_dir_path).await.unwrap();
+        while let Some(dir) = dir.next_entry().await.unwrap() {
+            if dir.path().is_dir() {
+                if let Some(name) = dir.file_name().to_str() {
+                    names.push(name.to_string());
+                }
+            }
+        }
+
+        Ok(names)
     }
 }
 
