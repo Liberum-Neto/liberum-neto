@@ -11,7 +11,7 @@ pub struct LoadNodes {
 pub struct StoreNodes {
     pub nodes: Vec<Node>,
 }
-pub struct ListNodes {}
+pub struct ListNodes;
 
 #[derive(Debug, Actor)]
 pub struct NodeStore {
