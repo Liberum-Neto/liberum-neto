@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, bail, Result};
 use kameo::{
-    actor::ActorRef, mailbox::bounded::BoundedMailbox, message::Message, request::MessageSend,
+    actor::{self, ActorRef},
+    mailbox::bounded::BoundedMailbox,
+    message::Message,
+    request::MessageSend,
     Actor,
 };
 
@@ -51,21 +54,21 @@ impl Actor for NodeManager {
     }
 
     async fn on_stop(
-            self,
-            _: kameo::actor::WeakActorRef<Self>,
-            _: kameo::error::ActorStopReason,
-        ) -> std::result::Result<(), kameo::error::BoxError> {
-            self.stop_all().await?;
-            Ok(())
+        self,
+        _: kameo::actor::WeakActorRef<Self>,
+        _: kameo::error::ActorStopReason,
+    ) -> std::result::Result<(), kameo::error::BoxError> {
+        self.stop_all().await?;
+        Ok(())
     }
 }
 
-struct StartNode {
-    name: String,
+struct StartNodes {
+    names: Vec<String>,
 }
 
-struct StopNode {
-    name: String,
+struct StopNodes {
+    names: Vec<String>,
 }
 
 struct StopAll {}
@@ -73,53 +76,60 @@ struct StopAll {}
 struct GetNode {
     name: String,
 }
+struct GetNodes {
+    names: Vec<String>,
+}
 
 struct GetAll {}
 
-impl Message<StartNode> for NodeManager {
-    type Reply = Result<ActorRef<Node>>;
+impl Message<StartNodes> for NodeManager {
+    type Reply = Result<Vec<ActorRef<Node>>>;
 
     async fn handle(
         &mut self,
-        StartNode { name }: StartNode,
+        StartNodes { names }: StartNodes,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        if self.nodes.contains_key(&name) {
-            bail!("node is already started");
+        for name in &names {
+            if self.nodes.contains_key(name) {
+                bail!("node {name} is already started");
+            }
         }
 
-        let mut node = self
-            .store
-            .ask(LoadNodes {
-                names: vec![name.clone()],
+        let mut nodes: Vec<Node> = self.store.ask(LoadNodes { names }).send().await?;
+
+        nodes
+            .iter_mut()
+            .for_each(|n| n.manager_ref = self.actor_ref.clone());
+        let node_refs: Vec<ActorRef<Node>> = nodes
+            .drain(0..)
+            .map(|n| {
+                let name = n.name.clone();
+                let actor_ref = kameo::spawn(n);
+                self.nodes.insert(name, actor_ref.clone());
+                actor_ref
             })
-            .send()
-            .await?
-            .swap_remove(0);
-        node.manager_ref = self.actor_ref.clone();
+            .collect();
 
-        let node_ref = kameo::spawn(node);
-
-        self.nodes.insert(name, node_ref.clone());
-
-        Ok(node_ref)
+        Ok(node_refs)
     }
 }
 
-impl Message<StopNode> for NodeManager {
+impl Message<StopNodes> for NodeManager {
     type Reply = Result<()>;
 
     async fn handle(
         &mut self,
-        StopNode { name }: StopNode,
+        StopNodes { names }: StopNodes,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        let node = self
-            .nodes
-            .get(&name)
-            .ok_or(anyhow!("node is not started"))?;
-
-        node.stop_gracefully().await?;
+        for name in &names {
+            self.nodes
+                .get(name)
+                .ok_or(anyhow!("node {name} is not started"))?
+                .stop_gracefully()
+                .await?;
+        }
 
         Ok(())
     }
@@ -129,30 +139,35 @@ impl Message<StopAll> for NodeManager {
     type Reply = Result<()>;
 
     async fn handle(
-            &mut self,
-            _: StopAll,
-            _: kameo::message::Context<'_, Self, Self::Reply>,
-        ) -> Self::Reply {
-            self.stop_all().await?;
-            Ok(())
+        &mut self,
+        _: StopAll,
+        _: kameo::message::Context<'_, Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.stop_all().await?;
+        Ok(())
     }
 }
 
-impl Message<GetNode> for NodeManager {
-    type Reply = Result<ActorRef<Node>>;
+impl Message<GetNodes> for NodeManager {
+    type Reply = Result<Vec<ActorRef<Node>>>;
 
     async fn handle(
         &mut self,
-        GetNode { name }: GetNode,
+        GetNodes { names }: GetNodes,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        let node_ref = self
-            .nodes
-            .get(&name)
-            .ok_or(anyhow!("there is no {} node started", name))?
-            .clone();
+        let node_refs: Result<Vec<ActorRef<Node>>> = names
+            .iter()
+            .map(|name| {
+                Ok(self
+                    .nodes
+                    .get(name)
+                    .ok_or(anyhow!("there is no {} node started", name))?
+                    .clone())
+            })
+            .collect();
 
-        Ok(node_ref)
+        node_refs
     }
 }
 
@@ -160,10 +175,10 @@ impl Message<GetAll> for NodeManager {
     type Reply = HashMap<String, ActorRef<Node>>;
 
     async fn handle(
-            &mut self,
-            _: GetAll,
-            _: kameo::message::Context<'_, Self, Self::Reply>,
-        ) -> Self::Reply {
-            self.nodes.clone()
+        &mut self,
+        _: GetAll,
+        _: kameo::message::Context<'_, Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.nodes.clone()
     }
 }

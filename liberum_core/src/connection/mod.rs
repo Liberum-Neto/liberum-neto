@@ -1,4 +1,6 @@
 mod message_handling;
+use crate::node;
+use crate::node::manager::NodeManager;
 use crate::node::store::NodeStore;
 use anyhow::Result;
 use futures::prelude::*;
@@ -24,7 +26,16 @@ async fn handle_message(message: DaemonRequest, context: &mut ConnectionContext)
 }
 
 struct ConnectionContext {
+    node_manager: ActorRef<NodeManager>,
     node_store: ActorRef<NodeStore>,
+}
+impl ConnectionContext {
+    fn new(node_store: ActorRef<NodeStore>) -> Self {
+        ConnectionContext {
+            node_manager: kameo::spawn(NodeManager::new(node_store.clone())),
+            node_store,
+        }
+    }
 }
 
 async fn handle_connection(
@@ -34,9 +45,8 @@ async fn handle_connection(
     >,
     id: u64,
 ) -> Result<()> {
-    let mut connection_context = ConnectionContext {
-        node_store: kameo::spawn(NodeStore::with_default_nodes_dir().await?),
-    };
+    let mut connection_context =
+        ConnectionContext::new(kameo::spawn(NodeStore::with_default_nodes_dir().await?));
 
     loop {
         tokio::select! {
