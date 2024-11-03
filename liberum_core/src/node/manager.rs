@@ -14,7 +14,7 @@ use std::{
     fmt::{Debug, Display},
 };
 use thiserror::Error;
-use tracing::error;
+use tracing::{debug, error};
 
 type NamedRefs = HashMap<String, ActorRef<Node>>;
 
@@ -160,8 +160,19 @@ impl Actor for NodeManager {
         id: kameo::actor::ActorID,
         _: kameo::error::ActorStopReason,
     ) -> std::result::Result<Option<kameo::error::ActorStopReason>, kameo::error::BoxError> {
-        error!(id = id.to_string(), "node died");
-        Ok(Some(kameo::error::ActorStopReason::Normal))
+        debug!(id = id.to_string(), "node died");
+        let name = self
+            .nodes
+            .keys()
+            .filter_map(|k| Some(self.nodes.get(k.as_str())?.id() == id))
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>();
+        let name = name
+            .first()
+            .ok_or(anyhow!("there is no such node started"))?;
+        self.nodes.remove(name);
+
+        Ok(None)
     }
 }
 

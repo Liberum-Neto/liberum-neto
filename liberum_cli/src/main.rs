@@ -1,9 +1,11 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use liberum_core;
+use liberum_core::messages::DaemonRequest;
 use std::path::Path;
 use tracing::{debug, error, info};
 use tracing_subscriber;
+
 #[derive(Parser)]
 struct Cli {
     #[command(subcommand)]
@@ -21,6 +23,10 @@ enum Commands {
         name: String,
     },
     StartNode {
+        #[arg()]
+        name: String,
+    },
+    StopNode {
         #[arg()]
         name: String,
     },
@@ -51,30 +57,34 @@ async fn main() -> Result<()> {
         Commands::NewNode { name } => {
             debug!("Creating node {name}");
             request_sender
-                .send(liberum_core::messages::DaemonRequest::NewNodes { names: vec![name] })
+                .send(DaemonRequest::NewNodes { names: vec![name] })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            match response_receiver.recv().await {
-                Some(r) => info!(response = format!("{r:?}"), "Daemon responds: {:?}", r),
-                None => {
-                    error!("Failed to receive response");
-                }
-            };
         }
 
         Commands::StartNode { name } => {
             debug!("Starting node {name}");
             request_sender
-                .send(liberum_core::messages::DaemonRequest::StartNodes { names: vec![name] })
+                .send(DaemonRequest::StartNodes { names: vec![name] })
                 .await
-                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message: {e}"))?;
-            match response_receiver.recv().await {
-                Some(r) => info!(response = format!("{r:?}"), "Client responds"),
-                None => {
-                    error!("Failed to receive response");
-                }
-            };
+                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+        }
+
+        Commands::StopNode { name } => {
+            debug!(name = name, "Stopping node");
+            request_sender
+                .send(DaemonRequest::StopNodes { names: vec![name] })
+                .await
+                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
         }
     };
+
+    match response_receiver.recv().await {
+        Some(r) => info!(response = format!("{r:?}"), "Daemon responds: {:?}", r),
+        None => {
+            error!("Failed to receive response");
+        }
+    };
+
     Ok(())
 }
