@@ -32,16 +32,18 @@ pub async fn handle_new_nodes(names: Vec<String>, context: &AppContext) -> Daemo
 }
 
 pub async fn handle_start_nodes(names: Vec<String>, context: &AppContext) -> DaemonResult {
-    let resp = context.node_manager.ask(StartNodes { names }).send().await;
-    match resp {
-        Err(e) => Err(DaemonError::Other(e.to_string())),
-        Ok(nodes) => {
-            for (name, _) in nodes {
-                debug!(name = name, "Node started!");
-            }
-            Ok(DaemonResponse::NodeStarted)
-        }
+    let nodes = context
+        .node_manager
+        .ask(StartNodes { names })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle start nodes"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    for (name, _) in nodes {
+        debug!(name = name, "Node started!");
     }
+    Ok(DaemonResponse::NodeStarted)
 }
 
 pub async fn handle_stop_nodes(names: Vec<String>, context: &AppContext) -> DaemonResult {

@@ -164,7 +164,13 @@ impl Actor for NodeManager {
         let name = self
             .nodes
             .keys()
-            .filter_map(|k| Some(self.nodes.get(k.as_str())?.id() == id))
+            .filter_map(|k| {
+                if self.nodes.get(k.as_str())?.id() == id {
+                    Some(k)
+                } else {
+                    None
+                }
+            })
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
         let name = name
