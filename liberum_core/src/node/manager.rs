@@ -1,8 +1,8 @@
 use super::{
-    store::{ListNodes, NodeStore, NodeStoreError, StoreNodes},
+    store::{ListNodes, NodeStore, NodeStoreError, StoreNode},
     Node,
 };
-use crate::node::store::LoadNodes;
+use crate::node::store::LoadNode;
 use anyhow::anyhow;
 use anyhow::{Error, Result};
 use kameo::{
@@ -34,42 +34,31 @@ impl NodeManager {
         }
     }
 
-    fn get_nodes_refs(&self, names: Vec<&str>) -> Result<NamedRefs, NodeManagerError> {
-        names
-            .into_iter()
-            .map(|name| match self.nodes.get(name) {
-                Some(node) => Ok((name.to_string(), node.clone())),
-                None => Err(NodeManagerError::NotStarted {
-                    name: name.to_string(),
-                }),
-            })
-            .collect()
+    fn get_node_ref(&self, name: &str) -> Result<ActorRef<Node>, NodeManagerError> {
+        match self.nodes.get(name) {
+            Some(node) => Ok(node.clone()),
+            None => Err(NodeManagerError::NotStarted {
+                name: name.to_string(),
+            }),
+        }
     }
 
-    async fn start_nodes(&mut self, names: Vec<String>) -> Result<NamedRefs, NodeManagerError> {
-        for name in &names {
-            if self.nodes.contains_key(name) {
-                return Err(NodeManagerError::AlreadyStarted {
-                    name: name.to_string(),
-                });
-            }
+    async fn start_node(&mut self, name: String) -> Result<ActorRef<Node>, NodeManagerError> {
+        if self.nodes.contains_key(&name) {
+            return Err(NodeManagerError::AlreadyStarted {
+                name: name.to_string(),
+            });
         }
 
-        let mut nodes = self.store.ask(LoadNodes { names }).send().await?;
+        let mut node = self
+            .store
+            .ask(LoadNode { name: name.clone() })
+            .send()
+            .await?;
 
-        nodes
-            .iter_mut()
-            .for_each(|n| n.manager_ref = self.actor_ref.clone());
-
-        let node_refs: HashMap<String, ActorRef<Node>> = nodes
-            .into_iter()
-            .map(|n| {
-                let name = n.name.clone();
-                let actor_ref = kameo::spawn(n);
-                self.nodes.insert(name.clone(), actor_ref.clone());
-                (name, actor_ref)
-            })
-            .collect();
+        node.manager_ref = self.actor_ref.clone();
+        let actor_ref = kameo::spawn(node);
+        self.nodes.insert(name.clone(), actor_ref.clone());
 
         let self_ref = self
             .actor_ref
@@ -78,33 +67,31 @@ impl NodeManager {
                 "manager has no actor ref"
             )))?;
 
-        for (_, n_ref) in &node_refs {
-            self_ref.link(n_ref).await;
-        }
+        self_ref.link(&actor_ref).await;
 
-        Ok(node_refs)
+        Ok(actor_ref)
     }
 
     async fn start_all(&mut self) -> Result<NamedRefs, NodeManagerError> {
         let names = self.store.ask(ListNodes {}).send().await?;
+        let mut named_refs = NamedRefs::new();
 
-        self.start_nodes(names).await
-    }
-
-    async fn save_nodes(&self, nodes_refs: NamedRefs) -> Result<(), NodeManagerError> {
-        let mut snapshots = Vec::new();
-
-        for (_, n_ref) in nodes_refs {
-            let snapshot = n_ref
-                .ask(super::GetSnapshot)
-                .send()
-                .await
-                .map_err(|e| NodeManagerError::OtherError(e.into()))?;
-            snapshots.push(snapshot);
+        for name in names {
+            named_refs.insert(name.clone(), self.start_node(name).await?);
         }
 
+        Ok(named_refs)
+    }
+
+    async fn save_node(&self, node_ref: ActorRef<Node>) -> Result<(), NodeManagerError> {
+        let snapshot = node_ref
+            .ask(super::GetSnapshot)
+            .send()
+            .await
+            .map_err(|e| NodeManagerError::OtherError(e.into()))?;
+
         self.store
-            .ask(StoreNodes { nodes: snapshots })
+            .ask(StoreNode { node: snapshot })
             .send()
             .await
             .map_err(|e| NodeManagerError::OtherError(e.into()))?;
@@ -112,23 +99,23 @@ impl NodeManager {
         Ok(())
     }
 
-    async fn stop_nodes(&self, names: Vec<&str>) -> Result<(), NodeManagerError> {
-        let nodes_refs = self.get_nodes_refs(names)?;
-        self.save_nodes(nodes_refs.clone()).await?;
+    async fn stop_node(&self, name: &str) -> Result<(), NodeManagerError> {
+        let node_ref = self.get_node_ref(name)?;
+        self.save_node(node_ref.clone()).await?;
 
-        for (_, n_ref) in nodes_refs {
-            n_ref
-                .stop_gracefully()
-                .await
-                .map_err(|e| NodeManagerError::OtherError(e.into()))?;
-        }
+        node_ref
+            .stop_gracefully()
+            .await
+            .map_err(|e| NodeManagerError::OtherError(e.into()))?;
 
         Ok(())
     }
 
     async fn stop_all(&self) -> Result<(), NodeManagerError> {
         let names = self.nodes.keys().map(|k| k.as_str()).collect::<Vec<&str>>();
-        self.stop_nodes(names).await?;
+        for name in names {
+            self.stop_node(name).await?;
+        }
 
         Ok(())
     }
@@ -182,35 +169,38 @@ impl Actor for NodeManager {
     }
 }
 
-pub struct CreateNodes {
-    pub nodes: Vec<Node>,
+pub struct CreateNode {
+    pub node: Node,
 }
 
-pub struct StartNodes {
-    pub names: Vec<String>,
+pub struct StartNode {
+    pub name: String,
 }
+
 pub struct StartAll;
 
-pub struct StopNodes {
-    pub names: Vec<String>,
+pub struct StopNode {
+    pub name: String,
 }
+
 pub struct StopAll;
 
-pub struct GetNodes {
-    pub names: Vec<String>,
+pub struct GetNode {
+    pub name: String,
 }
+
 struct GetAll;
 
-impl Message<CreateNodes> for NodeManager {
+impl Message<CreateNode> for NodeManager {
     type Reply = Result<(), NodeManagerError>;
 
     async fn handle(
         &mut self,
-        CreateNodes { nodes }: CreateNodes,
+        CreateNode { node }: CreateNode,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
         self.store
-            .ask(StoreNodes { nodes })
+            .ask(StoreNode { node })
             .send()
             .await
             .map_err(|e| NodeManagerError::OtherError(e.into()))?;
@@ -219,15 +209,15 @@ impl Message<CreateNodes> for NodeManager {
     }
 }
 
-impl Message<StartNodes> for NodeManager {
-    type Reply = Result<NamedRefs, NodeManagerError>;
+impl Message<StartNode> for NodeManager {
+    type Reply = Result<ActorRef<Node>, NodeManagerError>;
 
     async fn handle(
         &mut self,
-        StartNodes { names }: StartNodes,
+        StartNode { name }: StartNode,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        self.start_nodes(names).await
+        self.start_node(name).await
     }
 }
 
@@ -243,16 +233,15 @@ impl Message<StartAll> for NodeManager {
     }
 }
 
-impl Message<StopNodes> for NodeManager {
+impl Message<StopNode> for NodeManager {
     type Reply = Result<(), NodeManagerError>;
 
     async fn handle(
         &mut self,
-        StopNodes { names }: StopNodes,
+        StopNode { name }: StopNode,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        let names = names.iter().map(|s| s.as_str()).collect();
-        self.stop_nodes(names).await
+        self.stop_node(&name).await
     }
 }
 
@@ -269,16 +258,15 @@ impl Message<StopAll> for NodeManager {
     }
 }
 
-impl Message<GetNodes> for NodeManager {
-    type Reply = Result<NamedRefs, NodeManagerError>;
+impl Message<GetNode> for NodeManager {
+    type Reply = Result<ActorRef<Node>, NodeManagerError>;
 
     async fn handle(
         &mut self,
-        GetNodes { names }: GetNodes,
+        GetNode { name }: GetNode,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        let names = names.iter().map(|s| s.as_str()).collect();
-        self.get_nodes_refs(names)
+        self.get_node_ref(&name)
     }
 }
 

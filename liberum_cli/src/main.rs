@@ -57,7 +57,7 @@ async fn main() -> Result<()> {
         Commands::NewNode { name } => {
             debug!("Creating node {name}");
             request_sender
-                .send(DaemonRequest::NewNodes { names: vec![name] })
+                .send(DaemonRequest::NewNode { name })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
         }
@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
         Commands::StartNode { name } => {
             debug!("Starting node {name}");
             request_sender
-                .send(DaemonRequest::StartNodes { names: vec![name] })
+                .send(DaemonRequest::StartNode { name })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
         }
@@ -73,7 +73,7 @@ async fn main() -> Result<()> {
         Commands::StopNode { name } => {
             debug!(name = name, "Stopping node");
             request_sender
-                .send(DaemonRequest::StopNodes { names: vec![name] })
+                .send(DaemonRequest::StopNode { name })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
         }

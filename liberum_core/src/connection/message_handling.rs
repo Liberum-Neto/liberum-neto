@@ -1,55 +1,43 @@
 use crate::connection::AppContext;
-use crate::node::manager::{CreateNodes, StartNodes, StopNodes};
+use crate::node::manager::{CreateNode, StartNode, StopNode};
 use crate::node::Node;
 use kameo::request::MessageSend;
 use liberum_core::messages::*;
 use libp2p::identity::Keypair;
 use tracing::debug;
 
-pub async fn handle_new_nodes(names: Vec<String>, context: &AppContext) -> DaemonResult {
-    let mut nodes = Vec::with_capacity(names.len());
-    for name in names {
-        let node = Node::builder()
-            .name(name)
-            .keypair(Keypair::generate_ed25519())
-            .build();
+pub async fn handle_new_node(name: String, context: &AppContext) -> DaemonResult {
+    let node = Node::builder()
+        .name(name)
+        .keypair(Keypair::generate_ed25519())
+        .build()
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-        match node {
-            Err(e) => {
-                return Err(DaemonError::Other(e.to_string()));
-            }
-            Ok(node) => {
-                nodes.push(node);
-            }
-        }
-    }
-
-    let resp = context.node_manager.ask(CreateNodes { nodes }).send().await;
+    let resp = context.node_manager.ask(CreateNode { node }).send().await;
     match resp {
         Err(e) => Err(DaemonError::Other(e.to_string())),
         Ok(_resp) => Ok(DaemonResponse::NodeCreated),
     }
 }
 
-pub async fn handle_start_nodes(names: Vec<String>, context: &AppContext) -> DaemonResult {
-    let nodes = context
+pub async fn handle_start_node(name: String, context: &AppContext) -> DaemonResult {
+    context
         .node_manager
-        .ask(StartNodes { names })
+        .ask(StartNode { name: name.clone() })
         .send()
         .await
-        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle start nodes"))
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle start node"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    for (name, _) in nodes {
-        debug!(name = name, "Node started!");
-    }
+    debug!(name = name, "Node started!");
+
     Ok(DaemonResponse::NodeStarted)
 }
 
-pub async fn handle_stop_nodes(names: Vec<String>, context: &AppContext) -> DaemonResult {
+pub async fn handle_stop_nodes(name: String, context: &AppContext) -> DaemonResult {
     let resp = context
         .node_manager
-        .ask(StopNodes { names })
+        .ask(StopNode { name })
         .send()
         .await
         .map_err(|e| DaemonError::Other(e.to_string()));
