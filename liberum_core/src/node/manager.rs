@@ -122,6 +122,10 @@ impl Actor for NodeManager {
     }
 }
 
+pub struct CreateNodes {
+    pub nodes: Vec<Node>,
+}
+
 pub struct StartNodes {
     pub names: Vec<String>,
 }
@@ -136,6 +140,20 @@ pub struct GetNodes {
     pub names: Vec<String>,
 }
 struct GetAll;
+
+impl Message<CreateNodes> for NodeManager {
+    type Reply = Result<(), NodeManagerError>;
+
+    async fn handle(
+        &mut self,
+        CreateNodes { nodes }: CreateNodes,
+        _: kameo::message::Context<'_, Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.store.ask(StoreNodes { nodes }).send().await?;
+
+        Ok(())
+    }
+}
 
 impl Message<StartNodes> for NodeManager {
     type Reply = Result<Vec<ActorRef<Node>>, NodeManagerError>;
