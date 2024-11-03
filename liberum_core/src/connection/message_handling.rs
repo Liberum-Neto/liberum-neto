@@ -39,8 +39,8 @@ pub async fn handle_start_nodes(
     match resp {
         Err(e) => Err(DaemonError::Other(e.to_string())),
         Ok(nodes) => {
-            for _node in nodes {
-                //debug!(node = node.name, "Node loaded!");
+            for (name, _) in nodes {
+                debug!(name = name, "Node started!");
             }
             Ok(DaemonResponse::NodeStarted)
         }
