@@ -1,21 +1,20 @@
-use std::{
-    collections::HashMap,
-    fmt::{Debug, Display},
+use super::{
+    store::{ListNodes, NodeStore, NodeStoreError, StoreNodes},
+    Node,
 };
-
+use crate::node::store::LoadNodes;
+use anyhow::anyhow;
 use anyhow::{Error, Result};
 use kameo::{
     actor::ActorRef, error::SendError, mailbox::bounded::BoundedMailbox, message::Message,
     request::MessageSend, Actor,
 };
-use thiserror::Error;
-
-use crate::node::store::LoadNodes;
-
-use super::{
-    store::{ListNodes, NodeStore, NodeStoreError, StoreNodes},
-    Node,
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Display},
 };
+use thiserror::Error;
+use tracing::error;
 
 type NamedRefs = HashMap<String, ActorRef<Node>>;
 
@@ -61,6 +60,7 @@ impl NodeManager {
         nodes
             .iter_mut()
             .for_each(|n| n.manager_ref = self.actor_ref.clone());
+
         let node_refs: HashMap<String, ActorRef<Node>> = nodes
             .into_iter()
             .map(|n| {
@@ -70,6 +70,17 @@ impl NodeManager {
                 (name, actor_ref)
             })
             .collect();
+
+        let self_ref = self
+            .actor_ref
+            .as_mut()
+            .ok_or(NodeManagerError::OtherError(anyhow!(
+                "manager has no actor ref"
+            )))?;
+
+        for (_, n_ref) in &node_refs {
+            self_ref.link(n_ref).await;
+        }
 
         Ok(node_refs)
     }
@@ -141,6 +152,16 @@ impl Actor for NodeManager {
     ) -> std::result::Result<(), kameo::error::BoxError> {
         self.stop_all().await?;
         Ok(())
+    }
+
+    async fn on_link_died(
+        &mut self,
+        _: kameo::actor::WeakActorRef<Self>,
+        id: kameo::actor::ActorID,
+        _: kameo::error::ActorStopReason,
+    ) -> std::result::Result<Option<kameo::error::ActorStopReason>, kameo::error::BoxError> {
+        error!(id = id.to_string(), "node died");
+        Ok(Some(kameo::error::ActorStopReason::Normal))
     }
 }
 

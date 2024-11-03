@@ -17,7 +17,7 @@ bincode = "1"
 tokio = {version = "1.40", features = ["full"] }
 libp2p = { version = "0.54", features = [ "tokio", "ping", "macros", "quic", "kad"] }
 tracing = { version = "0.1"}
-tracing-subscriber = { version = "0.3.18"}
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "fmt"] }
 daemonize = "0.5.0"
 tokio-util = {version="0.7", features=["codec"]}
 bytes = "1.8"
