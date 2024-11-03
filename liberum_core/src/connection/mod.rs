@@ -17,9 +17,9 @@ use tracing::{debug, info, warn};
 
 async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonResult {
     match message {
-        DaemonRequest::NewNodes { names } => handle_new_nodes(names, context).await,
-        DaemonRequest::StartNodes { names } => handle_start_nodes(names, context).await,
-        DaemonRequest::StopNodes { names } => handle_stop_nodes(names, context).await,
+        DaemonRequest::NewNode { name } => handle_new_node(name, context).await,
+        DaemonRequest::StartNode { name } => handle_start_node(name, context).await,
+        DaemonRequest::StopNode { name } => handle_stop_nodes(name, context).await,
         DaemonRequest::ListNodes => handle_list_nodes(context).await,
     }
 }

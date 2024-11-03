@@ -5,9 +5,9 @@ use thiserror::Error;
 /// Messages that can be sent from the UI to the daemon
 #[derive(Serialize, Deserialize, Debug)]
 pub enum DaemonRequest {
-    NewNodes { names: Vec<String> },
-    StartNodes { names: Vec<String> },
-    StopNodes { names: Vec<String> },
+    NewNode { name: String },
+    StartNode { name: String },
+    StopNode { name: String },
     ListNodes,
 }
 
@@ -27,10 +27,10 @@ pub enum DaemonResponse {
 /// An enum of enums - categorizes the errors, just like responses
 #[derive(Serialize, Deserialize, Debug, Error)]
 pub enum DaemonError {
-    #[error("Nodes already exist: {0:?}")]
-    NodesAlreadyExist(Vec<String>),
-    #[error("Nodes don't exist: {0:?}")]
-    NodesDoesNotExist(Vec<String>),
+    #[error("Node already exist: {0}")]
+    NodeAlreadyExist(String),
+    #[error("Node don't exist: {0}")]
+    NodeDoesNotExist(String),
     #[error("Other error: {0}")]
     Other(String),
 }

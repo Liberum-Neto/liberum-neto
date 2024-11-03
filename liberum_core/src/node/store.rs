@@ -5,12 +5,14 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{debug, error, instrument};
 
-pub struct LoadNodes {
-    pub names: Vec<String>,
+pub struct LoadNode {
+    pub name: String,
 }
-pub struct StoreNodes {
-    pub nodes: Vec<Node>,
+
+pub struct StoreNode {
+    pub node: Node,
 }
+
 pub struct ListNodes;
 
 #[derive(Debug, Actor)]
@@ -122,43 +124,36 @@ impl NodeStore {
     }
 }
 
-impl Message<LoadNodes> for NodeStore {
-    type Reply = Result<Vec<Node>, NodeStoreError>;
+impl Message<LoadNode> for NodeStore {
+    type Reply = Result<Node, NodeStoreError>;
 
     #[instrument(skip_all, name = "LoadNodes")]
     async fn handle(
         &mut self,
-        LoadNodes { names }: LoadNodes,
+        LoadNode { name }: LoadNode,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        let mut result: Vec<Node> = Vec::new();
+        let node = self
+            .load_node(&name)
+            .await
+            .map_err(|_| NodeStoreError::LoadError { name })?;
 
-        for name in names {
-            let node = self
-                .load_node(&name)
-                .await
-                .map_err(|_| NodeStoreError::LoadError { name })?;
-            result.push(node);
-        }
-
-        Ok(result)
+        Ok(node)
     }
 }
 
-impl Message<StoreNodes> for NodeStore {
+impl Message<StoreNode> for NodeStore {
     type Reply = Result<(), NodeStoreError>;
 
     #[instrument(skip_all, name = "StoreNodes")]
     async fn handle(
         &mut self,
-        StoreNodes { nodes }: StoreNodes,
+        StoreNode { node }: StoreNode,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        for node in nodes {
-            self.save_node(&node)
-                .await
-                .map_err(|_| NodeStoreError::StoreError { name: node.name })?;
-        }
+        self.save_node(&node)
+            .await
+            .map_err(|_| NodeStoreError::StoreError { name: node.name })?;
 
         Ok(())
     }
@@ -216,20 +211,17 @@ mod tests {
             .build()
             .unwrap();
         node_store
-            .ask(StoreNodes {
-                nodes: vec![new_node],
-            })
+            .ask(StoreNode { node: new_node })
             .send()
             .await
             .unwrap();
         let got_node_name = node_store
-            .ask(LoadNodes {
-                names: vec!["test_node".to_string()],
+            .ask(LoadNode {
+                name: "test_node".to_string(),
             })
             .send()
             .await
             .unwrap()
-            .remove(0)
             .name;
         assert_eq!(got_node_name, "test_node");
     }
