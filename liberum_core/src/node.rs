@@ -2,17 +2,18 @@ pub mod config;
 pub mod manager;
 pub mod store;
 
+use crate::swarm_runner;
 use anyhow::{anyhow, bail, Result};
 use config::NodeConfig;
-use kameo::{actor::ActorRef, message::Message, request::MessageSend, Actor};
-use libp2p::{identity::Keypair, Multiaddr, PeerId};
+use futures::channel::mpsc;
 use kameo::mailbox::bounded::BoundedMailbox;
-use libp2p::{StreamProtocol, SwarmBuilder};
+use kameo::messages;
+use kameo::{actor::ActorRef, message::Message, Actor};
+use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, path::Path};
-use tracing::error;
-use crate::swarm::start_swarm;
+use tracing::{debug, error};
 
 pub struct Node {
     pub name: String,
@@ -20,6 +21,8 @@ pub struct Node {
     pub bootstrap_nodes: Vec<BootstrapNode>,
     pub manager_ref: Option<ActorRef<NodeManager>>,
     pub external_addresses: Vec<Multiaddr>,
+    pub self_actor_ref: Option<ActorRef<Self>>,
+    swarm_sender: Option<mpsc::Sender<swarm_runner::SwarmRunnerMessage>>,
 }
 
 impl Actor for Node {
@@ -29,14 +32,23 @@ impl Actor for Node {
         &mut self,
         actor_ref: ActorRef<Self>,
     ) -> std::result::Result<(), kameo::error::BoxError> {
-        if let Some(manager_ref) = &self.manager_ref {
-            let myself = manager_ref
-            .ask(manager::GetNodes{names: vec![self.name.clone()]}).send().await?
-            .get(&self.name).unwrap().to_owned();
-            tokio::spawn(start_swarm(myself));
-        }
+        let _ = &self
+            .manager_ref
+            .as_ref()
+            .ok_or(anyhow!("no manager ref for node set"))?;
+        self.self_actor_ref = Some(actor_ref.clone());
+        self.start_swarm()?;
 
         Ok(())
+    }
+}
+
+#[messages]
+impl Node {
+    #[message]
+    pub async fn swarm_died(&mut self) {
+        debug!(node = self.name, "Swarm died! Killing myself!");
+        self.self_actor_ref.as_mut().unwrap().kill();
     }
 }
 
@@ -110,6 +122,20 @@ impl Node {
 
         Ok(())
     }
+
+    fn start_swarm(&mut self) -> Result<()> {
+        let node_ref = self
+            .self_actor_ref
+            .as_ref()
+            .ok_or(anyhow!("no actor ref for node set"))?;
+        let (send, recv) = mpsc::channel::<swarm_runner::SwarmRunnerMessage>(16);
+        self.swarm_sender = Some(send);
+        debug!(name = self.name, "Node starts");
+
+        tokio::spawn(swarm_runner::run_swarm(node_ref.clone(), recv));
+
+        Ok(())
+    }
 }
 
 impl fmt::Debug for Node {
@@ -138,6 +164,8 @@ impl Clone for Node {
             bootstrap_nodes: self.bootstrap_nodes.clone(),
             manager_ref: None,
             external_addresses: self.external_addresses.clone(),
+            self_actor_ref: None,
+            swarm_sender: None,
         }
     }
 }
@@ -183,7 +211,6 @@ impl NodeBuilder {
 
     pub fn build(self) -> Result<Node> {
         let keypair = self.keypair.ok_or(anyhow!("keypair is required"))?;
-        let id = PeerId::from_public_key(&keypair.public());
 
         return Ok(Node {
             name: self.name.ok_or(anyhow!("node name is required"))?,
@@ -191,6 +218,8 @@ impl NodeBuilder {
             bootstrap_nodes: self.bootstrap_nodes,
             manager_ref: None,
             external_addresses: self.external_addresses,
+            self_actor_ref: None,
+            swarm_sender: None,
         });
     }
 }
@@ -201,8 +230,8 @@ pub struct BootstrapNode {
         serialize_with = "serialize_peer_id",
         deserialize_with = "deserialize_peer_id"
     )]
-    id: PeerId,
-    addr: Multiaddr,
+    pub id: PeerId,
+    pub addr: Multiaddr,
 }
 
 impl BootstrapNode {
