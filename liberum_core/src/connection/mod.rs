@@ -25,14 +25,12 @@ async fn handle_message(message: DaemonRequest, context: &mut ConnectionContext)
 }
 
 struct ConnectionContext {
-    _node_manager: ActorRef<NodeManager>,
-    node_store: ActorRef<NodeStore>,
+    node_manager: ActorRef<NodeManager>,
 }
 impl ConnectionContext {
     fn new(node_store: ActorRef<NodeStore>) -> Self {
         ConnectionContext {
-            _node_manager: kameo::spawn(NodeManager::new(node_store.clone())),
-            node_store,
+            node_manager: kameo::spawn(NodeManager::new(node_store.clone())),
         }
     }
 }
