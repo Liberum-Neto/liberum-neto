@@ -6,17 +6,21 @@ use futures::{
 };
 use kameo::actor::ActorRef;
 use kameo::request::MessageSend;
-use libp2p::{identity, kad, Multiaddr, StreamProtocol, SwarmBuilder};
+use libp2p::{
+    identity,
+    kad::{self},
+    Multiaddr, StreamProtocol, SwarmBuilder,
+};
 use libp2p::{
     kad::{store::MemoryStore, Behaviour},
     swarm::SwarmEvent,
     Swarm,
 };
 use std::str::FromStr;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
-const IPFS_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/kad/1.0.0");
-const DEFAULT_MULTIADDR_STR: &str = "/ip6/::/quic-v1/0";
+const IPFS_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
+const DEFAULT_MULTIADDR_STR: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 
 pub enum SwarmRunnerError {}
 
@@ -44,7 +48,7 @@ async fn run_swarm_inner(
     mut receiver: mpsc::Receiver<SwarmRunnerMessage>,
 ) -> Result<()> {
     // It must be guaranteed not to ever fail. Swarm can't start without this data.
-
+    // If it fails then it's a bug
     let node_data = node_ref
         .ask(node::GetSnapshot {})
         .send()
@@ -78,15 +82,13 @@ async fn run_swarm_inner(
         );
     })?;
 
-    debug!("default addr: {}", swarm_default_addr);
-
     if node_data.external_addresses.is_empty() {
         swarm.add_external_address(swarm_default_addr.clone());
-        swarm.listen_on(swarm_default_addr)?;
+        swarm.listen_on(swarm_default_addr.clone())?;
     } else {
         for addr in node_data.external_addresses {
             swarm.add_external_address(addr.clone());
-            swarm.listen_on(addr)?;
+            swarm.listen_on(addr.clone())?;
         }
     }
 
@@ -123,6 +125,16 @@ fn handle_swarm_event(
     _swarm: &mut Swarm<Behaviour<MemoryStore>>,
 ) -> Result<()> {
     match event {
+        libp2p::swarm::SwarmEvent::NewListenAddr {
+            listener_id,
+            address,
+        } => {
+            info!(
+                listener_id = format!("{listener_id:?}"),
+                address = address.to_string(),
+                "Listening!"
+            );
+        }
         _ => debug!(event = format!("{event:?}"), "Received Swarm Event!"),
     }
 

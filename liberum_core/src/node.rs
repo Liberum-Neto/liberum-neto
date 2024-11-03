@@ -211,8 +211,7 @@ impl NodeBuilder {
 
     pub fn build(self) -> Result<Node> {
         let keypair = self.keypair.ok_or(anyhow!("keypair is required"))?;
-
-        return Ok(Node {
+        let node = Node {
             name: self.name.ok_or(anyhow!("node name is required"))?,
             keypair: keypair,
             bootstrap_nodes: self.bootstrap_nodes,
@@ -220,7 +219,9 @@ impl NodeBuilder {
             external_addresses: self.external_addresses,
             self_actor_ref: None,
             swarm_sender: None,
-        });
+        };
+        //node.bootstrap_nodes.push(BootstrapNode{id: PeerId::random(), addr: Multiaddr::from_str("/ip4/127.0.0.1/udp/58852/quic-v1")?}); //TODO usun
+        Ok(node)
     }
 }
 
