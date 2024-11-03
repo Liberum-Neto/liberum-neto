@@ -35,32 +35,16 @@ impl NodeManager {
         }
     }
 
-    // This function is expected to return Vec of ActorRefs in order according to names
-    fn get_nodes_refs(&self, names: Vec<&str>) -> Result<Vec<&ActorRef<Node>>, NodeManagerError> {
-        let node_refs = names
+    fn get_nodes_refs(&self, names: Vec<&str>) -> Result<NamedRefs, NodeManagerError> {
+        names
             .into_iter()
-            .map(|name| {
-                self.nodes.get(name).ok_or(NodeManagerError::NotStarted {
+            .map(|name| match self.nodes.get(name) {
+                Some(node) => Ok((name.to_string(), node.clone())),
+                None => Err(NodeManagerError::NotStarted {
                     name: name.to_string(),
-                })
+                }),
             })
-            .collect::<Result<Vec<&ActorRef<Node>>, NodeManagerError>>()?;
-
-        Ok(node_refs)
-    }
-
-    // This function is expected to return Vec of ActorRefs in order according to names
-    fn get_nodes_refs_owned(
-        &self,
-        names: Vec<&str>,
-    ) -> Result<Vec<ActorRef<Node>>, NodeManagerError> {
-        let node_refs = self
-            .get_nodes_refs(names)?
-            .into_iter()
-            .map(|n_ref| n_ref.clone())
-            .collect::<Vec<ActorRef<Node>>>();
-
-        Ok(node_refs)
+            .collect()
     }
 
     async fn start_nodes(&mut self, names: Vec<String>) -> Result<NamedRefs, NodeManagerError> {
@@ -96,10 +80,10 @@ impl NodeManager {
         self.start_nodes(names).await
     }
 
-    async fn save_nodes(&self, nodes_refs: Vec<&ActorRef<Node>>) -> Result<(), NodeManagerError> {
+    async fn save_nodes(&self, nodes_refs: NamedRefs) -> Result<(), NodeManagerError> {
         let mut snapshots = Vec::new();
 
-        for n_ref in nodes_refs {
+        for (_, n_ref) in nodes_refs {
             let snapshot = n_ref
                 .ask(super::GetSnapshot)
                 .send()
@@ -120,7 +104,7 @@ impl NodeManager {
         let nodes_refs = self.get_nodes_refs(names)?;
         self.save_nodes(nodes_refs.clone()).await?;
 
-        for n_ref in nodes_refs {
+        for (_, n_ref) in nodes_refs {
             n_ref
                 .stop_gracefully()
                 .await
@@ -250,15 +234,8 @@ impl Message<GetNodes> for NodeManager {
         GetNodes { names }: GetNodes,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        let names_str = names.iter().map(|n| n.as_str()).collect::<Vec<&str>>();
-        let named_refs = self
-            .get_nodes_refs_owned(names_str)?
-            .iter()
-            .zip(names)
-            .map(|(n_ref, name)| (name.to_string(), n_ref.clone()))
-            .collect::<NamedRefs>();
-
-        Ok(named_refs)
+        let names = names.iter().map(|s| s.as_str()).collect();
+        self.get_nodes_refs(names)
     }
 }
 
