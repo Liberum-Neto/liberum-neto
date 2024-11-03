@@ -6,6 +6,7 @@ use crate::swarm_runner;
 use anyhow::{anyhow, bail, Result};
 use config::NodeConfig;
 use futures::channel::mpsc;
+use futures::SinkExt;
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
 use kameo::{actor::ActorRef, message::Message, Actor};
@@ -39,6 +40,18 @@ impl Actor for Node {
             .ok_or(anyhow!("no manager ref for node set"))?;
         self.self_actor_ref = Some(actor_ref.clone());
         self.start_swarm()?;
+
+        Ok(())
+    }
+
+    async fn on_stop(
+        self,
+        _: kameo::actor::WeakActorRef<Self>,
+        _: kameo::error::ActorStopReason,
+    ) -> std::result::Result<(), kameo::error::BoxError> {
+        if let Some(mut sender) = self.swarm_sender {
+            sender.send(swarm_runner::SwarmRunnerMessage::Kill).await?;
+        }
 
         Ok(())
     }
