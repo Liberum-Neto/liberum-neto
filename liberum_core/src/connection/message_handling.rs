@@ -31,10 +31,7 @@ pub async fn handle_new_nodes(names: Vec<String>, context: &AppContext) -> Daemo
     }
 }
 
-pub async fn handle_start_nodes(
-    names: Vec<String>,
-    context: &AppContext,
-) -> DaemonResult {
+pub async fn handle_start_nodes(names: Vec<String>, context: &AppContext) -> DaemonResult {
     let resp = context.node_manager.ask(StartNodes { names }).send().await;
     match resp {
         Err(e) => Err(DaemonError::Other(e.to_string())),

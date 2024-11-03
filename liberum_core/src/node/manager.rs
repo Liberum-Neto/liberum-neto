@@ -171,8 +171,11 @@ impl Message<CreateNodes> for NodeManager {
         CreateNodes { nodes }: CreateNodes,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        self.store.ask(StoreNodes { nodes }).send().await
-        .map_err(|e| NodeManagerError::OtherError(e.into()));
+        self.store
+            .ask(StoreNodes { nodes })
+            .send()
+            .await
+            .map_err(|e| NodeManagerError::OtherError(e.into()))?;
 
         Ok(())
     }

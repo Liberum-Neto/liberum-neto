@@ -68,7 +68,7 @@ async fn handle_connection(
 pub async fn listen(listener: UnixListener) -> Result<()> {
     info!("Server listening on {:?}", listener);
     let mut id = 0;
-    let mut app_context = AppContext::new(kameo::spawn(NodeStore::with_default_nodes_dir().await?));
+    let app_context = AppContext::new(kameo::spawn(NodeStore::with_default_nodes_dir().await?));
     loop {
         let (daemon_socket, _) = listener.accept().await?;
         info!(conn_id = id, "Handling a new connection");
