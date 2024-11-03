@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use crate::connection::ConnectionContext;
 use crate::node::{self, Node};
 use kameo::request::MessageSend;

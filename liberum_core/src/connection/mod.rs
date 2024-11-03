@@ -1,5 +1,4 @@
 mod message_handling;
-use crate::node;
 use crate::node::manager::NodeManager;
 use crate::node::store::NodeStore;
 use anyhow::Result;
@@ -26,13 +25,13 @@ async fn handle_message(message: DaemonRequest, context: &mut ConnectionContext)
 }
 
 struct ConnectionContext {
-    node_manager: ActorRef<NodeManager>,
+    _node_manager: ActorRef<NodeManager>,
     node_store: ActorRef<NodeStore>,
 }
 impl ConnectionContext {
     fn new(node_store: ActorRef<NodeStore>) -> Self {
         ConnectionContext {
-            node_manager: kameo::spawn(NodeManager::new(node_store.clone())),
+            _node_manager: kameo::spawn(NodeManager::new(node_store.clone())),
             node_store,
         }
     }
