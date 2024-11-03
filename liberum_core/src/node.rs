@@ -108,7 +108,7 @@ impl Into<NodeConfig> for &Node {
 
 impl Clone for Node {
     fn clone(&self) -> Self {
-        Self { 
+        Self {
             name: self.name.clone(),
             keypair: self.keypair.clone(),
             bootstrap_nodes: self.bootstrap_nodes.clone(),
@@ -123,11 +123,11 @@ impl Message<GetSnapshot> for Node {
     type Reply = Result<Node, kameo::error::Infallible>;
 
     async fn handle(
-            &mut self,
-            _: GetSnapshot,
-            _: kameo::message::Context<'_, Self, Self::Reply>,
-        ) -> Self::Reply {
-            Ok(self.clone())
+        &mut self,
+        _: GetSnapshot,
+        _: kameo::message::Context<'_, Self, Self::Reply>,
+    ) -> Self::Reply {
+        Ok(self.clone())
     }
 }
 
