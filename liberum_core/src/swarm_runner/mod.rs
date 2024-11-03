@@ -29,6 +29,7 @@ pub enum SwarmRunnerMessage {
         message: String,
         resp: oneshot::Sender<Result<String, SwarmRunnerError>>,
     },
+    Kill,
 }
 
 struct SwarmContext {
@@ -43,7 +44,7 @@ struct SwarmContext {
 
 pub async fn run_swarm(node_ref: ActorRef<Node>, receiver: mpsc::Receiver<SwarmRunnerMessage>) {
     if let Err(e) = run_swarm_inner(node_ref.clone(), receiver).await {
-        error!(err = e.to_string(), "Swarm run error");
+        error!(err = format!("{e:?}"), "Swarm run error");
         node_ref.ask(node::SwarmDied).send().await.unwrap();
     }
 }
@@ -109,7 +110,11 @@ async fn run_swarm_inner(
     loop {
         tokio::select! {
             Some(message) = receiver.next() => {
-                handle_swarm_runner_message(message, &mut context)?;
+                let should_end = handle_swarm_runner_message(message, &mut context)?;
+
+                if should_end {
+                    return Ok(());
+                }
             }
             event = context.swarm.select_next_some() => {
                 handle_swarm_event(event, &mut context)?;
@@ -121,15 +126,15 @@ async fn run_swarm_inner(
 fn handle_swarm_runner_message(
     message: SwarmRunnerMessage,
     _swarm: &mut SwarmContext,
-) -> Result<()> {
+) -> Result<bool> {
     match message {
         SwarmRunnerMessage::Echo { message, resp } => {
             debug!(message = message, "Received Echo!");
             let _ = resp.send(Ok(message));
+            Ok(false)
         }
+        SwarmRunnerMessage::Kill => Ok(true),
     }
-
-    Ok(())
 }
 
 fn handle_swarm_event(event: SwarmEvent<kad::Event>, context: &mut SwarmContext) -> Result<()> {
