@@ -1281,7 +1281,6 @@ name = "liberum_core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64",
  "bincode",
  "bytes",
  "daemonize",
