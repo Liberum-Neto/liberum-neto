@@ -4,6 +4,7 @@ pub mod store;
 
 use crate::swarm_runner;
 use anyhow::{anyhow, bail, Result};
+use base64::prelude::*;
 use config::NodeConfig;
 use futures::channel::mpsc;
 use kameo::mailbox::bounded::BoundedMailbox;
@@ -12,6 +13,7 @@ use kameo::{actor::ActorRef, message::Message, Actor};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::str::FromStr;
 use std::{fmt, path::Path};
 use tracing::{debug, error};
 
@@ -211,7 +213,7 @@ impl NodeBuilder {
 
     pub fn build(self) -> Result<Node> {
         let keypair = self.keypair.ok_or(anyhow!("keypair is required"))?;
-        let node = Node {
+        let mut node = Node {
             name: self.name.ok_or(anyhow!("node name is required"))?,
             keypair: keypair,
             bootstrap_nodes: self.bootstrap_nodes,
@@ -220,7 +222,10 @@ impl NodeBuilder {
             self_actor_ref: None,
             swarm_sender: None,
         };
-        //node.bootstrap_nodes.push(BootstrapNode{id: PeerId::random(), addr: Multiaddr::from_str("/ip4/127.0.0.1/udp/58852/quic-v1")?}); //TODO usun
+        node.bootstrap_nodes.push(BootstrapNode {
+            id: PeerId::random(),
+            addr: Multiaddr::from_str("/ip4/127.0.0.1/udp/58852/quic-v1")?,
+        }); //TODO usun
         Ok(node)
     }
 }
@@ -245,15 +250,21 @@ fn serialize_peer_id<S>(peer_id: &PeerId, serializer: S) -> Result<S::Ok, S::Err
 where
     S: Serializer,
 {
-    let peer_id_bytes = peer_id.to_bytes();
-    serializer.serialize_bytes(&peer_id_bytes)
+    let peer_id_base64 = BASE64_STANDARD.encode(peer_id.to_bytes());
+    serializer.serialize_str(&peer_id_base64)
 }
 
 fn deserialize_peer_id<'de, D>(deserializer: D) -> Result<PeerId, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let peer_id_bytes = <Vec<u8>>::deserialize(deserializer)?;
+    let peer_id_base64 = String::deserialize(deserializer)?;
+    let peer_id_bytes = BASE64_STANDARD.decode(peer_id_base64).map_err(|e| {
+        serde::de::Error::custom(format!(
+            "could not deserialize PeerId's base64 string: {}",
+            e
+        ))
+    })?;
     PeerId::from_bytes(&peer_id_bytes)
         .map_err(|e| serde::de::Error::custom(format!("could not deserialize PeerId: {}", e)))
 }
