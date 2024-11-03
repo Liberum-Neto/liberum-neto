@@ -1,4 +1,4 @@
-use crate::node::{self, Node};
+use crate::node::{self, BootstrapNode, Node};
 use anyhow::Result;
 use futures::{
     channel::{mpsc, oneshot},
@@ -17,10 +17,10 @@ use libp2p::{
     Swarm,
 };
 use std::str::FromStr;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 const IPFS_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
-const DEFAULT_MULTIADDR_STR: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
+const DEFAULT_MULTIADDR_STR: &str = "/ip6/::/udp/0/quic-v1"; // "/ipv/::/udp/0/quic-v1"
 
 pub enum SwarmRunnerError {}
 
@@ -29,6 +29,11 @@ pub enum SwarmRunnerMessage {
         message: String,
         resp: oneshot::Sender<Result<String, SwarmRunnerError>>,
     },
+}
+
+struct SwarmContext {
+    swarm: Swarm<Behaviour<MemoryStore>>,
+    node: Node,
 }
 
 // #[derive(NetworkBehaviour)]
@@ -49,6 +54,7 @@ async fn run_swarm_inner(
 ) -> Result<()> {
     // It must be guaranteed not to ever fail. Swarm can't start without this data.
     // If it fails then it's a bug
+
     let node_data = node_ref
         .ask(node::GetSnapshot {})
         .send()
@@ -72,6 +78,7 @@ async fn run_swarm_inner(
         swarm
             .behaviour_mut()
             .add_address(&node.id, node.addr.clone());
+        debug!("Bootstrap node: {}", serde_json::to_string(&node)?);
     }
 
     let swarm_default_addr = Multiaddr::from_str(DEFAULT_MULTIADDR_STR).inspect_err(|e| {
@@ -86,7 +93,7 @@ async fn run_swarm_inner(
         swarm.add_external_address(swarm_default_addr.clone());
         swarm.listen_on(swarm_default_addr.clone())?;
     } else {
-        for addr in node_data.external_addresses {
+        for addr in &node_data.external_addresses {
             swarm.add_external_address(addr.clone());
             swarm.listen_on(addr.clone())?;
         }
@@ -94,13 +101,18 @@ async fn run_swarm_inner(
 
     debug!(node_name = node_data.name, "Starting a swarm!");
 
+    let mut context = SwarmContext {
+        node: node_data,
+        swarm: swarm,
+    };
+
     loop {
         tokio::select! {
             Some(message) = receiver.next() => {
-                handle_swarm_runner_message(message, &mut swarm)?;
+                handle_swarm_runner_message(message, &mut context)?;
             }
-            event = swarm.select_next_some() => {
-                handle_swarm_event(event, &mut swarm)?;
+            event = context.swarm.select_next_some() => {
+                handle_swarm_event(event, &mut context)?;
             }
         }
     }
@@ -108,7 +120,7 @@ async fn run_swarm_inner(
 
 fn handle_swarm_runner_message(
     message: SwarmRunnerMessage,
-    _swarm: &mut Swarm<Behaviour<MemoryStore>>,
+    _swarm: &mut SwarmContext,
 ) -> Result<()> {
     match message {
         SwarmRunnerMessage::Echo { message, resp } => {
@@ -120,22 +132,41 @@ fn handle_swarm_runner_message(
     Ok(())
 }
 
-fn handle_swarm_event(
-    event: SwarmEvent<kad::Event>,
-    _swarm: &mut Swarm<Behaviour<MemoryStore>>,
-) -> Result<()> {
+fn handle_swarm_event(event: SwarmEvent<kad::Event>, context: &mut SwarmContext) -> Result<()> {
     match event {
-        libp2p::swarm::SwarmEvent::NewListenAddr {
-            listener_id,
-            address,
+        libp2p::swarm::SwarmEvent::IncomingConnection {
+            connection_id: _,
+            local_addr: _,
+            send_back_addr,
         } => {
-            info!(
-                listener_id = format!("{listener_id:?}"),
-                address = address.to_string(),
-                "Listening!"
+            warn!(
+                node = context.node.name,
+                "Connection from {send_back_addr:?}"
             );
         }
-        _ => debug!(event = format!("{event:?}"), "Received Swarm Event!"),
+        libp2p::swarm::SwarmEvent::Dialing {
+            peer_id,
+            connection_id: _,
+        } => {
+            warn!(node = context.node.name, "Dialing {peer_id:?}");
+        }
+        libp2p::swarm::SwarmEvent::NewListenAddr {
+            listener_id: _,
+            address,
+        } => {
+            let node = BootstrapNode {
+                id: context.swarm.local_peer_id().clone(),
+                addr: address.clone(),
+            };
+            let node = serde_json::to_string(&node)?;
+            info!(node = context.node.name, "Listening! <{node}>");
+        }
+        libp2p::swarm::SwarmEvent::Behaviour(_) => {}
+        _ => debug!(
+            node = context.node.name,
+            event = format!("{event:?}"),
+            "Received Swarm Event!"
+        ),
     }
 
     Ok(())
