@@ -63,6 +63,39 @@ impl NodeManager {
         Ok(node_refs)
     }
 
+    async fn start_nodes(&mut self, names: Vec<String>) -> Result<NamedRefs, NodeManagerError> {
+        for name in &names {
+            if self.nodes.contains_key(name) {
+                return Err(NodeManagerError::AlreadyStarted {
+                    name: name.to_string(),
+                });
+            }
+        }
+
+        let mut nodes = self.store.ask(LoadNodes { names }).send().await?;
+
+        nodes
+            .iter_mut()
+            .for_each(|n| n.manager_ref = self.actor_ref.clone());
+        let node_refs: HashMap<String, ActorRef<Node>> = nodes
+            .into_iter()
+            .map(|n| {
+                let name = n.name.clone();
+                let actor_ref = kameo::spawn(n);
+                self.nodes.insert(name.clone(), actor_ref.clone());
+                (name, actor_ref)
+            })
+            .collect();
+
+        Ok(node_refs)
+    }
+
+    async fn start_all(&mut self) -> Result<NamedRefs, NodeManagerError> {
+        let names = self.store.ask(ListNodes {}).send().await?;
+
+        self.start_nodes(names).await
+    }
+
     async fn save_nodes(&self, nodes_refs: Vec<&ActorRef<Node>>) -> Result<(), NodeManagerError> {
         let mut snapshots = Vec::new();
 
@@ -167,30 +200,7 @@ impl Message<StartNodes> for NodeManager {
         StartNodes { names }: StartNodes,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        for name in &names {
-            if self.nodes.contains_key(name) {
-                return Err(NodeManagerError::AlreadyStarted {
-                    name: name.to_string(),
-                });
-            }
-        }
-
-        let mut nodes = self.store.ask(LoadNodes { names }).send().await?;
-
-        nodes
-            .iter_mut()
-            .for_each(|n| n.manager_ref = self.actor_ref.clone());
-        let node_refs: HashMap<String, ActorRef<Node>> = nodes
-            .into_iter()
-            .map(|n| {
-                let name = n.name.clone();
-                let actor_ref = kameo::spawn(n);
-                self.nodes.insert(name.clone(), actor_ref.clone());
-                (name, actor_ref)
-            })
-            .collect();
-
-        Ok(node_refs)
+        self.start_nodes(names).await
     }
 }
 
@@ -202,19 +212,7 @@ impl Message<StartAll> for NodeManager {
         _: StartAll,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        let names = self.store.ask(ListNodes {}).send().await?;
-        let nodes = self.store.ask(LoadNodes { names }).send().await?;
-        let nodes = nodes
-            .into_iter()
-            .map(|node| {
-                let name = node.name.clone();
-                let actor_ref = kameo::spawn(node);
-                self.nodes.insert(name.clone(), actor_ref.clone());
-                (name, actor_ref)
-            })
-            .collect();
-
-        Ok(nodes)
+        self.start_all().await
     }
 }
 
@@ -226,17 +224,8 @@ impl Message<StopNodes> for NodeManager {
         StopNodes { names }: StopNodes,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        for name in &names {
-            self.nodes
-                .get(name)
-                .ok_or(NodeManagerError::NotStarted {
-                    name: name.to_string(),
-                })?
-                .stop_gracefully()
-                .await?;
-        }
-
-        Ok(())
+        let names = names.iter().map(|s| s.as_str()).collect();
+        self.stop_nodes(names).await
     }
 }
 
