@@ -17,9 +17,11 @@ use super::{
     Node,
 };
 
+type NamedRefs = HashMap<String, ActorRef<Node>>;
+
 #[derive(Debug)]
 pub struct NodeManager {
-    nodes: HashMap<String, ActorRef<Node>>,
+    nodes: NamedRefs,
     store: ActorRef<NodeStore>,
     actor_ref: Option<ActorRef<NodeManager>>,
 }
@@ -33,6 +35,7 @@ impl NodeManager {
         }
     }
 
+    // This function is expected to return Vec of ActorRefs in order according to names
     fn get_nodes_refs(&self, names: Vec<&str>) -> Result<Vec<&ActorRef<Node>>, NodeManagerError> {
         let node_refs = names
             .into_iter()
@@ -46,6 +49,7 @@ impl NodeManager {
         Ok(node_refs)
     }
 
+    // This function is expected to return Vec of ActorRefs in order according to names
     fn get_nodes_refs_owned(
         &self,
         names: Vec<&str>,
@@ -156,7 +160,7 @@ impl Message<CreateNodes> for NodeManager {
 }
 
 impl Message<StartNodes> for NodeManager {
-    type Reply = Result<Vec<ActorRef<Node>>, NodeManagerError>;
+    type Reply = Result<NamedRefs, NodeManagerError>;
 
     async fn handle(
         &mut self,
@@ -176,13 +180,13 @@ impl Message<StartNodes> for NodeManager {
         nodes
             .iter_mut()
             .for_each(|n| n.manager_ref = self.actor_ref.clone());
-        let node_refs: Vec<ActorRef<Node>> = nodes
+        let node_refs: HashMap<String, ActorRef<Node>> = nodes
             .into_iter()
             .map(|n| {
                 let name = n.name.clone();
                 let actor_ref = kameo::spawn(n);
-                self.nodes.insert(name, actor_ref.clone());
-                actor_ref
+                self.nodes.insert(name.clone(), actor_ref.clone());
+                (name, actor_ref)
             })
             .collect();
 
@@ -191,7 +195,7 @@ impl Message<StartNodes> for NodeManager {
 }
 
 impl Message<StartAll> for NodeManager {
-    type Reply = Result<Vec<ActorRef<Node>>, NodeManagerError>;
+    type Reply = Result<NamedRefs, NodeManagerError>;
 
     async fn handle(
         &mut self,
@@ -205,8 +209,8 @@ impl Message<StartAll> for NodeManager {
             .map(|node| {
                 let name = node.name.clone();
                 let actor_ref = kameo::spawn(node);
-                self.nodes.insert(name, actor_ref.clone());
-                actor_ref
+                self.nodes.insert(name.clone(), actor_ref.clone());
+                (name, actor_ref)
             })
             .collect();
 
@@ -250,20 +254,27 @@ impl Message<StopAll> for NodeManager {
 }
 
 impl Message<GetNodes> for NodeManager {
-    type Reply = Result<Vec<ActorRef<Node>>, NodeManagerError>;
+    type Reply = Result<NamedRefs, NodeManagerError>;
 
     async fn handle(
         &mut self,
         GetNodes { names }: GetNodes,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        let names = names.iter().map(|n| n.as_str()).collect::<Vec<&str>>();
-        self.get_nodes_refs_owned(names)
+        let names_str = names.iter().map(|n| n.as_str()).collect::<Vec<&str>>();
+        let named_refs = self
+            .get_nodes_refs_owned(names_str)?
+            .iter()
+            .zip(names)
+            .map(|(n_ref, name)| (name.to_string(), n_ref.clone()))
+            .collect::<NamedRefs>();
+
+        Ok(named_refs)
     }
 }
 
 impl Message<GetAll> for NodeManager {
-    type Reply = HashMap<String, ActorRef<Node>>;
+    type Reply = NamedRefs;
 
     async fn handle(
         &mut self,
