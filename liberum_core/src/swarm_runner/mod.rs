@@ -1,4 +1,5 @@
 use crate::node::{self, BootstrapNode, Node};
+use anyhow::anyhow;
 use anyhow::Result;
 use futures::{
     channel::{mpsc, oneshot},
@@ -8,7 +9,7 @@ use kameo::actor::ActorRef;
 use kameo::request::MessageSend;
 use libp2p::{
     identity,
-    kad::{self},
+    kad::{self, InboundRequest},
     Multiaddr, StreamProtocol, SwarmBuilder,
 };
 use libp2p::{
@@ -16,7 +17,7 @@ use libp2p::{
     swarm::SwarmEvent,
     Swarm,
 };
-use std::str::FromStr;
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::{debug, error, info, warn};
 
 const IPFS_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
@@ -30,11 +31,19 @@ pub enum SwarmRunnerMessage {
         resp: oneshot::Sender<Result<String, SwarmRunnerError>>,
     },
     Kill,
+    PublishFile {
+        id: libp2p::kad::RecordKey,
+        path: PathBuf,
+    },
 }
 
+enum SharedResource {
+    File { path: PathBuf },
+}
 struct SwarmContext {
     swarm: Swarm<Behaviour<MemoryStore>>,
     node: Node,
+    published: HashMap<kad::RecordKey, SharedResource>,
 }
 
 // #[derive(NetworkBehaviour)]
@@ -105,12 +114,13 @@ async fn run_swarm_inner(
     let mut context = SwarmContext {
         node: node_data,
         swarm: swarm,
+        published: HashMap::new(),
     };
 
     loop {
         tokio::select! {
             Some(message) = receiver.next() => {
-                let should_end = handle_swarm_runner_message(message, &mut context)?;
+                let should_end = handle_swarm_runner_message(message, &mut context).await?;
 
                 if should_end {
                     return Ok(());
@@ -123,9 +133,9 @@ async fn run_swarm_inner(
     }
 }
 
-fn handle_swarm_runner_message(
+async fn handle_swarm_runner_message(
     message: SwarmRunnerMessage,
-    _swarm: &mut SwarmContext,
+    swarm: &mut SwarmContext,
 ) -> Result<bool> {
     match message {
         SwarmRunnerMessage::Echo { message, resp } => {
@@ -134,6 +144,18 @@ fn handle_swarm_runner_message(
             Ok(false)
         }
         SwarmRunnerMessage::Kill => Ok(true),
+        SwarmRunnerMessage::PublishFile { id, path } => {
+            if swarm.published.contains_key(&id) {
+                return Err(anyhow!("asd"));
+            }
+            swarm
+                .published
+                .insert(id.clone(), SharedResource::File { path: path.clone() });
+            swarm.swarm.behaviour_mut().start_providing(id.clone())?;
+            let id = liberum_core::file_id_to_str(id).await;
+            debug!(path = format!("{path:?}"), id = id, "Providing file!");
+            Ok(false)
+        }
     }
 }
 
@@ -166,6 +188,9 @@ fn handle_swarm_event(event: SwarmEvent<kad::Event>, context: &mut SwarmContext)
             let node = serde_json::to_string(&node)?;
             info!(node = context.node.name, "Listening! <{node}>");
         }
+        libp2p::swarm::SwarmEvent::Behaviour(kad::Event::InboundRequest { request }) => {
+            handle_kad_request(request, context)?;
+        }
         libp2p::swarm::SwarmEvent::Behaviour(_) => {}
         _ => debug!(
             node = context.node.name,
@@ -174,5 +199,60 @@ fn handle_swarm_event(event: SwarmEvent<kad::Event>, context: &mut SwarmContext)
         ),
     }
 
+    Ok(())
+}
+
+fn handle_kad_request(request: InboundRequest, context: &mut SwarmContext) -> Result<()> {
+    match request {
+        InboundRequest::FindNode { num_closer_peers } => {
+            debug!(
+                num_closer_peers = num_closer_peers,
+                node = context.node.name,
+                "kad: FindNode"
+            )
+        }
+        InboundRequest::GetProvider {
+            num_closer_peers,
+            num_provider_peers,
+        } => {
+            debug!(
+                num_closer_peers = num_closer_peers,
+                num_provider_peers = num_provider_peers,
+                node = context.node.name,
+                "kad: GetProvider"
+            )
+        }
+        InboundRequest::AddProvider { record } => {
+            debug!(
+                record = format!("{record:?}"),
+                node = context.node.name,
+                "kad: AddProvider"
+            )
+        }
+        InboundRequest::GetRecord {
+            num_closer_peers,
+            present_locally,
+        } => {
+            debug!(
+                num_closer_peers = num_closer_peers,
+                present_locally = present_locally,
+                node = context.node.name,
+                "kad: GetRecord"
+            )
+        }
+        InboundRequest::PutRecord {
+            source,
+            connection,
+            record,
+        } => {
+            debug!(
+                source = format!("{source:?}"),
+                connection = format!("{connection:?}"),
+                record = format!("{record:?}"),
+                node = context.node.name,
+                "kad: PutRecord"
+            )
+        }
+    }
     Ok(())
 }
