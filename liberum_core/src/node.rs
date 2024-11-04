@@ -5,17 +5,19 @@ pub mod store;
 use crate::swarm_runner;
 use anyhow::{anyhow, bail, Result};
 use config::NodeConfig;
-use futures::channel::mpsc;
 use futures::SinkExt;
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
 use kameo::{actor::ActorRef, message::Message, Actor};
+use liberum_core::str_to_file_id;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::{fmt, path::Path};
+use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error};
 
 pub struct Node {
@@ -66,6 +68,23 @@ impl Node {
         self.self_actor_ref.as_mut().unwrap().kill();
     }
     #[message]
+    pub async fn get_providers(&mut self, id: String) -> Result<HashSet<PeerId>> {
+        let id = str_to_file_id(&id).await?;
+        if let Some(sender) = &mut self.swarm_sender {
+            let (send, recv) = oneshot::channel();
+            debug!("Node sends GetProviders to swarm");
+            sender
+                .send(swarm_runner::SwarmRunnerMessage::GetProviders { id, sender: send })
+                .await
+                .unwrap();
+            if let Ok(received) = recv.await {
+                debug!("Got providers: {received:?}");
+                return Ok(received);
+            }
+        }
+        Err(anyhow!("Could not get providers"))
+    }
+    #[message]
     pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
         let id = liberum_core::get_file_id(&path)
             .await
@@ -84,6 +103,10 @@ impl Node {
             error!("Swarm is None!");
             Err(anyhow!("Swarm is None!"))
         }
+    }
+    #[message]
+    pub async fn download_file(&mut self, id: String) -> Result<Vec<u8>> {
+        todo!()
     }
 }
 

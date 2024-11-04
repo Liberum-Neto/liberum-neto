@@ -9,6 +9,7 @@ use kameo::{
     actor::ActorRef, error::SendError, mailbox::bounded::BoundedMailbox, message::Message,
     request::MessageSend, Actor,
 };
+use liberum_core::messages::DaemonRequest;
 use std::{
     collections::HashMap,
     fmt::{Debug, Display},
@@ -189,7 +190,7 @@ pub struct GetNode {
     pub name: String,
 }
 
-struct GetAll;
+pub struct GetAll;
 
 impl Message<CreateNode> for NodeManager {
     type Reply = Result<(), NodeManagerError>;

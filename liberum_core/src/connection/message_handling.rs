@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::connection::AppContext;
 use crate::node::manager::{CreateNode, GetNode, StartNode, StopNode};
-use crate::node::{Node, PublishFile};
+use crate::node::{DownloadFile, GetProviders, Node, PublishFile};
 use kameo::request::MessageSend;
 use liberum_core::messages::*;
 use libp2p::identity::Keypair;
@@ -79,4 +79,56 @@ pub async fn handle_publish_file(
         Err(e) => Err(DaemonError::Other(e.to_string())),
         Ok(id) => Ok(DaemonResponse::FilePublished { id }),
     }
+}
+
+pub async fn handle_get_providers(
+    node_name: String,
+    id: String,
+    context: &AppContext,
+) -> DaemonResult {
+    debug!("handle get providers");
+    let node = context
+        .node_manager
+        .ask(GetNode { name: node_name })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to get file providers"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    debug!("got node");
+    let resp = node
+        .ask(GetProviders { id })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to get file providers"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    Ok(DaemonResponse::Providers {
+        ids: resp.iter().map(|r| r.to_base58()).collect(),
+    })
+}
+
+pub async fn handle_download_file(
+    node_name: String,
+    id: String,
+    context: &AppContext,
+) -> DaemonResult {
+    let node = context
+        .node_manager
+        .ask(GetNode {
+            name: node_name.to_string(),
+        })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    let file = node
+        .ask(DownloadFile { id })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    Ok(DaemonResponse::FileDownloaded { data: file })
 }
