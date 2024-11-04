@@ -1,6 +1,8 @@
+use std::path::PathBuf;
+
 use crate::connection::AppContext;
-use crate::node::manager::{CreateNode, StartNode, StopNode};
-use crate::node::Node;
+use crate::node::manager::{CreateNode, GetNode, StartNode, StopNode};
+use crate::node::{Node, PublishFile};
 use kameo::request::MessageSend;
 use liberum_core::messages::*;
 use libp2p::identity::Keypair;
@@ -49,4 +51,32 @@ pub async fn handle_stop_nodes(name: String, context: &AppContext) -> DaemonResu
 
 pub async fn handle_list_nodes(_context: &AppContext) -> DaemonResult {
     Ok(DaemonResponse::NodeList(vec![]))
+}
+
+pub async fn handle_publish_file(
+    node_name: &str,
+    path: PathBuf,
+    context: &AppContext,
+) -> DaemonResult {
+    let node = context
+        .node_manager
+        .ask(GetNode {
+            name: node_name.to_string(),
+        })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish file"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    let resp = node
+        .ask(PublishFile { path })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish file"))
+        .map_err(|e| DaemonError::Other(e.to_string()));
+
+    match resp {
+        Err(e) => Err(DaemonError::Other(e.to_string())),
+        Ok(id) => Ok(DaemonResponse::FilePublished { id }),
+    }
 }

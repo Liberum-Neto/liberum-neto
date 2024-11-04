@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-use liberum_core;
 use liberum_core::messages::DaemonRequest;
-use std::path::Path;
+use liberum_core::{self, messages::DaemonResponse};
+use std::path::{Path, PathBuf};
 use tracing::{debug, error, info};
 use tracing_subscriber;
 
@@ -29,6 +29,16 @@ enum Commands {
     StopNode {
         #[arg()]
         name: String,
+    },
+    PublishFile {
+        #[arg()]
+        node_name: String,
+        #[arg()]
+        path: PathBuf,
+    },
+    DownloadFile {
+        #[arg()]
+        id: String,
     },
 }
 
@@ -76,6 +86,31 @@ async fn main() -> Result<()> {
                 .send(DaemonRequest::StopNode { name })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+        }
+        Commands::PublishFile { node_name, path } => {
+            debug!(path = format!("{path:?}"), "Publishing file");
+            let path = std::path::absolute(path).expect("Path to be converted into absolute path");
+
+            request_sender
+                .send(DaemonRequest::PublishFile { node_name, path })
+                .await
+                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+            if let Some(Ok(resp)) = response_receiver.recv().await {
+                match resp {
+                    DaemonResponse::FilePublished { id } => debug!(id = id, "File published"),
+                    _ => error!("{resp:?}"),
+                }
+            } else {
+                error!("No response to publish file!");
+            }
+        }
+        // Commands::PublishData { data } => {
+        //     let data_str = format!("{:X?}",data[0..data.len().min(32)]);
+        //     debug!(data=data_str, "Publishing data");
+        // }
+        Commands::DownloadFile { id } => {
+            debug!(id = format!("{id}"), "Downloading file");
         }
     };
 
