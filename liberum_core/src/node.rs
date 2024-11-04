@@ -13,6 +13,7 @@ use kameo::{actor::ActorRef, message::Message, Actor};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::{fmt, path::Path};
 use tracing::{debug, error};
@@ -63,6 +64,26 @@ impl Node {
     pub async fn swarm_died(&mut self) {
         debug!(node = self.name, "Swarm died! Killing myself!");
         self.self_actor_ref.as_mut().unwrap().kill();
+    }
+    #[message]
+    pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
+        let id = liberum_core::get_file_id(&path)
+            .await
+            .map_err(|e| error!(err = e.to_string(), "Failed to hash file"))
+            .unwrap();
+        if let Some(sender) = &mut self.swarm_sender {
+            sender
+                .send(swarm_runner::SwarmRunnerMessage::PublishFile {
+                    id: id.clone(),
+                    path,
+                })
+                .await?;
+            let s = liberum_core::file_id_to_str(id).await;
+            Ok(s)
+        } else {
+            error!("Swarm is None!");
+            Err(anyhow!("Swarm is None!"))
+        }
     }
 }
 

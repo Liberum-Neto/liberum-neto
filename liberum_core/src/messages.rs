@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use thiserror::Error;
 
 /// Messages that can be sent from the UI to the daemon
@@ -9,6 +10,7 @@ pub enum DaemonRequest {
     StartNode { name: String },
     StopNode { name: String },
     ListNodes,
+    PublishFile { node_name: String, path: PathBuf },
 }
 
 /// Messages that are sent from the daemon as a reponse
@@ -21,6 +23,7 @@ pub enum DaemonResponse {
     NodeStarted,
     NodeStopped,
     NodeList(Vec<String>),
+    FilePublished { id: String },
 }
 
 /// Errors that can be returned by the daemon

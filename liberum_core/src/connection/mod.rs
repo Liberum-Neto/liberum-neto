@@ -21,6 +21,9 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         DaemonRequest::StartNode { name } => handle_start_node(name, context).await,
         DaemonRequest::StopNode { name } => handle_stop_nodes(name, context).await,
         DaemonRequest::ListNodes => handle_list_nodes(context).await,
+        DaemonRequest::PublishFile { node_name, path } => {
+            handle_publish_file(&node_name, path, context).await
+        }
     }
 }
 
