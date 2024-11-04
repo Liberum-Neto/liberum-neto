@@ -11,6 +11,8 @@ pub enum DaemonRequest {
     StopNode { name: String },
     ListNodes,
     PublishFile { node_name: String, path: PathBuf },
+    DownloadFile { node_name: String, id: String },
+    GetProviders { node_name: String, id: String },
 }
 
 /// Messages that are sent from the daemon as a reponse
@@ -24,6 +26,8 @@ pub enum DaemonResponse {
     NodeStopped,
     NodeList(Vec<String>),
     FilePublished { id: String },
+    Providers { ids: Vec<String> },
+    FileDownloaded { data: Vec<u8> },
 }
 
 /// Errors that can be returned by the daemon
