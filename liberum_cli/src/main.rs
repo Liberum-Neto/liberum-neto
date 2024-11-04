@@ -36,7 +36,15 @@ enum Commands {
         #[arg()]
         path: PathBuf,
     },
+    GetProviders {
+        #[arg()]
+        node_name: String,
+        #[arg()]
+        id: String,
+    },
     DownloadFile {
+        #[arg()]
+        node_name: String,
         #[arg()]
         id: String,
     },
@@ -105,12 +113,25 @@ async fn main() -> Result<()> {
                 error!("No response to publish file!");
             }
         }
-        // Commands::PublishData { data } => {
-        //     let data_str = format!("{:X?}",data[0..data.len().min(32)]);
-        //     debug!(data=data_str, "Publishing data");
-        // }
-        Commands::DownloadFile { id } => {
-            debug!(id = format!("{id}"), "Downloading file");
+        Commands::DownloadFile { node_name, id } => {
+            debug!(id = format!("{id}"), "Downloading file unimplemented!");
+        }
+        Commands::GetProviders { node_name, id } => {
+            request_sender
+                .send(DaemonRequest::GetProviders { node_name, id })
+                .await
+                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+            if let Some(Ok(resp)) = response_receiver.recv().await {
+                match resp {
+                    DaemonResponse::Providers { ids } => {
+                        debug!(ids = format!("{ids:?}"), "File published")
+                    }
+                    _ => error!("{resp:?}"),
+                }
+            } else {
+                error!("No response to get providers!");
+            }
         }
     };
 

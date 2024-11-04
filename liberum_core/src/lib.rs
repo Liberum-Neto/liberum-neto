@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use libp2p::futures::StreamExt;
 use std::path::PathBuf;
 use tokio::net::UnixStream;

@@ -24,6 +24,12 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         DaemonRequest::PublishFile { node_name, path } => {
             handle_publish_file(&node_name, path, context).await
         }
+        DaemonRequest::DownloadFile { node_name, id } => {
+            handle_download_file(node_name, id, context).await
+        }
+        DaemonRequest::GetProviders { node_name, id } => {
+            handle_get_providers(node_name, id, context).await
+        }
     }
 }
 
