@@ -8,7 +8,6 @@ use behaviour::*;
 use futures::StreamExt;
 use kameo::actor::ActorRef;
 use kameo::request::MessageSend;
-use libp2p::multiaddr::Protocol;
 use libp2p::request_response::ProtocolSupport;
 use libp2p::{identity, kad, Multiaddr, StreamProtocol, SwarmBuilder};
 use libp2p::{kad::store::MemoryStore, request_response, swarm::SwarmEvent, Swarm};

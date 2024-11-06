@@ -1,5 +1,5 @@
 use super::{
-    store::{ListNodes, NodeStore, NodeStoreError, StoreNode},
+    store::{self, ListNodes, NodeStore, NodeStoreError, StoreNode},
     Node,
 };
 use crate::node::store::LoadNode;
@@ -179,6 +179,12 @@ pub struct StartNode {
 
 pub struct StartAll;
 
+pub struct UpdateNodeConfig {
+    pub name: String,
+    pub bootstrap_node_id: String,
+    pub bootstrap_node_addr: String,
+}
+
 pub struct StopNode {
     pub name: String,
 }
@@ -230,6 +236,27 @@ impl Message<StartAll> for NodeManager {
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
         self.start_all().await
+    }
+}
+
+impl Message<UpdateNodeConfig> for NodeManager {
+    type Reply = Result<(), NodeManagerError>;
+
+    async fn handle(
+        &mut self,
+        msg: UpdateNodeConfig,
+        _: kameo::message::Context<'_, Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.store
+            .ask(store::UpdateNodeConfig {
+                name: msg.name,
+                bootstrap_node_id: msg.bootstrap_node_id,
+                bootstrap_node_addr: msg.bootstrap_node_addr,
+            })
+            .send()
+            .await?;
+
+        Ok(())
     }
 }
 

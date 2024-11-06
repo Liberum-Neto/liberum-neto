@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::connection::AppContext;
-use crate::node::manager::{CreateNode, GetNode, StartNode, StopNode};
+use crate::node::manager::{self, CreateNode, GetNode, StartNode, StopNode};
 use crate::node::{DownloadFile, GetProviders, Node, PublishFile};
 use kameo::request::MessageSend;
 use liberum_core::messages::*;
@@ -34,6 +34,29 @@ pub async fn handle_start_node(name: String, context: &AppContext) -> DaemonResu
     debug!(name = name, "Node started!");
 
     Ok(DaemonResponse::NodeStarted)
+}
+
+pub async fn handle_update_node_config(
+    name: String,
+    bootstrap_node_id: String,
+    bootstrap_node_addr: String,
+    context: &AppContext,
+) -> DaemonResult {
+    context
+        .node_manager
+        .ask(manager::UpdateNodeConfig {
+            name: name.clone(),
+            bootstrap_node_id,
+            bootstrap_node_addr,
+        })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Faild to update node config"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    debug!(name = name, "Node config updated");
+
+    Ok(DaemonResponse::NodeConfigUpdated)
 }
 
 pub async fn handle_stop_nodes(name: String, context: &AppContext) -> DaemonResult {

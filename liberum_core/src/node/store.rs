@@ -1,9 +1,15 @@
 use crate::node::Node;
 use anyhow::{anyhow, Result};
 use kameo::{message::Message, Actor};
-use std::path::{Path, PathBuf};
+use libp2p::{Multiaddr, PeerId};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use thiserror::Error;
 use tracing::{debug, error, instrument};
+
+use super::{config::NodeConfig, BootstrapNode};
 
 pub struct LoadNode {
     pub name: String,
@@ -14,6 +20,12 @@ pub struct StoreNode {
 }
 
 pub struct ListNodes;
+
+pub struct UpdateNodeConfig {
+    pub name: String,
+    pub bootstrap_node_id: String,
+    pub bootstrap_node_addr: String,
+}
 
 #[derive(Debug, Actor)]
 pub struct NodeStore {
@@ -90,6 +102,11 @@ impl NodeStore {
             .map_err(|e| anyhow!("{}", e))
     }
 
+    fn node_exists(&self, name: &str) -> bool {
+        let node_dir_path = self.resolve_node_dir_path(&name);
+        node_dir_path.exists()
+    }
+
     async fn ensure_node_dir_path(&self, name: &str) -> Result<PathBuf> {
         let node_dir_path = self.resolve_node_dir_path(name);
         debug!(
@@ -108,6 +125,12 @@ impl NodeStore {
 
     fn resolve_node_dir_path(&self, name: &str) -> PathBuf {
         self.store_dir_path.join(name)
+    }
+
+    fn resolve_node_config_path(&self, name: &str) -> PathBuf {
+        let node_dir_path = self.resolve_node_dir_path(name);
+
+        node_dir_path.join(name).join(Node::CONFIG_FILE_NAME)
     }
 
     async fn ensure_store_dir_path(path: &Path) -> Result<()> {
@@ -182,12 +205,61 @@ impl Message<ListNodes> for NodeStore {
     }
 }
 
+impl Message<UpdateNodeConfig> for NodeStore {
+    type Reply = Result<(), NodeStoreError>;
+
+    #[instrument(skip_all, name = "UpdateNodeConfig")]
+    async fn handle(
+        &mut self,
+        msg: UpdateNodeConfig,
+        _: kameo::message::Context<'_, Self, Self::Reply>,
+    ) -> Self::Reply {
+        if !self.node_exists(&msg.name) {
+            return Err(NodeStoreError::NodeDoesNotExist { name: msg.name });
+        }
+
+        let node_config_path = self.resolve_node_config_path(&msg.name);
+        let config_bytes = tokio::fs::read(node_config_path.clone())
+            .await
+            .inspect_err(|e| error!(err = e.to_string(), "could not read node config from file"))
+            .map_err(|e| NodeStoreError::OtherError {
+                name: msg.name.clone(),
+                err: e.into(),
+            })?;
+        let mut new_config: NodeConfig = serde_json::from_slice(&config_bytes)
+            .inspect_err(|e| error!(err = e.to_string(), "could not parse node config JSON"))
+            .map_err(|e| NodeStoreError::OtherError {
+                name: msg.name.clone(),
+                err: e.into(),
+            })?;
+
+        new_config.bootstrap_nodes = vec![BootstrapNode {
+            id: PeerId::from_str(&msg.bootstrap_node_id).unwrap(),
+            addr: Multiaddr::from_str(&msg.bootstrap_node_addr).unwrap(),
+        }];
+
+        tokio::fs::write(
+            node_config_path,
+            serde_json::to_string(&new_config).unwrap(),
+        )
+        .await
+        .inspect_err(|e| error!(err = e.to_string(), "could not write node config"))
+        .unwrap();
+
+        Ok(())
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum NodeStoreError {
     #[error("failed to load node, name: {name}")]
     LoadError { name: String },
     #[error("failed to store node, name: {name}")]
     StoreError { name: String },
+    #[error("node does not exist, name: {name}")]
+    NodeDoesNotExist { name: String },
+    #[error("other error, name: {name}")]
+    OtherError { name: String, err: anyhow::Error },
 }
 
 #[cfg(test)]

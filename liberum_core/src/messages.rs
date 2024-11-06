@@ -6,13 +6,33 @@ use thiserror::Error;
 /// Messages that can be sent from the UI to the daemon
 #[derive(Serialize, Deserialize, Debug)]
 pub enum DaemonRequest {
-    NewNode { name: String },
-    StartNode { name: String },
-    StopNode { name: String },
+    NewNode {
+        name: String,
+    },
+    StartNode {
+        name: String,
+    },
+    UpdateNodeConfig {
+        name: String,
+        bootstrap_node_id: String,
+        bootstrap_node_addr: String,
+    },
+    StopNode {
+        name: String,
+    },
     ListNodes,
-    PublishFile { node_name: String, path: PathBuf },
-    DownloadFile { node_name: String, id: String },
-    GetProviders { node_name: String, id: String },
+    PublishFile {
+        node_name: String,
+        path: PathBuf,
+    },
+    DownloadFile {
+        node_name: String,
+        id: String,
+    },
+    GetProviders {
+        node_name: String,
+        id: String,
+    },
 }
 
 /// Messages that are sent from the daemon as a reponse
@@ -23,6 +43,7 @@ pub type DaemonResult = Result<DaemonResponse, DaemonError>;
 pub enum DaemonResponse {
     NodeCreated,
     NodeStarted,
+    NodeConfigUpdated,
     NodeStopped,
     NodeList(Vec<String>),
     FilePublished { id: String },
