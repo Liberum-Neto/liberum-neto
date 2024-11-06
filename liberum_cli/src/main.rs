@@ -26,6 +26,14 @@ enum Commands {
         #[arg()]
         name: String,
     },
+    ConfigNode {
+        #[arg()]
+        name: String,
+        #[arg(short = 'i')]
+        bootstrap_node_id: String,
+        #[arg(short = 'a')]
+        bootstrap_node_addr: String,
+    },
     StopNode {
         #[arg()]
         name: String,
@@ -88,6 +96,22 @@ async fn main() -> Result<()> {
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
             handle_response(&mut response_receiver).await?;
+        }
+
+        Commands::ConfigNode {
+            name,
+            bootstrap_node_id,
+            bootstrap_node_addr,
+        } => {
+            debug!(name = name, "Configuring node");
+            request_sender
+                .send(DaemonRequest::UpdateNodeConfig {
+                    name,
+                    bootstrap_node_id,
+                    bootstrap_node_addr,
+                })
+                .await
+                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
         }
 
         Commands::StopNode { name } => {
