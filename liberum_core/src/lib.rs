@@ -52,6 +52,7 @@ pub async fn connect(
                         Ok(_) => {}
                     }
                 }
+                else => break
             };
         }
     });
