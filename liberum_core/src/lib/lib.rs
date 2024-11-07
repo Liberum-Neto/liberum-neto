@@ -1,19 +1,18 @@
+pub mod codec;
+pub mod messages;
+
 use libp2p::futures::StreamExt;
-use std::path::PathBuf;
-use tokio::net::UnixStream;
+use tokio_util::io::ReaderStream;
+use std::path::{Path, PathBuf};
+use tokio::{fs::File, net::UnixStream};
 use tokio::sync::mpsc;
 use tracing::{debug, error};
 
-use futures::prelude::*;
-use tokio_util::codec::Decoder;
-pub mod codec;
-pub mod messages;
 use anyhow::Result;
 use codec::AsymmetricMessageCodec;
+use futures::prelude::*;
 use messages::{DaemonRequest, DaemonResult};
-use std::path::Path;
-use tokio::fs::File;
-use tokio_util::io::ReaderStream;
+use tokio_util::codec::Decoder;
 
 /// Function for a CLI or other UI to connecto to the client daemon
 /// Returns a sender and receiver for sending and receiving messages
