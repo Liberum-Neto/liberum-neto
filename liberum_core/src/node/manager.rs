@@ -25,6 +25,48 @@ pub struct NodeManager {
     actor_ref: Option<ActorRef<NodeManager>>,
 }
 
+pub struct CreateNode {
+    pub node: Node,
+}
+
+pub struct StartNode {
+    pub name: String,
+}
+
+pub struct StartAll;
+
+pub struct UpdateNodeConfig {
+    pub name: String,
+    pub bootstrap_node_id: String,
+    pub bootstrap_node_addr: String,
+}
+
+pub struct StopNode {
+    pub name: String,
+}
+
+pub struct StopAll;
+
+pub struct GetNode {
+    pub name: String,
+}
+
+struct GetAll;
+
+#[derive(Error, Debug)]
+pub enum NodeManagerError {
+    #[error("node {name} is already started")]
+    AlreadyStarted { name: String },
+    #[error("node {name} is already stopped")]
+    AlreadyStopped { name: String },
+    #[error("node {name} is not started")]
+    NotStarted { name: String },
+    #[error("node store error: {0}")]
+    StoreError(NodeStoreError),
+    #[error("other node manager error: {0}")]
+    OtherError(Error),
+}
+
 impl NodeManager {
     pub fn new(store: ActorRef<NodeStore>) -> Self {
         NodeManager {
@@ -169,34 +211,6 @@ impl Actor for NodeManager {
     }
 }
 
-pub struct CreateNode {
-    pub node: Node,
-}
-
-pub struct StartNode {
-    pub name: String,
-}
-
-pub struct StartAll;
-
-pub struct UpdateNodeConfig {
-    pub name: String,
-    pub bootstrap_node_id: String,
-    pub bootstrap_node_addr: String,
-}
-
-pub struct StopNode {
-    pub name: String,
-}
-
-pub struct StopAll;
-
-pub struct GetNode {
-    pub name: String,
-}
-
-pub struct GetAll;
-
 impl Message<CreateNode> for NodeManager {
     type Reply = Result<(), NodeManagerError>;
 
@@ -307,20 +321,6 @@ impl Message<GetAll> for NodeManager {
     ) -> Self::Reply {
         self.nodes.clone()
     }
-}
-
-#[derive(Error, Debug)]
-pub enum NodeManagerError {
-    #[error("node {name} is already started")]
-    AlreadyStarted { name: String },
-    #[error("node {name} is already stopped")]
-    AlreadyStopped { name: String },
-    #[error("node {name} is not started")]
-    NotStarted { name: String },
-    #[error("node store error: {0}")]
-    StoreError(NodeStoreError),
-    #[error("other node manager error: {0}")]
-    OtherError(Error),
 }
 
 impl From<NodeStoreError> for NodeManagerError {
