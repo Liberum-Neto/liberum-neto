@@ -146,6 +146,11 @@ async fn run_swarm_inner(
         }
     }
 
+    swarm
+        .behaviour_mut()
+        .kademlia
+        .set_mode(Some(kad::Mode::Server));
+
     debug!(node_name = node_data.name, "Starting a swarm!");
 
     let mut context = SwarmContext {
