@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-use liberum_core::messages::DaemonRequest;
+use liberum_core::messages::{DaemonError, DaemonRequest};
 use liberum_core::{self, messages::DaemonResponse};
 use std::path::{Path, PathBuf};
 use tracing::{debug, error, info};
@@ -78,6 +78,7 @@ async fn main() -> Result<()> {
                 .send(DaemonRequest::NewNode { name })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+            generic_print_response(&mut response_receiver).await;
         }
 
         Commands::StartNode { name } => {
@@ -86,6 +87,7 @@ async fn main() -> Result<()> {
                 .send(DaemonRequest::StartNode { name })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+            generic_print_response(&mut response_receiver).await;
         }
 
         Commands::StopNode { name } => {
@@ -94,6 +96,7 @@ async fn main() -> Result<()> {
                 .send(DaemonRequest::StopNode { name })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+            generic_print_response(&mut response_receiver).await;
         }
         Commands::PublishFile { node_name, path } => {
             debug!(path = format!("{path:?}"), "Publishing file");
@@ -103,44 +106,47 @@ async fn main() -> Result<()> {
                 .send(DaemonRequest::PublishFile { node_name, path })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-
-            if let Some(Ok(resp)) = response_receiver.recv().await {
-                match resp {
-                    DaemonResponse::FilePublished { id } => debug!(id = id, "File published"),
-                    _ => error!("{resp:?}"),
-                }
-            } else {
-                error!("No response to publish file!");
-            }
+            generic_print_response(&mut response_receiver).await;
         }
         Commands::DownloadFile { node_name, id } => {
-            debug!(id = format!("{id}"), "Downloading file unimplemented!");
+            request_sender
+                .send(DaemonRequest::DownloadFile { node_name, id })
+                .await
+                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+            match response_receiver.recv().await {
+                Some(Ok(DaemonResponse::FileDownloaded { data })) => info!(
+                    response = format!("{}", String::from_utf8(data)?),
+                    "Daemon responds"
+                ),
+                Some(r) => info!(response = format!("{r:?}"), "Daemon responds"),
+                None => {
+                    error!("Failed to receive response");
+                }
+            };
         }
         Commands::GetProviders { node_name, id } => {
             request_sender
                 .send(DaemonRequest::GetProviders { node_name, id })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-
-            if let Some(Ok(resp)) = response_receiver.recv().await {
-                match resp {
-                    DaemonResponse::Providers { ids } => {
-                        debug!(ids = format!("{ids:?}"), "File published")
-                    }
-                    _ => error!("{resp:?}"),
-                }
-            } else {
-                error!("No response to get providers!");
-            }
-        }
-    };
-
-    match response_receiver.recv().await {
-        Some(r) => info!(response = format!("{r:?}"), "Daemon responds: {:?}", r),
-        None => {
-            error!("Failed to receive response");
+            generic_print_response(&mut response_receiver).await;
         }
     };
 
     Ok(())
+}
+
+async fn generic_print_response(
+    response_receiver: &mut tokio::sync::mpsc::Receiver<Result<DaemonResponse, DaemonError>>,
+) {
+    match response_receiver.recv().await {
+        Some(Ok(DaemonResponse::FileDownloaded { data })) => info!(
+            response = String::from_utf8(data).unwrap_or("Failed to decode utf8".to_string()),
+            "Daemon responds"
+        ),
+        Some(r) => info!(response = format!("{r:?}"), "Daemon responds"),
+        None => {
+            error!("Failed to receive response");
+        }
+    };
 }

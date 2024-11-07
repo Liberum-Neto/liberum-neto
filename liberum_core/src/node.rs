@@ -5,7 +5,6 @@ pub mod store;
 use crate::swarm_runner;
 use anyhow::{anyhow, bail, Result};
 use config::NodeConfig;
-use futures::SinkExt;
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
 use kameo::{actor::ActorRef, message::Message, Actor};
@@ -52,7 +51,7 @@ impl Actor for Node {
         _: kameo::actor::WeakActorRef<Self>,
         _: kameo::error::ActorStopReason,
     ) -> std::result::Result<(), kameo::error::BoxError> {
-        if let Some(mut sender) = self.swarm_sender {
+        if let Some(sender) = self.swarm_sender {
             sender.send(swarm_runner::SwarmRunnerMessage::Kill).await?;
         }
 
@@ -69,14 +68,14 @@ impl Node {
     }
     #[message]
     pub async fn get_providers(&mut self, id: String) -> Result<HashSet<PeerId>> {
+        debug!("Node got GetProviders");
         let id = str_to_file_id(&id).await?;
         if let Some(sender) = &mut self.swarm_sender {
             let (send, recv) = oneshot::channel();
             debug!("Node sends GetProviders to swarm");
             sender
                 .send(swarm_runner::SwarmRunnerMessage::GetProviders { id, sender: send })
-                .await
-                .unwrap();
+                .await?;
             if let Ok(received) = recv.await {
                 debug!("Got providers: {received:?}");
                 return Ok(received);
@@ -91,12 +90,15 @@ impl Node {
             .map_err(|e| error!(err = e.to_string(), "Failed to hash file"))
             .unwrap();
         if let Some(sender) = &mut self.swarm_sender {
+            let (resp_send, resp_recv) = oneshot::channel();
             sender
                 .send(swarm_runner::SwarmRunnerMessage::PublishFile {
                     id: id.clone(),
                     path,
+                    sender: resp_send,
                 })
                 .await?;
+            resp_recv.await?;
             let s = liberum_core::file_id_to_str(id).await;
             Ok(s)
         } else {
@@ -106,7 +108,43 @@ impl Node {
     }
     #[message]
     pub async fn download_file(&mut self, id: String) -> Result<Vec<u8>> {
-        todo!()
+        let id_str = id;
+        let id = liberum_core::str_to_file_id(&id_str).await?;
+        if let Some(sender) = &mut self.swarm_sender {
+            let (resp_send, resp_recv) = oneshot::channel();
+            sender
+                .send(swarm_runner::SwarmRunnerMessage::GetProviders {
+                    id: id.clone(),
+                    sender: resp_send,
+                })
+                .await?;
+            let providers = resp_recv.await?;
+            if providers.is_empty() {
+                return Err(anyhow!("Could not find provider for file {id_str}.").into());
+            }
+
+            let mut requests = vec![];
+            for peer in providers {
+                let (file_sender, file_receiver) = oneshot::channel();
+                requests.push(tokio::task::spawn({
+                    sender
+                        .send(swarm_runner::SwarmRunnerMessage::DownloadFile {
+                            id: id.clone(),
+                            peer,
+                            sender: file_sender,
+                        })
+                        .await
+                        .unwrap();
+                    file_receiver
+                }));
+            }
+
+            if let Ok((Ok(file), _)) = futures::future::select_ok(requests).await {
+                return Ok(file);
+            }
+        }
+
+        Err(anyhow!(""))
     }
 }
 

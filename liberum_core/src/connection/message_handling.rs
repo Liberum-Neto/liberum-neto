@@ -86,23 +86,22 @@ pub async fn handle_get_providers(
     id: String,
     context: &AppContext,
 ) -> DaemonResult {
-    debug!("handle get providers");
     let node = context
         .node_manager
-        .ask(GetNode { name: node_name })
+        .ask(GetNode {
+            name: node_name.clone(),
+        })
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to get file providers"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    debug!("got node");
     let resp = node
-        .ask(GetProviders { id })
+        .ask(GetProviders { id: id.clone() })
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to get file providers"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
-
     Ok(DaemonResponse::Providers {
         ids: resp.iter().map(|r| r.to_base58()).collect(),
     })

@@ -56,7 +56,7 @@ async fn handle_connection(
     loop {
         tokio::select! {
             Some(message) = daemon_socket_framed.next() => {
-                info!("Received: {message:?} at {id}");
+                debug!("Received: {message:?} at {id}");
                 match message {
                     Ok(message) => {
                         let response = handle_message(message, &app_context).await;
@@ -80,7 +80,7 @@ pub async fn listen(listener: UnixListener) -> Result<()> {
     let app_context = AppContext::new(kameo::spawn(NodeStore::with_default_nodes_dir().await?));
     loop {
         let (daemon_socket, _) = listener.accept().await?;
-        info!(conn_id = id, "Handling a new connection");
+        debug!(conn_id = id, "Handling a new connection");
         let daemon_socket_framed: Framed<
             tokio::net::UnixStream,
             AsymmetricMessageCodec<DaemonResult, DaemonRequest>,
