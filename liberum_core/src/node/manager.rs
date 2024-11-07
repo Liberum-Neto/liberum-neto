@@ -1,13 +1,13 @@
 use super::{
-    store::{self, ListNodes, NodeStore, NodeStoreError, StoreNode},
+    store::{ListNodes, NodeStore, NodeStoreError, StoreNode},
     Node,
 };
 use crate::node::store::LoadNode;
 use anyhow::anyhow;
 use anyhow::{Error, Result};
 use kameo::{
-    actor::ActorRef, error::SendError, mailbox::bounded::BoundedMailbox, message::Message,
-    request::MessageSend, Actor,
+    actor::ActorRef, error::SendError, mailbox::bounded::BoundedMailbox, request::MessageSend,
+    Actor,
 };
 use std::{
     collections::HashMap,
@@ -16,42 +16,14 @@ use std::{
 use thiserror::Error;
 use tracing::{debug, error};
 
-type NamedRefs = HashMap<String, ActorRef<Node>>;
+type NodeRefs = HashMap<String, ActorRef<Node>>;
 
 #[derive(Debug)]
 pub struct NodeManager {
-    nodes: NamedRefs,
+    nodes: NodeRefs,
     store: ActorRef<NodeStore>,
     actor_ref: Option<ActorRef<NodeManager>>,
 }
-
-pub struct CreateNode {
-    pub node: Node,
-}
-
-pub struct StartNode {
-    pub name: String,
-}
-
-pub struct StartAll;
-
-pub struct UpdateNodeConfig {
-    pub name: String,
-    pub bootstrap_node_id: String,
-    pub bootstrap_node_addr: String,
-}
-
-pub struct StopNode {
-    pub name: String,
-}
-
-pub struct StopAll;
-
-pub struct GetNode {
-    pub name: String,
-}
-
-struct GetAll;
 
 #[derive(Error, Debug)]
 pub enum NodeManagerError {
@@ -67,25 +39,21 @@ pub enum NodeManagerError {
     OtherError(Error),
 }
 
+#[kameo::messages]
 impl NodeManager {
-    pub fn new(store: ActorRef<NodeStore>) -> Self {
-        NodeManager {
-            nodes: HashMap::new(),
-            store,
-            actor_ref: None,
-        }
+    #[message]
+    pub async fn create_node(&mut self, node: Node) -> Result<(), NodeManagerError> {
+        self.store
+            .ask(StoreNode { node })
+            .send()
+            .await
+            .map_err(|e| NodeManagerError::OtherError(e.into()))?;
+
+        Ok(())
     }
 
-    fn get_node_ref(&self, name: &str) -> Result<ActorRef<Node>, NodeManagerError> {
-        match self.nodes.get(name) {
-            Some(node) => Ok(node.clone()),
-            None => Err(NodeManagerError::NotStarted {
-                name: name.to_string(),
-            }),
-        }
-    }
-
-    async fn start_node(&mut self, name: String) -> Result<ActorRef<Node>, NodeManagerError> {
+    #[message]
+    pub async fn start_node(&mut self, name: String) -> Result<ActorRef<Node>, NodeManagerError> {
         if self.nodes.contains_key(&name) {
             return Err(NodeManagerError::AlreadyStarted {
                 name: name.to_string(),
@@ -114,15 +82,67 @@ impl NodeManager {
         Ok(actor_ref)
     }
 
-    async fn start_all(&mut self) -> Result<NamedRefs, NodeManagerError> {
+    #[message]
+    pub async fn start_all(&mut self) -> Result<NodeRefs, NodeManagerError> {
         let names = self.store.ask(ListNodes {}).send().await?;
-        let mut named_refs = NamedRefs::new();
+        let mut named_refs = NodeRefs::new();
 
         for name in names {
             named_refs.insert(name.clone(), self.start_node(name).await?);
         }
 
         Ok(named_refs)
+    }
+
+    #[message]
+    pub async fn get_node(&self, name: String) -> Result<ActorRef<Node>, NodeManagerError> {
+        self.get_node_ref(&name)
+    }
+
+    #[message]
+    pub async fn get_all(&self) -> NodeRefs {
+        self.nodes.clone()
+    }
+
+    #[message]
+    pub async fn stop_node(&self, name: String) -> Result<(), NodeManagerError> {
+        let node_ref = self.get_node_ref(&name)?;
+        self.save_node(node_ref.clone()).await?;
+
+        node_ref
+            .stop_gracefully()
+            .await
+            .map_err(|e| NodeManagerError::OtherError(e.into()))?;
+
+        Ok(())
+    }
+
+    #[message]
+    pub async fn stop_all(&mut self) -> Result<(), NodeManagerError> {
+        for name in self.nodes.keys() {
+            self.stop_node(name.to_string()).await?;
+        }
+
+        Ok(())
+    }
+}
+
+impl NodeManager {
+    pub fn new(store: ActorRef<NodeStore>) -> Self {
+        NodeManager {
+            nodes: HashMap::new(),
+            store,
+            actor_ref: None,
+        }
+    }
+
+    fn get_node_ref(&self, name: &str) -> Result<ActorRef<Node>, NodeManagerError> {
+        match self.nodes.get(name) {
+            Some(node) => Ok(node.clone()),
+            None => Err(NodeManagerError::NotStarted {
+                name: name.to_string(),
+            }),
+        }
     }
 
     async fn save_node(&self, node_ref: ActorRef<Node>) -> Result<(), NodeManagerError> {
@@ -140,27 +160,6 @@ impl NodeManager {
 
         Ok(())
     }
-
-    async fn stop_node(&self, name: &str) -> Result<(), NodeManagerError> {
-        let node_ref = self.get_node_ref(name)?;
-        self.save_node(node_ref.clone()).await?;
-
-        node_ref
-            .stop_gracefully()
-            .await
-            .map_err(|e| NodeManagerError::OtherError(e.into()))?;
-
-        Ok(())
-    }
-
-    async fn stop_all(&self) -> Result<(), NodeManagerError> {
-        let names = self.nodes.keys().map(|k| k.as_str()).collect::<Vec<&str>>();
-        for name in names {
-            self.stop_node(name).await?;
-        }
-
-        Ok(())
-    }
 }
 
 impl Actor for NodeManager {
@@ -175,7 +174,7 @@ impl Actor for NodeManager {
     }
 
     async fn on_stop(
-        self,
+        mut self,
         _: kameo::actor::WeakActorRef<Self>,
         _: kameo::error::ActorStopReason,
     ) -> std::result::Result<(), kameo::error::BoxError> {
@@ -208,118 +207,6 @@ impl Actor for NodeManager {
         self.nodes.remove(name);
 
         Ok(None)
-    }
-}
-
-impl Message<CreateNode> for NodeManager {
-    type Reply = Result<(), NodeManagerError>;
-
-    async fn handle(
-        &mut self,
-        CreateNode { node }: CreateNode,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.store
-            .ask(StoreNode { node })
-            .send()
-            .await
-            .map_err(|e| NodeManagerError::OtherError(e.into()))?;
-
-        Ok(())
-    }
-}
-
-impl Message<StartNode> for NodeManager {
-    type Reply = Result<ActorRef<Node>, NodeManagerError>;
-
-    async fn handle(
-        &mut self,
-        StartNode { name }: StartNode,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.start_node(name).await
-    }
-}
-
-impl Message<StartAll> for NodeManager {
-    type Reply = Result<NamedRefs, NodeManagerError>;
-
-    async fn handle(
-        &mut self,
-        _: StartAll,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.start_all().await
-    }
-}
-
-impl Message<UpdateNodeConfig> for NodeManager {
-    type Reply = Result<(), NodeManagerError>;
-
-    async fn handle(
-        &mut self,
-        msg: UpdateNodeConfig,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.store
-            .ask(store::UpdateNodeConfig {
-                name: msg.name,
-                bootstrap_node_id: msg.bootstrap_node_id,
-                bootstrap_node_addr: msg.bootstrap_node_addr,
-            })
-            .send()
-            .await?;
-
-        Ok(())
-    }
-}
-
-impl Message<StopNode> for NodeManager {
-    type Reply = Result<(), NodeManagerError>;
-
-    async fn handle(
-        &mut self,
-        StopNode { name }: StopNode,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.stop_node(&name).await
-    }
-}
-
-impl Message<StopAll> for NodeManager {
-    type Reply = Result<(), NodeManagerError>;
-
-    async fn handle(
-        &mut self,
-        _: StopAll,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.stop_all().await?;
-        Ok(())
-    }
-}
-
-impl Message<GetNode> for NodeManager {
-    type Reply = Result<ActorRef<Node>, NodeManagerError>;
-
-    async fn handle(
-        &mut self,
-        GetNode { name }: GetNode,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.get_node_ref(&name)
-    }
-}
-
-impl Message<GetAll> for NodeManager {
-    type Reply = NamedRefs;
-
-    async fn handle(
-        &mut self,
-        _: GetAll,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.nodes.clone()
     }
 }
 

@@ -19,11 +19,6 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
     match message {
         DaemonRequest::NewNode { name } => handle_new_node(name, context).await,
         DaemonRequest::StartNode { name } => handle_start_node(name, context).await,
-        DaemonRequest::UpdateNodeConfig {
-            name,
-            bootstrap_node_id,
-            bootstrap_node_addr,
-        } => handle_update_node_config(name, bootstrap_node_id, bootstrap_node_addr, context).await,
         DaemonRequest::StopNode { name } => handle_stop_nodes(name, context).await,
         DaemonRequest::ListNodes => handle_list_nodes(context).await,
         DaemonRequest::PublishFile { node_name, path } => {
