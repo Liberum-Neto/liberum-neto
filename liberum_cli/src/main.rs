@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-use liberum_core::messages::{DaemonError, DaemonRequest};
-use liberum_core::{self, messages::DaemonResponse};
+use liberum_core::{DaemonError, DaemonRequest, DaemonResponse};
+use std::path::Path;
+use std::path::PathBuf;
 use tokio::sync::mpsc::{Receiver, Sender};
-use std::path::{Path, PathBuf};
 use tracing::{debug, error, info};
 use tracing_subscriber;
 
@@ -66,7 +66,7 @@ struct AddBootstrapNode {
     id: String,
     addr: String,
 }
-    
+
 #[derive(Parser)]
 struct PublishFile {
     #[arg()]
@@ -82,7 +82,7 @@ struct GetProviders {
     #[arg()]
     id: String,
 }
-    
+
 #[derive(Parser)]
 struct DownloadFile {
     #[arg()]
@@ -128,7 +128,11 @@ async fn handle_command(cmd: Command, req: RequestSender, res: ReseponseReceiver
     }
 }
 
-async fn handle_new_node(cmd: NewNode, req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
+async fn handle_new_node(
+    cmd: NewNode,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
     debug!(name = cmd.name, "Creating node");
     req.send(DaemonRequest::NewNode { name: cmd.name })
         .await
@@ -172,37 +176,59 @@ async fn handle_add_bootstrap_node(
     todo!()
 }
 
-async fn handle_publish_file(cmd: PublishFile, req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
+async fn handle_publish_file(
+    cmd: PublishFile,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
     debug!(path = format!("{:?}", &cmd.path), "Publishing file");
     let path = std::path::absolute(&cmd.path).expect("Path to be converted into absolute path");
 
-    req
-        .send(DaemonRequest::PublishFile { node_name: cmd.node_name, path })
-        .await
-        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+    req.send(DaemonRequest::PublishFile {
+        node_name: cmd.node_name,
+        path,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
     handle_response(&mut res).await
 }
 
-async fn handle_download_file(cmd: DownloadFile, req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
-    req
-        .send(DaemonRequest::DownloadFile { node_name: cmd.node_name, id: cmd.id })
-        .await
-        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+async fn handle_download_file(
+    cmd: DownloadFile,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    req.send(DaemonRequest::DownloadFile {
+        node_name: cmd.node_name,
+        id: cmd.id,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
     handle_response(&mut res).await
 }
 
-async fn handle_get_providers(cmd: GetProviders, req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
-    req
-        .send(DaemonRequest::GetProviders { node_name: cmd.node_name, id: cmd.id })
-        .await
-        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+async fn handle_get_providers(
+    cmd: GetProviders,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    req.send(DaemonRequest::GetProviders {
+        node_name: cmd.node_name,
+        id: cmd.id,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
     handle_response(&mut res).await
 }
 
-async fn handle_stop_node(cmd: StopNode, req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
+async fn handle_stop_node(
+    cmd: StopNode,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
     debug!(name = cmd.name, "Stopping node");
     req.send(DaemonRequest::StopNode { name: cmd.name })
         .await
