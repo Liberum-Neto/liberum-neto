@@ -1,18 +1,59 @@
 pub mod codec;
-pub mod messages;
 
 use libp2p::futures::StreamExt;
-use tokio_util::io::ReaderStream;
 use std::path::{Path, PathBuf};
-use tokio::{fs::File, net::UnixStream};
 use tokio::sync::mpsc;
+use tokio::{fs::File, net::UnixStream};
+use tokio_util::io::ReaderStream;
 use tracing::{debug, error};
 
 use anyhow::Result;
 use codec::AsymmetricMessageCodec;
 use futures::prelude::*;
-use messages::{DaemonRequest, DaemonResult};
 use tokio_util::codec::Decoder;
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+/// Messages that can be sent from the UI to the daemon
+#[derive(Serialize, Deserialize, Debug)]
+pub enum DaemonRequest {
+    NewNode { name: String },
+    StartNode { name: String },
+    StopNode { name: String },
+    ListNodes,
+    PublishFile { node_name: String, path: PathBuf },
+    DownloadFile { node_name: String, id: String },
+    GetProviders { node_name: String, id: String },
+}
+
+/// Messages that are sent from the daemon as a reponse
+/// An enum of enums - categorizes the responses
+pub type DaemonResult = Result<DaemonResponse, DaemonError>;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum DaemonResponse {
+    NodeCreated,
+    NodeStarted,
+    NodeConfigUpdated,
+    NodeStopped,
+    NodeList(Vec<String>),
+    FilePublished { id: String },
+    Providers { ids: Vec<String> },
+    FileDownloaded { data: Vec<u8> }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
+}
+
+/// Errors that can be returned by the daemon
+/// An enum of enums - categorizes the errors, just like responses
+#[derive(Serialize, Deserialize, Debug, Error)]
+pub enum DaemonError {
+    #[error("Node already exist: {0}")]
+    NodeAlreadyExist(String),
+    #[error("Node don't exist: {0}")]
+    NodeDoesNotExist(String),
+    #[error("Other error: {0}")]
+    Other(String),
+}
 
 /// Function for a CLI or other UI to connecto to the client daemon
 /// Returns a sender and receiver for sending and receiving messages
@@ -26,6 +67,7 @@ pub async fn connect(
     let mut daemon_socket = encoder.framed(socket);
     let (daemon_sender, mut daemon_receiver) = mpsc::channel::<DaemonRequest>(16);
     let (ui_sender, ui_receiver) = mpsc::channel::<DaemonResult>(16);
+
     tokio::spawn(async move {
         loop {
             tokio::select! {
@@ -34,6 +76,7 @@ pub async fn connect(
                         Err(e)=> error!(err=e.to_string(),"Failed to send message to daemon"),
                         Ok(_) => {}
                     }
+
                     let resp = match daemon_socket.next().await {
                         Some(Ok(resp)) => resp,
                         Some(Err(e)) => {
@@ -45,6 +88,7 @@ pub async fn connect(
                             break;
                         }
                     };
+
                     match ui_sender.send(resp).await {
                         Err(e) => error!(err=e.to_string(), "Failed to send message to UI"),
                         Ok(_) => {}
@@ -54,6 +98,7 @@ pub async fn connect(
             };
         }
     });
+
     Ok((daemon_sender, ui_receiver))
 }
 
