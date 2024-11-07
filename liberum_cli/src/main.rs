@@ -2,60 +2,93 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use liberum_core::messages::{DaemonError, DaemonRequest};
 use liberum_core::{self, messages::DaemonResponse};
+use tokio::sync::mpsc::{Receiver, Sender};
 use std::path::{Path, PathBuf};
 use tracing::{debug, error, info};
 use tracing_subscriber;
 
+type RequestSender = Sender<DaemonRequest>;
+type ReseponseReceiver = Receiver<Result<DaemonResponse, DaemonError>>;
+
 #[derive(Parser)]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Command,
 }
 
 /// Subcommands for the CLI
 /// They need to be matched in the main function
 /// and can send messages to the daemon
-#[derive(Debug, Subcommand)]
-enum Commands {
+#[derive(Subcommand)]
+enum Command {
     /// Creates a new node
-    NewNode {
-        #[arg()]
-        name: String,
-    },
-    StartNode {
-        #[arg()]
-        name: String,
-    },
-    ConfigNode {
-        #[arg()]
-        name: String,
-        #[arg(short = 'i')]
-        bootstrap_node_id: String,
-        #[arg(short = 'a')]
-        bootstrap_node_addr: String,
-    },
-    StopNode {
-        #[arg()]
-        name: String,
-    },
-    PublishFile {
-        #[arg()]
-        node_name: String,
-        #[arg()]
-        path: PathBuf,
-    },
-    GetProviders {
-        #[arg()]
-        node_name: String,
-        #[arg()]
-        id: String,
-    },
-    DownloadFile {
-        #[arg()]
-        node_name: String,
-        #[arg()]
-        id: String,
-    },
+    NewNode(NewNode),
+    StartNode(StartNode),
+    ConfigNode(ConfigNode),
+    StopNode(StopNode),
+    PublishFile(PublishFile),
+    GetProviders(GetProviders),
+    DownloadFile(DownloadFile),
+}
+
+#[derive(Parser)]
+struct NewNode {
+    #[arg()]
+    name: String,
+}
+
+#[derive(Parser)]
+struct StartNode {
+    #[arg()]
+    name: String,
+}
+
+#[derive(Parser)]
+struct ConfigNode {
+    #[command(subcommand)]
+    subcommand: ConfigNodeCommand,
+}
+
+#[derive(Parser)]
+struct StopNode {
+    #[arg()]
+    name: String,
+}
+
+#[derive(Subcommand)]
+enum ConfigNodeCommand {
+    AddBootstrapNode(AddBootstrapNode),
+}
+
+#[derive(Parser)]
+struct AddBootstrapNode {
+    #[arg()]
+    id: String,
+    addr: String,
+}
+    
+#[derive(Parser)]
+struct PublishFile {
+    #[arg()]
+    node_name: String,
+    #[arg()]
+    path: PathBuf,
+}
+
+#[derive(Parser)]
+struct GetProviders {
+    #[arg()]
+    node_name: String,
+    #[arg()]
+    id: String,
+}
+    
+#[derive(Parser)]
+struct DownloadFile {
+    #[arg()]
+    node_name: String,
+    #[arg()]
+    id: String,
 }
 
 #[tokio::main]
@@ -64,9 +97,9 @@ async fn main() -> Result<()> {
         .with_max_level(tracing::Level::DEBUG)
         .init();
     let path = Path::new("/tmp/liberum-core/");
-    let contact = liberum_core::connect(path.join("liberum-core-socket")).await;
+    let conn = liberum_core::connect(path.join("liberum-core-socket")).await;
 
-    let (request_sender, mut response_receiver) = match contact {
+    let (request_sender, response_receiver) = match conn {
         Ok(c) => c,
         Err(e) => {
             error!(
@@ -78,77 +111,104 @@ async fn main() -> Result<()> {
     };
 
     let cli = Cli::parse();
-
-    match cli.command {
-        Commands::NewNode { name } => {
-            debug!("Creating node {name}");
-            request_sender
-                .send(DaemonRequest::NewNode { name })
-                .await
-                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            handle_response(&mut response_receiver).await?;
-        }
-
-        Commands::StartNode { name } => {
-            debug!("Starting node {name}");
-            request_sender
-                .send(DaemonRequest::StartNode { name })
-                .await
-                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            handle_response(&mut response_receiver).await?;
-        }
-
-        Commands::ConfigNode {
-            name,
-            bootstrap_node_id,
-            bootstrap_node_addr,
-        } => {
-            debug!(name = name, "Configuring node");
-            request_sender
-                .send(DaemonRequest::UpdateNodeConfig {
-                    name,
-                    bootstrap_node_id,
-                    bootstrap_node_addr,
-                })
-                .await
-                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-        }
-
-        Commands::StopNode { name } => {
-            debug!(name = name, "Stopping node");
-            request_sender
-                .send(DaemonRequest::StopNode { name })
-                .await
-                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            handle_response(&mut response_receiver).await?;
-        }
-        Commands::PublishFile { node_name, path } => {
-            debug!(path = format!("{path:?}"), "Publishing file");
-            let path = std::path::absolute(path).expect("Path to be converted into absolute path");
-
-            request_sender
-                .send(DaemonRequest::PublishFile { node_name, path })
-                .await
-                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            handle_response(&mut response_receiver).await?;
-        }
-        Commands::DownloadFile { node_name, id } => {
-            request_sender
-                .send(DaemonRequest::DownloadFile { node_name, id })
-                .await
-                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            handle_response(&mut response_receiver).await?;
-        }
-        Commands::GetProviders { node_name, id } => {
-            request_sender
-                .send(DaemonRequest::GetProviders { node_name, id })
-                .await
-                .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            handle_response(&mut response_receiver).await?;
-        }
-    };
+    handle_command(cli.command, request_sender, response_receiver).await?;
 
     Ok(())
+}
+
+async fn handle_command(cmd: Command, req: RequestSender, res: ReseponseReceiver) -> Result<()> {
+    match cmd {
+        Command::NewNode(cmd) => handle_new_node(cmd, req, res).await,
+        Command::StartNode(cmd) => handle_start_node(cmd, req, res).await,
+        Command::ConfigNode(cmd) => handle_config_node(cmd, req, res).await,
+        Command::StopNode(cmd) => handle_stop_node(cmd, req, res).await,
+        Command::PublishFile(cmd) => handle_publish_file(cmd, req, res).await,
+        Command::DownloadFile(cmd) => handle_download_file(cmd, req, res).await,
+        Command::GetProviders(cmd) => handle_get_providers(cmd, req, res).await,
+    }
+}
+
+async fn handle_new_node(cmd: NewNode, req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
+    debug!(name = cmd.name, "Creating node");
+    req.send(DaemonRequest::NewNode { name: cmd.name })
+        .await
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    handle_response(&mut res).await
+}
+
+async fn handle_start_node(
+    cmd: StartNode,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    debug!(name = cmd.name, "Starting node");
+    req.send(DaemonRequest::StartNode { name: cmd.name })
+        .await
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    handle_response(&mut res).await
+}
+
+async fn handle_config_node(
+    cmd: ConfigNode,
+    req: RequestSender,
+    res: ReseponseReceiver,
+) -> Result<()> {
+    match cmd.subcommand {
+        ConfigNodeCommand::AddBootstrapNode(cmd) => {
+            handle_add_bootstrap_node(cmd, req, res).await?
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_add_bootstrap_node(
+    cmd: AddBootstrapNode,
+    req: RequestSender,
+    res: ReseponseReceiver,
+) -> Result<()> {
+    todo!()
+}
+
+async fn handle_publish_file(cmd: PublishFile, req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
+    debug!(path = format!("{:?}", &cmd.path), "Publishing file");
+    let path = std::path::absolute(&cmd.path).expect("Path to be converted into absolute path");
+
+    req
+        .send(DaemonRequest::PublishFile { node_name: cmd.node_name, path })
+        .await
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    handle_response(&mut res).await
+}
+
+async fn handle_download_file(cmd: DownloadFile, req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
+    req
+        .send(DaemonRequest::DownloadFile { node_name: cmd.node_name, id: cmd.id })
+        .await
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    handle_response(&mut res).await
+}
+
+async fn handle_get_providers(cmd: GetProviders, req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
+    req
+        .send(DaemonRequest::GetProviders { node_name: cmd.node_name, id: cmd.id })
+        .await
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    handle_response(&mut res).await
+}
+
+async fn handle_stop_node(cmd: StopNode, req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
+    debug!(name = cmd.name, "Stopping node");
+    req.send(DaemonRequest::StopNode { name: cmd.name })
+        .await
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    handle_response(&mut res).await
 }
 
 async fn handle_response(
@@ -163,5 +223,6 @@ async fn handle_response(
             error!("Failed to receive response");
         }
     };
+
     Ok(())
 }
