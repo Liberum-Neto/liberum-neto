@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use crate::connection::AppContext;
-use crate::node::manager::{self, CreateNode, GetNode, StartNode, StopNode};
-use crate::node::{DownloadFile, GetProviders, Node, PublishFile};
+use crate::node::manager::GetNode;
+use crate::node::{self, DownloadFile, GetProviders, Node, PublishFile};
 use kameo::request::MessageSend;
 use liberum_core::messages::*;
 use libp2p::identity::Keypair;
@@ -15,7 +15,11 @@ pub async fn handle_new_node(name: String, context: &AppContext) -> DaemonResult
         .build()
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    let resp = context.node_manager.ask(CreateNode { node }).send().await;
+    let resp = context
+        .node_manager
+        .ask(node::manager::CreateNode { node })
+        .send()
+        .await;
     match resp {
         Err(e) => Err(DaemonError::Other(e.to_string())),
         Ok(_resp) => Ok(DaemonResponse::NodeCreated),
@@ -25,7 +29,7 @@ pub async fn handle_new_node(name: String, context: &AppContext) -> DaemonResult
 pub async fn handle_start_node(name: String, context: &AppContext) -> DaemonResult {
     context
         .node_manager
-        .ask(StartNode { name: name.clone() })
+        .ask(node::manager::StartNode { name: name.clone() })
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle start node"))
@@ -36,33 +40,10 @@ pub async fn handle_start_node(name: String, context: &AppContext) -> DaemonResu
     Ok(DaemonResponse::NodeStarted)
 }
 
-pub async fn handle_update_node_config(
-    name: String,
-    bootstrap_node_id: String,
-    bootstrap_node_addr: String,
-    context: &AppContext,
-) -> DaemonResult {
-    context
-        .node_manager
-        .ask(manager::UpdateNodeConfig {
-            name: name.clone(),
-            bootstrap_node_id,
-            bootstrap_node_addr,
-        })
-        .send()
-        .await
-        .inspect_err(|e| debug!(err = e.to_string(), "Faild to update node config"))
-        .map_err(|e| DaemonError::Other(e.to_string()))?;
-
-    debug!(name = name, "Node config updated");
-
-    Ok(DaemonResponse::NodeConfigUpdated)
-}
-
 pub async fn handle_stop_nodes(name: String, context: &AppContext) -> DaemonResult {
     let resp = context
         .node_manager
-        .ask(StopNode { name })
+        .ask(node::manager::StopNode { name })
         .send()
         .await
         .map_err(|e| DaemonError::Other(e.to_string()));

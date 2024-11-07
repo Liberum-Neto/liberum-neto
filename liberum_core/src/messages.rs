@@ -6,20 +6,9 @@ use thiserror::Error;
 /// Messages that can be sent from the UI to the daemon
 #[derive(Serialize, Deserialize, Debug)]
 pub enum DaemonRequest {
-    NewNode {
-        name: String,
-    },
-    StartNode {
-        name: String,
-    },
-    UpdateNodeConfig {
-        name: String,
-        bootstrap_node_id: String,
-        bootstrap_node_addr: String,
-    },
-    StopNode {
-        name: String,
-    },
+    NewNode { name: String },
+    StartNode { name: String },
+    StopNode { name: String },
     ListNodes,
     PublishFile {
         node_name: String,
