@@ -35,7 +35,7 @@ fn setup_logging() {
         .with_target(true)
         .compact()
         .with_file(true)
-        .with_env_filter("liberum_core=debug")
+        .with_env_filter("liberum_core=info")
         .init();
 }
 
