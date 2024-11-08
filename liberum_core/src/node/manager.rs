@@ -1,4 +1,5 @@
 use super::{
+    config::NodeConfig,
     store::{ListNodes, NodeStore, NodeStoreError, StoreNode},
     Node,
 };
@@ -29,6 +30,8 @@ pub struct NodeManager {
 pub enum NodeManagerError {
     #[error("node {name} is already started")]
     AlreadyStarted { name: String },
+    #[error("node {name} is started, but should not be")]
+    NodeStarted { name: String },
     #[error("node {name} is already stopped")]
     AlreadyStopped { name: String },
     #[error("node {name} is not started")]
@@ -105,6 +108,24 @@ impl NodeManager {
     }
 
     #[message]
+    pub async fn overwrite_node_config(
+        &self,
+        name: String,
+        new_cfg: NodeConfig,
+    ) -> Result<(), NodeManagerError> {
+        if self.is_node_running(&name) {
+            return Err(NodeManagerError::NodeStarted { name });
+        }
+
+        self.store
+            .ask(super::store::OverwriteNodeConfig { name, new_cfg })
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    #[message]
     pub async fn stop_node(&self, name: String) -> Result<(), NodeManagerError> {
         let node_ref = self.get_node_ref(&name)?;
         self.save_node(node_ref.clone()).await?;
@@ -143,6 +164,10 @@ impl NodeManager {
                 name: name.to_string(),
             }),
         }
+    }
+
+    fn is_node_running(&self, name: &str) -> bool {
+        self.nodes.contains_key(name)
     }
 
     async fn save_node(&self, node_ref: ActorRef<Node>) -> Result<(), NodeManagerError> {
