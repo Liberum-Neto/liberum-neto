@@ -200,11 +200,7 @@ impl Node {
         }
 
         let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
-        let config_bytes = tokio::fs::read(config_path)
-            .await
-            .inspect_err(|e| error!(err = e.to_string(), "could not read node config from file"))?;
-        let config: NodeConfig = serde_json::from_slice(&config_bytes)
-            .inspect_err(|e| error!(err = e.to_string(), "could not parse node config JSON"))?;
+        let config = NodeConfig::load(&config_path).await?;
         let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
         let key_bytes = tokio::fs::read(key_path)
             .await
@@ -246,9 +242,8 @@ impl Node {
         tokio::fs::write(key_path, key_bytes)
             .await
             .inspect_err(|e| error!(err = e.to_string(), "could not write node keypair"))?;
-        tokio::fs::write(config_path, serde_json::to_string(&config)?)
-            .await
-            .inspect_err(|e| error!(err = e.to_string(), "could not write node config"))?;
+
+        config.save(&config_path).await?;
 
         Ok(())
     }
