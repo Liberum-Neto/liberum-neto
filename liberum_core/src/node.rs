@@ -16,6 +16,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::{fmt, path::Path};
+use swarm_runner::messages::SwarmRunnerMessage;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error};
 
@@ -26,7 +27,7 @@ pub struct Node {
     pub manager_ref: Option<ActorRef<NodeManager>>,
     pub external_addresses: Vec<Multiaddr>,
     pub self_actor_ref: Option<ActorRef<Self>>,
-    swarm_sender: Option<mpsc::Sender<swarm_runner::SwarmRunnerMessage>>,
+    swarm_sender: Option<mpsc::Sender<SwarmRunnerMessage>>,
 }
 
 impl Actor for Node {
@@ -41,7 +42,7 @@ impl Actor for Node {
             .as_ref()
             .ok_or(anyhow!("no manager ref for node set"))?;
         self.self_actor_ref = Some(actor_ref.clone());
-        self.start_swarm()?;
+        self.start_swarm().await?;
 
         Ok(())
     }
@@ -52,7 +53,7 @@ impl Actor for Node {
         _: kameo::error::ActorStopReason,
     ) -> std::result::Result<(), kameo::error::BoxError> {
         if let Some(sender) = self.swarm_sender {
-            sender.send(swarm_runner::SwarmRunnerMessage::Kill).await?;
+            sender.send(SwarmRunnerMessage::Kill).await?;
         }
 
         Ok(())
@@ -74,7 +75,7 @@ impl Node {
             let (send, recv) = oneshot::channel();
             debug!("Node sends GetProviders to swarm");
             sender
-                .send(swarm_runner::SwarmRunnerMessage::GetProviders { id, sender: send })
+                .send(SwarmRunnerMessage::GetProviders { id, sender: send })
                 .await?;
             if let Ok(received) = recv.await {
                 debug!("Got providers: {received:?}");
@@ -92,7 +93,7 @@ impl Node {
         if let Some(sender) = &mut self.swarm_sender {
             let (resp_send, resp_recv) = oneshot::channel();
             sender
-                .send(swarm_runner::SwarmRunnerMessage::PublishFile {
+                .send(SwarmRunnerMessage::PublishFile {
                     id: id.clone(),
                     path,
                     sender: resp_send,
@@ -113,7 +114,7 @@ impl Node {
         if let Some(sender) = &mut self.swarm_sender {
             let (resp_send, resp_recv) = oneshot::channel();
             sender
-                .send(swarm_runner::SwarmRunnerMessage::GetProviders {
+                .send(SwarmRunnerMessage::GetProviders {
                     id: id.clone(),
                     sender: resp_send,
                 })
@@ -128,7 +129,7 @@ impl Node {
                 let (file_sender, file_receiver) = oneshot::channel();
                 requests.push(tokio::task::spawn({
                     sender
-                        .send(swarm_runner::SwarmRunnerMessage::DownloadFile {
+                        .send(SwarmRunnerMessage::DownloadFile {
                             id: id.clone(),
                             peer,
                             sender: file_sender,
@@ -219,16 +220,13 @@ impl Node {
         Ok(())
     }
 
-    fn start_swarm(&mut self) -> Result<()> {
+    async fn start_swarm(&mut self) -> Result<()> {
         let node_ref = self
             .self_actor_ref
             .as_ref()
             .ok_or(anyhow!("no actor ref for node set"))?;
-        let (send, recv) = mpsc::channel::<swarm_runner::SwarmRunnerMessage>(16);
-        self.swarm_sender = Some(send);
+        self.swarm_sender = Some(swarm_runner::run_swarm(node_ref.clone()).await);
         debug!(name = self.name, "Node starts");
-
-        tokio::spawn(swarm_runner::run_swarm(node_ref.clone(), recv));
 
         Ok(())
     }
