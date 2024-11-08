@@ -80,13 +80,7 @@ async fn run_swarm_main(
     let mut context = SwarmContext {
         node: node_data,
         swarm: swarm,
-        behaviour: BehaviourContext {
-            published: HashMap::new(),
-            pending_start_providing: HashMap::new(),
-            pending_get_providers: HashMap::new(),
-            pending_download_file: HashMap::new(),
-            pending_dial: HashMap::new(),
-        },
+        behaviour: BehaviourContext::new(),
     };
 
     let swarm_default_addr = Multiaddr::from_str(DEFAULT_MULTIADDR_STR).inspect_err(|e| {
