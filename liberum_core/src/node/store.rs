@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{debug, error};
 
+use super::config::NodeConfig;
+
 pub struct UpdateNodeConfig {
     pub name: String,
     pub bootstrap_node_id: String,
@@ -73,6 +75,26 @@ impl NodeStore {
         Node::save(&node, &node_dir_path)
             .await
             .map_err(|_| NodeStoreError::StoreError { name: node.name })
+    }
+
+    #[message]
+    pub async fn overwrite_node_config(
+        &self,
+        name: String,
+        new_cfg: NodeConfig,
+    ) -> Result<(), NodeStoreError> {
+        if !self.node_exists(&name) {
+            return Err(NodeStoreError::NodeDoesNotExist { name: name.clone() });
+        }
+
+        let node_conf_path = self.resolve_node_config_path(&name);
+
+        new_cfg
+            .save(&node_conf_path)
+            .await
+            .map_err(|err| NodeStoreError::OtherError { name: name, err })?;
+
+        Ok(())
     }
 
     #[message]
