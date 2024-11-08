@@ -1,25 +1,9 @@
 use crate::node::Node;
 use anyhow::{anyhow, Result};
-use kameo::{message::Message, Actor};
-use libp2p::{Multiaddr, PeerId};
-use std::{
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use kameo::{messages, Actor};
+use std::path::{Path, PathBuf};
 use thiserror::Error;
-use tracing::{debug, error, instrument};
-
-use super::{config::NodeConfig, BootstrapNode};
-
-pub struct LoadNode {
-    pub name: String,
-}
-
-pub struct StoreNode {
-    pub node: Node,
-}
-
-pub struct ListNodes;
+use tracing::{debug, error};
 
 pub struct UpdateNodeConfig {
     pub name: String,
@@ -30,6 +14,81 @@ pub struct UpdateNodeConfig {
 #[derive(Debug, Actor)]
 pub struct NodeStore {
     store_dir_path: PathBuf,
+}
+
+#[derive(Error, Debug)]
+pub enum NodeStoreError {
+    #[error("failed to load node, name: {name}")]
+    LoadError { name: String },
+    #[error("failed to store node, name: {name}")]
+    StoreError { name: String },
+    #[error("node does not exist, name: {name}")]
+    NodeDoesNotExist { name: String },
+    #[error("other error, name: {name}")]
+    OtherError { name: String, err: anyhow::Error },
+}
+
+#[messages]
+impl NodeStore {
+    #[message]
+    pub async fn load_node(&self, name: String) -> Result<Node, NodeStoreError> {
+        let node_dir_path = self.resolve_node_dir_path(&name);
+        debug!(
+            name = name,
+            path = node_dir_path.display().to_string(),
+            "loading node"
+        );
+
+        if !node_dir_path.exists() {
+            debug!(
+                path = node_dir_path.display().to_string(),
+                name = name,
+                "node does not exist"
+            );
+
+            return Err(NodeStoreError::NodeDoesNotExist { name });
+        }
+
+        let node = Node::load(&node_dir_path)
+            .await
+            .map_err(|_| NodeStoreError::LoadError { name })?;
+
+        Ok(node)
+    }
+
+    #[message]
+    pub async fn store_node(&self, node: Node) -> Result<(), NodeStoreError> {
+        let node_dir_path = self.ensure_node_dir_path(&node.name).await.map_err(|_| {
+            NodeStoreError::StoreError {
+                name: node.name.clone(),
+            }
+        })?;
+
+        debug!(
+            name = node.name,
+            path = node_dir_path.display().to_string(),
+            "saving node"
+        );
+
+        Node::save(&node, &node_dir_path)
+            .await
+            .map_err(|_| NodeStoreError::StoreError { name: node.name })
+    }
+
+    #[message]
+    pub async fn list_nodes(&self) -> Result<Vec<String>, NodeStoreError> {
+        let mut names = Vec::new();
+        let mut dir = tokio::fs::read_dir(&self.store_dir_path).await.unwrap();
+        while let Some(dir) = dir.next_entry().await.unwrap() {
+            if dir.path().is_dir() {
+                if let Some(name) = dir.file_name().to_str() {
+                    names.push(name.to_string());
+                }
+            }
+        }
+
+        Ok(names)
+    }
 }
 
 impl NodeStore {
@@ -69,37 +128,6 @@ impl NodeStore {
         NodeStore::new(&store_dir_path)
             .await
             .inspect_err(|e| error!(err = e.to_string(), "could not create a node store"))
-    }
-
-    async fn load_node(&self, name: &str) -> Result<Node> {
-        let node_dir_path = self.resolve_node_dir_path(name);
-        debug!(
-            name = name,
-            path = node_dir_path.display().to_string(),
-            "loading node"
-        );
-
-        if !node_dir_path.exists() {
-            debug!(
-                path = node_dir_path.display().to_string(),
-                name = name,
-                "node does not exist"
-            );
-        }
-
-        Node::load(&node_dir_path).await.map_err(|e| anyhow!(e))
-    }
-
-    async fn save_node(&self, node: &Node) -> Result<()> {
-        let node_dir_path = self.ensure_node_dir_path(&node.name).await?;
-        debug!(
-            name = node.name,
-            path = node_dir_path.display().to_string(),
-            "saving node"
-        );
-        Node::save(node, &node_dir_path)
-            .await
-            .map_err(|e| anyhow!("{}", e))
     }
 
     fn node_exists(&self, name: &str) -> bool {
@@ -145,121 +173,6 @@ impl NodeStore {
             path_override.unwrap_or(Path::new(NodeStore::DEFAULT_NODES_DIRECTORY_NAME));
         Ok(home_dir_path.join(store_dir_name))
     }
-}
-
-impl Message<LoadNode> for NodeStore {
-    type Reply = Result<Node, NodeStoreError>;
-
-    #[instrument(skip_all, name = "LoadNodes")]
-    async fn handle(
-        &mut self,
-        LoadNode { name }: LoadNode,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        let node = self
-            .load_node(&name)
-            .await
-            .map_err(|_| NodeStoreError::LoadError { name })?;
-
-        Ok(node)
-    }
-}
-
-impl Message<StoreNode> for NodeStore {
-    type Reply = Result<(), NodeStoreError>;
-
-    #[instrument(skip_all, name = "StoreNodes")]
-    async fn handle(
-        &mut self,
-        StoreNode { node }: StoreNode,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.save_node(&node)
-            .await
-            .map_err(|_| NodeStoreError::StoreError { name: node.name })?;
-
-        Ok(())
-    }
-}
-
-impl Message<ListNodes> for NodeStore {
-    type Reply = Result<Vec<String>, NodeStoreError>;
-
-    #[instrument(skip_all, name = "ListNodes")]
-    async fn handle(
-        &mut self,
-        _: ListNodes,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        let mut names = Vec::new();
-        let mut dir = tokio::fs::read_dir(&self.store_dir_path).await.unwrap();
-        while let Some(dir) = dir.next_entry().await.unwrap() {
-            if dir.path().is_dir() {
-                if let Some(name) = dir.file_name().to_str() {
-                    names.push(name.to_string());
-                }
-            }
-        }
-
-        Ok(names)
-    }
-}
-
-impl Message<UpdateNodeConfig> for NodeStore {
-    type Reply = Result<(), NodeStoreError>;
-
-    #[instrument(skip_all, name = "UpdateNodeConfig")]
-    async fn handle(
-        &mut self,
-        msg: UpdateNodeConfig,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        if !self.node_exists(&msg.name) {
-            return Err(NodeStoreError::NodeDoesNotExist { name: msg.name });
-        }
-
-        let node_config_path = self.resolve_node_config_path(&msg.name);
-        let config_bytes = tokio::fs::read(node_config_path.clone())
-            .await
-            .inspect_err(|e| error!(err = e.to_string(), "could not read node config from file"))
-            .map_err(|e| NodeStoreError::OtherError {
-                name: msg.name.clone(),
-                err: e.into(),
-            })?;
-        let mut new_config: NodeConfig = serde_json::from_slice(&config_bytes)
-            .inspect_err(|e| error!(err = e.to_string(), "could not parse node config JSON"))
-            .map_err(|e| NodeStoreError::OtherError {
-                name: msg.name.clone(),
-                err: e.into(),
-            })?;
-
-        new_config.bootstrap_nodes = vec![BootstrapNode {
-            id: PeerId::from_str(&msg.bootstrap_node_id).unwrap(),
-            addr: Multiaddr::from_str(&msg.bootstrap_node_addr).unwrap(),
-        }];
-
-        tokio::fs::write(
-            node_config_path,
-            serde_json::to_string(&new_config).unwrap(),
-        )
-        .await
-        .inspect_err(|e| error!(err = e.to_string(), "could not write node config"))
-        .unwrap();
-
-        Ok(())
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum NodeStoreError {
-    #[error("failed to load node, name: {name}")]
-    LoadError { name: String },
-    #[error("failed to store node, name: {name}")]
-    StoreError { name: String },
-    #[error("node does not exist, name: {name}")]
-    NodeDoesNotExist { name: String },
-    #[error("other error, name: {name}")]
-    OtherError { name: String, err: anyhow::Error },
 }
 
 #[cfg(test)]
