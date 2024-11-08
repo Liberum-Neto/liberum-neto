@@ -8,7 +8,7 @@ use config::NodeConfig;
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
 use kameo::{actor::ActorRef, message::Message, Actor};
-use liberum_core::str_to_file_id;
+use liberum_core::{file_id_to_str, str_to_file_id};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -141,6 +141,11 @@ impl Node {
             }
 
             if let Ok((Ok(file), _)) = futures::future::select_ok(requests).await {
+                let hash = bs58::encode(blake3::hash(&file).as_bytes()).into_string();
+                if hash != id_str {
+                    error!("Received wrong file! {hash} != {id_str}");
+                    return Err(anyhow!("Received wrong file! {hash} != {id_str}"));
+                }
                 return Ok(file);
             }
         }
