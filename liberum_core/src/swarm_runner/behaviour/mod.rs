@@ -27,6 +27,18 @@ pub struct BehaviourContext {
     pub pending_dial: HashMap<PeerId, oneshot::Sender<Result<()>>>,
 }
 
+impl BehaviourContext {
+    pub fn new() -> Self {
+        BehaviourContext {
+            published: HashMap::new(),
+            pending_start_providing: HashMap::new(),
+            pending_get_providers: HashMap::new(),
+            pending_download_file: HashMap::new(),
+            pending_dial: HashMap::new(),
+        }
+    }
+}
+
 impl SwarmContext {
     pub(crate) async fn handle_behaviour_event(&mut self, event: LiberumNetoBehaviorEvent) {
         match event {
