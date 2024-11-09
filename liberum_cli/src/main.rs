@@ -1,11 +1,14 @@
 use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
 use liberum_core::node_config::NodeConfig;
+use liberum_core::types::NodeInfo;
 use liberum_core::{node_config::BootstrapNode, DaemonError, DaemonRequest, DaemonResponse};
 use libp2p::Multiaddr;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
+use tabled::settings::Style;
+use tabled::{Table, Tabled};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, error, info};
 use tracing_subscriber;
@@ -104,6 +107,13 @@ struct DownloadFile {
     id: String,
 }
 
+#[derive(Tabled)]
+struct NodeInfoRow {
+    pub name: String,
+    pub is_running: bool,
+    pub fisrt_address: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -198,10 +208,14 @@ async fn handle_list_nodes(req: RequestSender, mut res: ReseponseReceiver) -> Re
 
     match node_infos {
         DaemonResponse::NodeList(node_infos) => {
-            println!("{:<32} {:<32}", "NAME", "IS RUNNING");
-            node_infos.iter().for_each(|info| {
-                println!("{:<32} {:<32}", info.name, info.is_running);
-            });
+            let node_info_rows = node_infos
+                .iter()
+                .map(|info| info.into())
+                .collect::<Vec<NodeInfoRow>>();
+            let mut table = Table::new(node_info_rows);
+            table.with(Style::modern());
+            let table = table.to_string();
+            println!("{table}");
         }
         _ => {
             bail!("Daemon returned wrong response");
@@ -354,4 +368,18 @@ async fn handle_response(
     };
 
     Ok(())
+}
+
+impl From<&NodeInfo> for NodeInfoRow {
+    fn from(value: &NodeInfo) -> Self {
+        Self {
+            name: value.name.to_string(),
+            is_running: value.is_running,
+            fisrt_address: value
+                .addresses
+                .first()
+                .unwrap_or(&"N/A".to_string())
+                .to_string(),
+        }
+    }
 }

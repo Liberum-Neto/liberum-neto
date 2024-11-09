@@ -5,6 +5,7 @@ use crate::node::manager::GetNode;
 use crate::node::manager::IsNodeRunning;
 use crate::node::manager::NodeManager;
 use crate::node::store::ListNodes;
+use crate::node::store::LoadNode;
 use crate::node::store::NodeStore;
 use crate::node::DownloadFile;
 use crate::node::GetProviders;
@@ -226,9 +227,24 @@ async fn handle_list_nodes(context: &AppContext) -> DaemonResult {
             .await
             .map_err(|e| DaemonError::Other(e.to_string()))?;
 
+        let node = node_store
+            .ask(LoadNode {
+                name: name.to_string(),
+            })
+            .send()
+            .await
+            .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+        let node_ext_addrs = node
+            .external_addresses
+            .into_iter()
+            .map(|addr| addr.to_string())
+            .collect::<Vec<String>>();
+
         let node_info = NodeInfo {
             name: name.to_string(),
             is_running,
+            addresses: node_ext_addrs,
         };
 
         node_infos.push(node_info);

@@ -11,3 +11,4 @@ tracing = { version = "0.1"}
 tracing-subscriber = { version = "0.3.18" }
 anyhow = "1.0"
 libp2p = "0.54.1"
+tabled = "0.16.0"
