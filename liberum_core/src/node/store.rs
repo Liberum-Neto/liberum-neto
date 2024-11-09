@@ -83,6 +83,11 @@ impl NodeStore {
         }
 
         let node_conf_path = self.resolve_node_config_path(&name);
+        debug!(
+            path = node_conf_path.display().to_string(),
+            "Getting current node config"
+        );
+
         let config = NodeConfig::load(&node_conf_path)
             .await
             .map_err(|err| NodeStoreError::OtherError { name, err })?;
@@ -193,7 +198,7 @@ impl NodeStore {
     fn resolve_node_config_path(&self, name: &str) -> PathBuf {
         let node_dir_path = self.resolve_node_dir_path(name);
 
-        node_dir_path.join(name).join(Node::CONFIG_FILE_NAME)
+        node_dir_path.join(Node::CONFIG_FILE_NAME)
     }
 
     async fn ensure_store_dir_path(path: &Path) -> Result<()> {
