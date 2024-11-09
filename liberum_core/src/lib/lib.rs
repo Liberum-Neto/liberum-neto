@@ -1,5 +1,6 @@
 pub mod codec;
 pub mod node_config;
+pub mod types;
 
 use libp2p::futures::StreamExt;
 use node_config::NodeConfig;
@@ -9,6 +10,7 @@ use tokio::net::UnixStream;
 use tokio::sync::mpsc;
 use tokio_util::io::ReaderStream;
 use tracing::{debug, error};
+use types::NodeInfo;
 
 use anyhow::Result;
 use codec::AsymmetricMessageCodec;
@@ -43,7 +45,7 @@ pub enum DaemonResponse {
     NodeConfig(NodeConfig),
     NodeConfigUpdated,
     NodeStopped,
-    NodeList(Vec<String>),
+    NodeList(Vec<NodeInfo>),
     FilePublished { id: String },
     Providers { ids: Vec<String> },
     FileDownloaded { data: Vec<u8> }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory

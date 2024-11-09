@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use crate::node;
 use crate::node::manager::GetNode;
+use crate::node::manager::IsNodeRunning;
 use crate::node::manager::NodeManager;
 use crate::node::store::ListNodes;
 use crate::node::store::NodeStore;
@@ -16,6 +17,7 @@ use kameo::actor::ActorRef;
 use kameo::request::MessageSend;
 use liberum_core::codec::AsymmetricMessageCodec;
 use liberum_core::node_config::NodeConfig;
+use liberum_core::types::NodeInfo;
 use liberum_core::DaemonError;
 use liberum_core::DaemonRequest;
 use liberum_core::DaemonResponse;
@@ -212,7 +214,27 @@ async fn handle_list_nodes(context: &AppContext) -> DaemonResult {
         .await
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    Ok(DaemonResponse::NodeList(all_nodes_names))
+    let mut node_infos = Vec::new();
+
+    for name in all_nodes_names.iter() {
+        let is_running = context
+            .node_manager
+            .ask(IsNodeRunning {
+                name: name.to_string(),
+            })
+            .send()
+            .await
+            .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+        let node_info = NodeInfo {
+            name: name.to_string(),
+            is_running,
+        };
+
+        node_infos.push(node_info);
+    }
+
+    Ok(DaemonResponse::NodeList(node_infos))
 }
 
 async fn handle_publish_file(node_name: &str, path: PathBuf, context: &AppContext) -> DaemonResult {
