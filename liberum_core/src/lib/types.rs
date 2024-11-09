@@ -4,4 +4,5 @@ use serde::{Deserialize, Serialize};
 pub struct NodeInfo {
     pub name: String,
     pub is_running: bool,
+    pub addresses: Vec<String>,
 }
