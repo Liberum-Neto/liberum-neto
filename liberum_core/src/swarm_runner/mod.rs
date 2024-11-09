@@ -1,13 +1,14 @@
 pub mod behaviour;
 pub mod messages;
 
-use crate::node::{self, BootstrapNode, Node};
+use crate::node::{self, Node};
 use anyhow::anyhow;
 use anyhow::Result;
 use behaviour::*;
 use futures::StreamExt;
 use kameo::actor::ActorRef;
 use kameo::request::MessageSend;
+use liberum_core::node_config::BootstrapNode;
 use libp2p::request_response::ProtocolSupport;
 use libp2p::{identity, kad, Multiaddr, StreamProtocol, SwarmBuilder};
 use libp2p::{kad::store::MemoryStore, request_response, swarm::SwarmEvent, Swarm};

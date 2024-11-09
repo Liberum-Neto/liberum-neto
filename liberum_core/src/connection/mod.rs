@@ -14,6 +14,7 @@ use futures::StreamExt;
 use kameo::actor::ActorRef;
 use kameo::request::MessageSend;
 use liberum_core::codec::AsymmetricMessageCodec;
+use liberum_core::node_config::NodeConfig;
 use liberum_core::DaemonError;
 use liberum_core::DaemonRequest;
 use liberum_core::DaemonResponse;
@@ -90,6 +91,10 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
     match message {
         DaemonRequest::NewNode { name: node_name } => handle_new_node(node_name, context).await,
         DaemonRequest::StartNode { name: node_name } => handle_start_node(node_name, context).await,
+        DaemonRequest::UpdateNodeConfig {
+            name: node_name,
+            new_cfg,
+        } => handle_overwrite_node_config(node_name, new_cfg, context).await,
         DaemonRequest::StopNode { name: node_name } => handle_stop_nodes(node_name, context).await,
         DaemonRequest::ListNodes => handle_list_nodes(context).await,
         DaemonRequest::PublishFile { node_name, path } => {
@@ -134,6 +139,32 @@ async fn handle_start_node(name: String, context: &AppContext) -> DaemonResult {
     debug!(name = name, "Node started!");
 
     Ok(DaemonResponse::NodeStarted)
+}
+
+async fn handle_overwrite_node_config(
+    name: String,
+    new_cfg: NodeConfig,
+    context: &AppContext,
+) -> DaemonResult {
+    context
+        .node_manager
+        .ask(node::manager::OverwriteNodeConfig {
+            name: name.clone(),
+            new_cfg,
+        })
+        .send()
+        .await
+        .inspect_err(|e| {
+            debug!(
+                err = e.to_string(),
+                "Failed to handle overwrite node config"
+            )
+        })
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    debug!(name = name, "Node config overwritten!");
+
+    Ok(DaemonResponse::NodeConfigUpdated)
 }
 
 async fn handle_stop_nodes(name: String, context: &AppContext) -> DaemonResult {
