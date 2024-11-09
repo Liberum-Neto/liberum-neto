@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::node;
 use crate::node::manager::GetNode;
 use crate::node::manager::NodeManager;
+use crate::node::store::ListNodes;
 use crate::node::store::NodeStore;
 use crate::node::DownloadFile;
 use crate::node::GetProviders;
@@ -197,8 +198,21 @@ async fn handle_stop_node(name: String, context: &AppContext) -> DaemonResult {
     }
 }
 
-async fn handle_list_nodes(_context: &AppContext) -> DaemonResult {
-    Ok(DaemonResponse::NodeList(vec![]))
+async fn handle_list_nodes(context: &AppContext) -> DaemonResult {
+    let node_store = context
+        .node_manager
+        .ask(node::manager::GetNodeStore)
+        .send()
+        .await
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    let all_nodes_names = node_store
+        .ask(ListNodes)
+        .send()
+        .await
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    Ok(DaemonResponse::NodeList(all_nodes_names))
 }
 
 async fn handle_publish_file(node_name: &str, path: PathBuf, context: &AppContext) -> DaemonResult {
