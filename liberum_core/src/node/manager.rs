@@ -48,8 +48,13 @@ pub enum NodeManagerError {
 #[kameo::messages]
 impl NodeManager {
     #[message]
-    pub async fn get_node_store(&self) -> Result<ActorRef<NodeStore>, Infallible> {
+    pub fn get_node_store(&self) -> Result<ActorRef<NodeStore>, Infallible> {
         Ok(self.store.clone())
+    }
+
+    #[message]
+    pub fn is_node_running(&self, name: String) -> bool {
+        self.nodes.contains_key(&name)
     }
 
     #[message]
@@ -117,7 +122,7 @@ impl NodeManager {
 
     #[message]
     pub async fn get_node_config(&self, name: String) -> Result<NodeConfig, NodeManagerError> {
-        let config: NodeConfig = match self.is_node_running(&name) {
+        let config: NodeConfig = match self.is_node_running(name.clone()) {
             true => {
                 let node = self.get_node_ref(&name)?.ask(GetSnapshot).send().await?;
                 (&node).into()
@@ -139,7 +144,7 @@ impl NodeManager {
         name: String,
         new_cfg: NodeConfig,
     ) -> Result<(), NodeManagerError> {
-        if self.is_node_running(&name) {
+        if self.is_node_running(name.clone()) {
             return Err(NodeManagerError::NodeStarted { name });
         }
 
@@ -190,10 +195,6 @@ impl NodeManager {
                 name: name.to_string(),
             }),
         }
-    }
-
-    fn is_node_running(&self, name: &str) -> bool {
-        self.nodes.contains_key(name)
     }
 
     async fn save_node(&self, node_ref: ActorRef<Node>) -> Result<(), NodeManagerError> {
