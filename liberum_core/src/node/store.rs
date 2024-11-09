@@ -77,6 +77,20 @@ impl NodeStore {
     }
 
     #[message]
+    pub async fn get_node_config(&self, name: String) -> Result<NodeConfig, NodeStoreError> {
+        if !self.node_exists(&name) {
+            return Err(NodeStoreError::NodeDoesNotExist { name: name.clone() });
+        }
+
+        let node_conf_path = self.resolve_node_config_path(&name);
+        let config = NodeConfig::load(&node_conf_path)
+            .await
+            .map_err(|err| NodeStoreError::OtherError { name: name, err })?;
+
+        Ok(config)
+    }
+
+    #[message]
     pub async fn overwrite_node_config(
         &self,
         name: String,
