@@ -1,0 +1,13 @@
+[package]
+name = "liberum_gui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+liberum_core = { path = "../liberum_core"}
+anyhow = "1.0.93"
+chrono = "0.4.38"
+eframe = "0.29.1"
+egui = "0.29.1"
+tokio = "1.41.1"
+tracing = "0.1.40"
