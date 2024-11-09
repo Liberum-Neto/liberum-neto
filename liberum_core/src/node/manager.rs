@@ -1,6 +1,6 @@
 use super::{
     store::{ListNodes, NodeStore, NodeStoreError, StoreNode},
-    Node,
+    GetSnapshot, Node,
 };
 use crate::node::store::LoadNode;
 use anyhow::anyhow;
@@ -105,6 +105,24 @@ impl NodeManager {
     #[message]
     pub async fn get_all(&self) -> NodeRefs {
         self.nodes.clone()
+    }
+
+    #[message]
+    pub async fn get_node_config(&self, name: String) -> Result<NodeConfig, NodeManagerError> {
+        let config: NodeConfig = match self.is_node_running(&name) {
+            true => {
+                let node = self.get_node_ref(&name)?.ask(GetSnapshot).send().await?;
+                (&node).into()
+            }
+            false => {
+                self.store
+                    .ask(super::store::GetNodeConfig { name })
+                    .send()
+                    .await?
+            }
+        };
+
+        Ok(config)
     }
 
     #[message]
