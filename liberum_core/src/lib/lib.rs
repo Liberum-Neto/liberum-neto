@@ -23,6 +23,7 @@ use thiserror::Error;
 pub enum DaemonRequest {
     NewNode { name: String },
     StartNode { name: String },
+    GetNodeConfig { name: String },
     UpdateNodeConfig { name: String, new_cfg: NodeConfig },
     StopNode { name: String },
     ListNodes,
@@ -39,6 +40,7 @@ pub type DaemonResult = Result<DaemonResponse, DaemonError>;
 pub enum DaemonResponse {
     NodeCreated,
     NodeStarted,
+    NodeConfig(NodeConfig),
     NodeConfigUpdated,
     NodeStopped,
     NodeList(Vec<String>),
