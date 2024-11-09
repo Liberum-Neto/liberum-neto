@@ -1,9 +1,12 @@
 pub mod codec;
+pub mod node_config;
 
 use libp2p::futures::StreamExt;
+use node_config::NodeConfig;
 use std::path::{Path, PathBuf};
+use tokio::fs::File;
+use tokio::net::UnixStream;
 use tokio::sync::mpsc;
-use tokio::{fs::File, net::UnixStream};
 use tokio_util::io::ReaderStream;
 use tracing::{debug, error};
 
@@ -20,6 +23,7 @@ use thiserror::Error;
 pub enum DaemonRequest {
     NewNode { name: String },
     StartNode { name: String },
+    UpdateNodeConfig { name: String, new_cfg: NodeConfig },
     StopNode { name: String },
     ListNodes,
     PublishFile { node_name: String, path: PathBuf },

@@ -1,9 +1,8 @@
-use std::path::Path;
+use std::{path::Path, str::FromStr};
 
-use crate::node::BootstrapNode;
 use anyhow::Result;
-use libp2p::Multiaddr;
-use serde::{Deserialize, Serialize};
+use libp2p::{Multiaddr, PeerId};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tracing::error;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -38,4 +37,36 @@ impl NodeConfig {
 
         Ok(config)
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BootstrapNode {
+    #[serde(
+        serialize_with = "serialize_peer_id",
+        deserialize_with = "deserialize_peer_id"
+    )]
+    pub id: PeerId,
+    pub addr: Multiaddr,
+}
+
+impl BootstrapNode {
+    pub fn new(peer_id: PeerId, addr: Multiaddr) -> Self {
+        BootstrapNode { id: peer_id, addr }
+    }
+}
+
+fn serialize_peer_id<S>(peer_id: &PeerId, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&peer_id.to_base58())
+}
+
+fn deserialize_peer_id<'de, D>(deserializer: D) -> Result<PeerId, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let peer_id_base58 = String::deserialize(deserializer)?;
+    PeerId::from_str(&peer_id_base58)
+        .map_err(|e| serde::de::Error::custom(format!("could not deserialize PeerId: {}", e)))
 }

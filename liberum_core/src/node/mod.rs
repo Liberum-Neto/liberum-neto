@@ -1,20 +1,17 @@
-pub mod config;
 pub mod manager;
 pub mod store;
 
 use crate::swarm_runner;
 use anyhow::{anyhow, bail, Result};
-use config::NodeConfig;
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
 use kameo::{actor::ActorRef, message::Message, Actor};
+use liberum_core::node_config::{BootstrapNode, NodeConfig};
 use liberum_core::str_to_file_id;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::{fmt, path::Path};
 use swarm_runner::messages::SwarmRunnerMessage;
 use tokio::sync::{mpsc, oneshot};
@@ -344,36 +341,4 @@ impl NodeBuilder {
         };
         Ok(node)
     }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct BootstrapNode {
-    #[serde(
-        serialize_with = "serialize_peer_id",
-        deserialize_with = "deserialize_peer_id"
-    )]
-    pub id: PeerId,
-    pub addr: Multiaddr,
-}
-
-impl BootstrapNode {
-    pub fn new(peer_id: PeerId, addr: Multiaddr) -> Self {
-        BootstrapNode { id: peer_id, addr }
-    }
-}
-
-fn serialize_peer_id<S>(peer_id: &PeerId, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    serializer.serialize_str(&peer_id.to_base58())
-}
-
-fn deserialize_peer_id<'de, D>(deserializer: D) -> Result<PeerId, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let peer_id_base58 = String::deserialize(deserializer)?;
-    PeerId::from_str(&peer_id_base58)
-        .map_err(|e| serde::de::Error::custom(format!("could not deserialize PeerId: {}", e)))
 }

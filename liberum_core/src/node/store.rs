@@ -1,11 +1,10 @@
 use crate::node::Node;
 use anyhow::{anyhow, Result};
 use kameo::{messages, Actor};
+use liberum_core::node_config::NodeConfig;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{debug, error};
-
-use super::config::NodeConfig;
 
 pub struct UpdateNodeConfig {
     pub name: String,

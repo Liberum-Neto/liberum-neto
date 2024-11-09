@@ -1,5 +1,4 @@
 use super::{
-    config::NodeConfig,
     store::{ListNodes, NodeStore, NodeStoreError, StoreNode},
     Node,
 };
@@ -10,6 +9,7 @@ use kameo::{
     actor::ActorRef, error::SendError, mailbox::bounded::BoundedMailbox, request::MessageSend,
     Actor,
 };
+use liberum_core::node_config::NodeConfig;
 use std::{
     collections::HashMap,
     fmt::{Debug, Display},
