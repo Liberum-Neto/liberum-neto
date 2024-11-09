@@ -1,8 +1,11 @@
 use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
+use liberum_core::node_config::NodeConfig;
 use liberum_core::{node_config::BootstrapNode, DaemonError, DaemonRequest, DaemonResponse};
+use libp2p::Multiaddr;
 use std::path::Path;
 use std::path::PathBuf;
+use std::str::FromStr;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, error, info};
 use tracing_subscriber;
@@ -60,12 +63,19 @@ struct StopNode {
 #[derive(Subcommand)]
 enum ConfigNodeCommand {
     AddBootstrapNode(AddBootstrapNode),
+    AddExternalAddr(AddExternalAddr),
 }
 
 #[derive(Parser)]
 struct AddBootstrapNode {
     #[arg()]
     id: String,
+    addr: String,
+}
+
+#[derive(Parser)]
+struct AddExternalAddr {
+    #[arg()]
     addr: String,
 }
 
@@ -165,6 +175,9 @@ async fn handle_config_node(
         ConfigNodeCommand::AddBootstrapNode(sub_cmd) => {
             handle_add_bootstrap_node(&cmd.name, sub_cmd, req, res).await?
         }
+        ConfigNodeCommand::AddExternalAddr(sub_cmd) => {
+            handle_add_external_addr(&cmd.name, sub_cmd, req, res).await?
+        }
     }
 
     Ok(())
@@ -177,9 +190,46 @@ async fn handle_add_bootstrap_node(
     mut res: ReseponseReceiver,
 ) -> Result<()> {
     debug!(name = name, "Adding bootstrap node");
+    let mut config = get_current_config(name, &req, &mut res).await?;
+    let new_bootstrap_node = BootstrapNode::from_strings(&cmd.id, &cmd.addr)?;
+    config.bootstrap_nodes.push(new_bootstrap_node);
 
-    req.send(DaemonRequest::GetNodeConfig {
+    req.send(DaemonRequest::OverwriteNodeConfig {
         name: name.to_string(),
+        new_cfg: config,
+    })
+    .await?;
+
+    handle_response(&mut res).await
+}
+
+async fn handle_add_external_addr(
+    name: &str,
+    sub_cmd: AddExternalAddr,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    debug!(name = name, "Adding external address");
+    let mut config = get_current_config(name, &req, &mut res).await?;
+    let new_external_addr = Multiaddr::from_str(&sub_cmd.addr)?;
+    config.external_addresses.push(new_external_addr);
+
+    req.send(DaemonRequest::OverwriteNodeConfig {
+        name: name.to_string(),
+        new_cfg: config,
+    })
+    .await?;
+
+    handle_response(&mut res).await
+}
+
+async fn get_current_config(
+    node_name: &str,
+    req: &RequestSender,
+    res: &mut ReseponseReceiver,
+) -> Result<NodeConfig> {
+    req.send(DaemonRequest::GetNodeConfig {
+        name: node_name.to_string(),
     })
     .await?;
 
@@ -190,7 +240,7 @@ async fn handle_add_bootstrap_node(
         .inspect_err(|e| error!(err = e.to_string(), "Failed to receive response"))?
         .inspect_err(|e| error!(err = e.to_string(), "Failed to get current config"))?;
 
-    let mut config = match current_config {
+    let config = match current_config {
         DaemonResponse::NodeConfig(cfg) => cfg,
         _ => {
             error!("Expected response to be NodeConfig, but it is not");
@@ -198,14 +248,18 @@ async fn handle_add_bootstrap_node(
         }
     };
 
-    let new_bootstrap_node = BootstrapNode::from_strings(&cmd.id, &cmd.addr)?;
-    config.bootstrap_nodes.push(new_bootstrap_node);
+    Ok(config)
+}
 
-    req.send(DaemonRequest::OverwriteNodeConfig {
-        name: name.to_string(),
-        new_cfg: config,
-    })
-    .await?;
+async fn handle_stop_node(
+    cmd: StopNode,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    debug!(name = cmd.name, "Stopping node");
+    req.send(DaemonRequest::StopNode { name: cmd.name })
+        .await
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
     handle_response(&mut res).await
 }
@@ -254,19 +308,6 @@ async fn handle_get_providers(
     })
     .await
     .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-
-    handle_response(&mut res).await
-}
-
-async fn handle_stop_node(
-    cmd: StopNode,
-    req: RequestSender,
-    mut res: ReseponseReceiver,
-) -> Result<()> {
-    debug!(name = cmd.name, "Stopping node");
-    req.send(DaemonRequest::StopNode { name: cmd.name })
-        .await
-        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
     handle_response(&mut res).await
 }
