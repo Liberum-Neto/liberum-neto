@@ -53,6 +53,13 @@ impl BootstrapNode {
     pub fn new(peer_id: PeerId, addr: Multiaddr) -> Self {
         BootstrapNode { id: peer_id, addr }
     }
+
+    pub fn from_strings(peer_id: &str, addr: &str) -> Result<Self> {
+        Ok(BootstrapNode {
+            id: PeerId::from_str(peer_id)?,
+            addr: Multiaddr::from_str(addr)?,
+        })
+    }
 }
 
 fn serialize_peer_id<S>(peer_id: &PeerId, serializer: S) -> Result<S::Ok, S::Error>

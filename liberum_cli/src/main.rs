@@ -1,6 +1,6 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
-use liberum_core::{DaemonError, DaemonRequest, DaemonResponse};
+use liberum_core::{node_config::BootstrapNode, DaemonError, DaemonRequest, DaemonResponse};
 use std::path::Path;
 use std::path::PathBuf;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -45,6 +45,8 @@ struct StartNode {
 
 #[derive(Parser)]
 struct ConfigNode {
+    #[arg()]
+    name: String,
     #[command(subcommand)]
     subcommand: ConfigNodeCommand,
 }
@@ -160,8 +162,8 @@ async fn handle_config_node(
     res: ReseponseReceiver,
 ) -> Result<()> {
     match cmd.subcommand {
-        ConfigNodeCommand::AddBootstrapNode(cmd) => {
-            handle_add_bootstrap_node(cmd, req, res).await?
+        ConfigNodeCommand::AddBootstrapNode(sub_cmd) => {
+            handle_add_bootstrap_node(&cmd.name, sub_cmd, req, res).await?
         }
     }
 
@@ -169,11 +171,43 @@ async fn handle_config_node(
 }
 
 async fn handle_add_bootstrap_node(
+    name: &str,
     cmd: AddBootstrapNode,
     req: RequestSender,
-    res: ReseponseReceiver,
+    mut res: ReseponseReceiver,
 ) -> Result<()> {
-    todo!()
+    debug!(name = name, "Adding bootstrap node");
+
+    req.send(DaemonRequest::GetNodeConfig {
+        name: name.to_string(),
+    })
+    .await?;
+
+    let current_config = res
+        .recv()
+        .await
+        .ok_or(anyhow!("failed to get response"))
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to receive response"))?
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to get current config"))?;
+
+    let mut config = match current_config {
+        DaemonResponse::NodeConfig(cfg) => cfg,
+        _ => {
+            error!("Expected response to be NodeConfig, but it is not");
+            bail!("Response is not NodeConfig");
+        }
+    };
+
+    let new_bootstrap_node = BootstrapNode::from_strings(&cmd.id, &cmd.addr)?;
+    config.bootstrap_nodes.push(new_bootstrap_node);
+
+    req.send(DaemonRequest::OverwriteNodeConfig {
+        name: name.to_string(),
+        new_cfg: config,
+    })
+    .await?;
+
+    handle_response(&mut res).await
 }
 
 async fn handle_publish_file(
