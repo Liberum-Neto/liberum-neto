@@ -25,7 +25,7 @@ pub enum NodeStoreError {
     StoreError { name: String },
     #[error("node does not exist, name: {name}")]
     NodeDoesNotExist { name: String },
-    #[error("other error, name: {name}")]
+    #[error("other error, name: {name}, err: {err}")]
     OtherError { name: String, err: anyhow::Error },
 }
 
@@ -85,7 +85,7 @@ impl NodeStore {
         let node_conf_path = self.resolve_node_config_path(&name);
         let config = NodeConfig::load(&node_conf_path)
             .await
-            .map_err(|err| NodeStoreError::OtherError { name: name, err })?;
+            .map_err(|err| NodeStoreError::OtherError { name, err })?;
 
         Ok(config)
     }
