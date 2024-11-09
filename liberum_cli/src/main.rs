@@ -111,7 +111,7 @@ struct DownloadFile {
 struct NodeInfoRow {
     pub name: String,
     pub is_running: bool,
-    pub fisrt_address: String,
+    pub first_address: String,
 }
 
 #[tokio::main]
@@ -375,7 +375,7 @@ impl From<&NodeInfo> for NodeInfoRow {
         Self {
             name: value.name.to_string(),
             is_running: value.is_running,
-            fisrt_address: value
+            first_address: value
                 .addresses
                 .first()
                 .unwrap_or(&"N/A".to_string())
