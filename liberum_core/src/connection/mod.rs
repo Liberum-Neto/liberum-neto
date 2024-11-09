@@ -91,6 +91,9 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
     match message {
         DaemonRequest::NewNode { name: node_name } => handle_new_node(node_name, context).await,
         DaemonRequest::StartNode { name: node_name } => handle_start_node(node_name, context).await,
+        DaemonRequest::GetNodeConfig { name: node_name } => {
+            handle_get_node_config(node_name, context).await
+        }
         DaemonRequest::UpdateNodeConfig {
             name: node_name,
             new_cfg,
@@ -139,6 +142,20 @@ async fn handle_start_node(name: String, context: &AppContext) -> DaemonResult {
     debug!(name = name, "Node started!");
 
     Ok(DaemonResponse::NodeStarted)
+}
+
+async fn handle_get_node_config(name: String, context: &AppContext) -> DaemonResult {
+    let config = context
+        .node_manager
+        .ask(node::manager::GetNodeConfig { name: name.clone() })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle get node config"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    debug!(name = name, "Node config got!");
+
+    Ok(DaemonResponse::NodeConfig(config))
 }
 
 async fn handle_overwrite_node_config(
