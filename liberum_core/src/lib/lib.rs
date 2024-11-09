@@ -24,7 +24,7 @@ pub enum DaemonRequest {
     NewNode { name: String },
     StartNode { name: String },
     GetNodeConfig { name: String },
-    UpdateNodeConfig { name: String, new_cfg: NodeConfig },
+    OverwriteNodeConfig { name: String, new_cfg: NodeConfig },
     StopNode { name: String },
     ListNodes,
     PublishFile { node_name: String, path: PathBuf },

@@ -94,7 +94,7 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         DaemonRequest::GetNodeConfig { name: node_name } => {
             handle_get_node_config(node_name, context).await
         }
-        DaemonRequest::UpdateNodeConfig {
+        DaemonRequest::OverwriteNodeConfig {
             name: node_name,
             new_cfg,
         } => handle_overwrite_node_config(node_name, new_cfg, context).await,
