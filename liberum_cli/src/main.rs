@@ -28,6 +28,7 @@ enum Command {
     NewNode(NewNode),
     StartNode(StartNode),
     ConfigNode(ConfigNode),
+    ListNodes,
     StopNode(StopNode),
     PublishFile(PublishFile),
     GetProviders(GetProviders),
@@ -133,6 +134,7 @@ async fn handle_command(cmd: Command, req: RequestSender, res: ReseponseReceiver
         Command::NewNode(cmd) => handle_new_node(cmd, req, res).await,
         Command::StartNode(cmd) => handle_start_node(cmd, req, res).await,
         Command::ConfigNode(cmd) => handle_config_node(cmd, req, res).await,
+        Command::ListNodes => handle_list_nodes(req, res).await,
         Command::StopNode(cmd) => handle_stop_node(cmd, req, res).await,
         Command::PublishFile(cmd) => handle_publish_file(cmd, req, res).await,
         Command::DownloadFile(cmd) => handle_download_file(cmd, req, res).await,
@@ -177,6 +179,32 @@ async fn handle_config_node(
         }
         ConfigNodeCommand::AddExternalAddr(sub_cmd) => {
             handle_add_external_addr(&cmd.name, sub_cmd, req, res).await?
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_list_nodes(req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
+    debug!("Listing nodes...");
+    req.send(DaemonRequest::ListNodes)
+        .await
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    let node_infos = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))??;
+
+    match node_infos {
+        DaemonResponse::NodeList(node_infos) => {
+            println!("{:<32} {:<32}", "NAME", "IS RUNNING");
+            node_infos.iter().for_each(|info| {
+                println!("{:<32} {:<32}", info.name, info.is_running);
+            });
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
         }
     }
 
