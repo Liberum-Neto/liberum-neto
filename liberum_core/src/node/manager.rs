@@ -6,7 +6,10 @@ use crate::node::store::LoadNode;
 use anyhow::anyhow;
 use anyhow::{Error, Result};
 use kameo::{
-    actor::ActorRef, error::SendError, mailbox::bounded::BoundedMailbox, request::MessageSend,
+    actor::ActorRef,
+    error::{Infallible, SendError},
+    mailbox::bounded::BoundedMailbox,
+    request::MessageSend,
     Actor,
 };
 use liberum_core::node_config::NodeConfig;
@@ -44,6 +47,11 @@ pub enum NodeManagerError {
 
 #[kameo::messages]
 impl NodeManager {
+    #[message]
+    pub async fn get_node_store(&self) -> Result<ActorRef<NodeStore>, Infallible> {
+        Ok(self.store.clone())
+    }
+
     #[message]
     pub async fn create_node(&mut self, node: Node) -> Result<(), NodeManagerError> {
         self.store
