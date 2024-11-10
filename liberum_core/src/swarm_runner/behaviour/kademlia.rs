@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 use libp2p::kad;
-use tokio::sync::oneshot;
 use tracing::{debug, info};
 
 use crate::swarm_runner::SwarmContext;
@@ -22,15 +21,15 @@ impl SwarmContext {
                     id = format!("{id:?}"),
                     "Published file"
                 );
-                let sender: oneshot::Sender<()> = self
-                    .behaviour
-                    .pending_start_providing
-                    .remove(&id)
-                    .expect("Query ID to not disappear from hashmap.");
+                let sender = self.behaviour.pending_start_providing.remove(&id);
 
-                // Node is waiting on its oneshot for this message to know
-                // that the file was published
-                let _ = sender.send(());
+                if let Some(sender) = sender {
+                    // Node is waiting on its oneshot for this message to know
+                    // that the file was published
+                    let _ = sender.send(());
+                } else {
+                    debug!(qid = format!("{id}"), "Channel closed");
+                }
             }
 
             kad::Event::OutboundQueryProgressed {
@@ -43,7 +42,13 @@ impl SwarmContext {
                 ..
             } => {
                 if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
-                    sender.send(providers).expect("Channel not to break");
+                    let _ = sender.send(providers).inspect_err(|e| {
+                        debug!(
+                            qid = format!("{id}"),
+                            err = format!("{e:?}"),
+                            "Channel closed"
+                        )
+                    });
                     self.swarm
                         .behaviour_mut()
                         .kademlia
@@ -62,8 +67,13 @@ impl SwarmContext {
             } => {
                 debug!("Get providers didn't find any new records");
                 if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
-                    sender.send(HashSet::new()).expect("Channel not to break");
-                    //self.swarm.behaviour_mut().kademlia.query_mut(&id).unwrap().finish();
+                    let _ = sender.send(HashSet::new()).inspect_err(|e| {
+                        debug!(
+                            qid = format!("{id}"),
+                            err = format!("{e:?}"),
+                            "Channel closed"
+                        )
+                    });
                 }
             }
             kad::Event::InboundRequest {
