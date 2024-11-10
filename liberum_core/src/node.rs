@@ -108,22 +108,23 @@ impl Node {
             .await
             .map_err(|e| error!(err = e.to_string(), "Failed to hash file"))
             .unwrap();
-        if let Some(sender) = &mut self.swarm_sender {
-            let (resp_send, resp_recv) = oneshot::channel();
-            sender
-                .send(SwarmRunnerMessage::PublishFile {
-                    id: id.clone(),
-                    path,
-                    sender: resp_send,
-                })
-                .await?;
-            resp_recv.await?;
-            let id_str = liberum_core::file_id_to_str(id);
-            Ok(id_str)
-        } else {
+        if let None = self.swarm_sender {
             error!("Swarm is None!");
-            Err(anyhow!("Swarm is None!"))
+            return Err(anyhow!("Swarm is None!"));
         }
+
+        let sender = self.swarm_sender.as_mut().unwrap(); // won't panic due to the if let above
+        let (resp_send, resp_recv) = oneshot::channel();
+        sender
+            .send(SwarmRunnerMessage::PublishFile {
+                id: id.clone(),
+                path,
+                sender: resp_send,
+            })
+            .await?;
+        resp_recv.await?;
+        let id_str = liberum_core::file_id_to_str(id);
+        Ok(id_str)
     }
 
     /// Message called on the node from the daemon to download a file of a given ID.
@@ -131,51 +132,50 @@ impl Node {
     pub async fn download_file(&mut self, id: String) -> Result<Vec<u8>> {
         let id_str = id;
         let id = liberum_core::str_to_file_id(&id_str)?;
-        if let Some(sender) = &mut self.swarm_sender {
-            // first get the providers of the file
-            // Maybe getting the providers could be reused from GetProviders node message handler??
-            let (resp_send, resp_recv) = oneshot::channel();
-            sender
-                .send(SwarmRunnerMessage::GetProviders {
-                    id: id.clone(),
-                    sender: resp_send,
-                })
-                .await?;
-            let providers = resp_recv.await?;
-            if providers.is_empty() {
-                return Err(anyhow!("Could not find provider for file {id_str}.").into());
-            }
+        if let None = self.swarm_sender {
+            error!("Swarm is None!");
+            return Err(anyhow!("Swarm is None!"));
+        }
+        let sender = self.swarm_sender.as_mut().unwrap(); // won't panic due to the if let above
 
-            // then request all the providers for the file
-            let mut requests = vec![];
-            for peer in providers {
-                let (file_sender, file_receiver) = oneshot::channel();
-                requests.push(tokio::task::spawn({
-                    sender
-                        .send(SwarmRunnerMessage::DownloadFile {
-                            id: id.clone(),
-                            peer,
-                            sender: file_sender,
-                        })
-                        .await
-                        .unwrap();
-                    file_receiver
-                }));
-            }
+        // first get the providers of the file
+        // Maybe getting the providers could be reused from GetProviders node message handler??
+        let (resp_send, resp_recv) = oneshot::channel();
+        sender
+            .send(SwarmRunnerMessage::GetProviders {
+                id: id.clone(),
+                sender: resp_send,
+            })
+            .await?;
+        let providers = resp_recv.await?;
+        if providers.is_empty() {
+            return Err(anyhow!("Could not find provider for file {id_str}.").into());
+        }
 
-            // The intention is to accept the first file that is received and trash
-            // the rest of the requests. I am not perfectly sure if this works as intended.
-            if let Ok((Ok(file), _)) = futures::future::select_ok(requests).await {
+        for peer in &providers {
+            let (file_sender, file_receiver) = oneshot::channel();
+            let result = sender.send(SwarmRunnerMessage::DownloadFile {
+                id: id.clone(),
+                peer: peer.clone(),
+                sender: file_sender,
+            });
+            if let Err(e) = result.await {
+                error!(err = e.to_string(), "Failed to send download file message");
+                continue;
+            }
+            if let Ok(file) = file_receiver.await {
                 let hash = bs58::encode(blake3::hash(&file).as_bytes()).into_string();
                 if hash != id_str {
-                    error!("Received wrong file! {hash} != {id_str}");
-                    return Err(anyhow!("Received wrong file! {hash} != {id_str}"));
+                    debug!(
+                        from = format!("{peer}"),
+                        "Received wrong file! {hash} != {id_str}"
+                    );
+                    continue;
                 }
                 return Ok(file);
             }
         }
-
-        Err(anyhow!(""))
+        Err(anyhow!("Could not download file"))
     }
 }
 
