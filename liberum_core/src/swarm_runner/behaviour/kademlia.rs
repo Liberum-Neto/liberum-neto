@@ -27,6 +27,9 @@ impl SwarmContext {
                     .pending_start_providing
                     .remove(&id)
                     .expect("Query ID to not disappear from hashmap.");
+
+                // Node is waiting on its oneshot for this message to know
+                // that the file was published
                 let _ = sender.send(());
             }
 
