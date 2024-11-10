@@ -62,11 +62,16 @@ impl Actor for Node {
 
 #[messages]
 impl Node {
+    /// Message called by the swarm when it dies. The node should know about
+    /// it and shut down.
     #[message]
     pub async fn swarm_died(&mut self) {
         debug!(node = self.name, "Swarm died! Killing myself!");
         self.self_actor_ref.as_mut().unwrap().kill();
     }
+
+    /// Message called on the node from the daemon to get the list of providers
+    /// of an id. Changes the ID from string to libp2p format and just passes it to the swarm.
     #[message]
     pub async fn get_providers(&mut self, id: String) -> Result<HashSet<PeerId>> {
         debug!("Node got GetProviders");
@@ -84,6 +89,10 @@ impl Node {
         }
         Err(anyhow!("Could not get providers"))
     }
+
+    /// Message called on the node from the daemon to publish a file.
+    /// Calculates the ID of the file and passes it to the swarm. Responds with
+    /// the ID of the file using which it can be found.
     #[message]
     pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
         let id = liberum_core::get_file_id(&path)
@@ -100,18 +109,22 @@ impl Node {
                 })
                 .await?;
             resp_recv.await?;
-            let s = liberum_core::file_id_to_str(id).await;
-            Ok(s)
+            let id_str = liberum_core::file_id_to_str(id).await;
+            Ok(id_str)
         } else {
             error!("Swarm is None!");
             Err(anyhow!("Swarm is None!"))
         }
     }
+
+    /// Message called on the node from the daemon to download a file of a given ID.
     #[message]
     pub async fn download_file(&mut self, id: String) -> Result<Vec<u8>> {
         let id_str = id;
         let id = liberum_core::str_to_file_id(&id_str).await?;
         if let Some(sender) = &mut self.swarm_sender {
+            // first get the providers of the file
+            // Maybe getting the providers could be reused from GetProviders node message handler??
             let (resp_send, resp_recv) = oneshot::channel();
             sender
                 .send(SwarmRunnerMessage::GetProviders {
@@ -124,6 +137,7 @@ impl Node {
                 return Err(anyhow!("Could not find provider for file {id_str}.").into());
             }
 
+            // then request all the providers for the file
             let mut requests = vec![];
             for peer in providers {
                 let (file_sender, file_receiver) = oneshot::channel();
@@ -140,6 +154,8 @@ impl Node {
                 }));
             }
 
+            // The intention is to accept the first file that is received and trash
+            // the rest of the requests. I am not perfectly sure if this works as intended.
             if let Ok((Ok(file), _)) = futures::future::select_ok(requests).await {
                 let hash = bs58::encode(blake3::hash(&file).as_bytes()).into_string();
                 if hash != id_str {

@@ -12,8 +12,8 @@ use libp2p::request_response::ProtocolSupport;
 use libp2p::{identity, kad, Multiaddr, StreamProtocol, SwarmBuilder};
 use libp2p::{kad::store::MemoryStore, request_response, swarm::SwarmEvent, Swarm};
 use messages::*;
+use std::str::FromStr;
 use std::time::Duration;
-use std::{collections::HashMap, str::FromStr};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 const KAD_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/kad/1.0.0");
@@ -26,12 +26,14 @@ struct SwarmContext {
     behaviour: BehaviourContext,
 }
 
+/// Prepares the sender to send messages to the swarm
 pub async fn run_swarm(node_ref: ActorRef<Node>) -> mpsc::Sender<SwarmRunnerMessage> {
     let (sender, receiver) = mpsc::channel::<SwarmRunnerMessage>(16);
     tokio::spawn(run_swarm_task(node_ref, receiver));
     sender
 }
 
+/// Task that runs the swarm and handles errors which can't be propagated outside of a task
 async fn run_swarm_task(node_ref: ActorRef<Node>, receiver: mpsc::Receiver<SwarmRunnerMessage>) {
     if let Err(e) = run_swarm_main(node_ref.clone(), receiver).await {
         error!(err = format!("{e:?}"), "Swarm run error");
@@ -39,6 +41,7 @@ async fn run_swarm_task(node_ref: ActorRef<Node>, receiver: mpsc::Receiver<Swarm
     }
 }
 
+/// The main function that runs the swarm
 async fn run_swarm_main(
     node_ref: ActorRef<Node>,
     mut receiver: mpsc::Receiver<SwarmRunnerMessage>,
@@ -46,12 +49,14 @@ async fn run_swarm_main(
     // It must be guaranteed not to ever fail. Swarm can't start without this data.
     // If it fails then it's a bug
 
+    // Get the node data
     let node_data = node_ref
         .ask(node::GetSnapshot {})
         .send()
         .await
         .inspect_err(|e| error!(err = e.to_string(), "Swarm can't get node snapshot!"))?;
 
+    // Create a new swarm using the node data
     let keypair = node_data.keypair.clone();
     let id = identity::PeerId::from_public_key(&keypair.public());
     let swarm = SwarmBuilder::with_existing_identity(keypair.clone())
@@ -91,6 +96,7 @@ async fn run_swarm_main(
         );
     })?;
 
+    // Add the external addresses to the swarm
     if context.node.external_addresses.is_empty() {
         context
             .swarm
@@ -103,6 +109,8 @@ async fn run_swarm_main(
         }
     }
 
+    // Set mode to Server EXTREMELY IMPORTANT, otherwise the node won't
+    // talk to anyone
     context
         .swarm
         .behaviour_mut()
@@ -111,6 +119,7 @@ async fn run_swarm_main(
 
     debug!(node_name = context.node.name, "Starting a swarm!");
 
+    // Bootstrap using the bootstrap nodes from the node data
     for node in &context.node.bootstrap_nodes {
         context
             .swarm
@@ -122,17 +131,15 @@ async fn run_swarm_main(
             .dial(node.addr.clone().with(Protocol::P2p(node.id)))?;
         debug!("Bootstrap node: {}", serde_json::to_string(&node)?);
     }
-    context
-        .swarm
-        .behaviour_mut()
-        .kademlia
-        .set_mode(Some(kad::Mode::Server));
 
+    // Main swarm loop for handling all events and messages
     loop {
         tokio::select! {
             Some(message) = receiver.recv() => {
                 let should_end = context.handle_swarm_runner_message(message).await?;
 
+                // If the message returns true, then the swarm should end
+                // Mainly used for the Kill message but might be useful in other cases
                 if should_end {
                     return Ok(());
                 }
@@ -144,6 +151,7 @@ async fn run_swarm_main(
     }
 }
 
+/// Methods on SwarmContext for handling Swarm Events
 impl SwarmContext {
     async fn handle_swarm_event(
         &mut self,
@@ -160,14 +168,8 @@ impl SwarmContext {
                 info!(
                     peer_id = format!("{peer_id:?}"),
                     address = format!("{addr}"),
-                    "New connection, adding peer address"
+                    "New connection"
                 );
-                self.swarm
-                    .add_peer_address(peer_id, endpoint.get_remote_address().clone());
-                self.swarm
-                    .behaviour_mut()
-                    .kademlia
-                    .add_address(&peer_id, addr);
 
                 debug!(node = self.node.name, "Neighbours:");
                 self.swarm
