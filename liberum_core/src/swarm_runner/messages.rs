@@ -17,27 +17,27 @@ pub enum SwarmRunnerError {}
 pub enum SwarmRunnerMessage {
     Echo {
         message: String,
-        resp: oneshot::Sender<Result<String, SwarmRunnerError>>,
+        response_sender: oneshot::Sender<Result<String, SwarmRunnerError>>,
     },
     Dial {
         peer_id: PeerId,
         peer_addr: Multiaddr,
-        sender: oneshot::Sender<Result<()>>,
+        response_sender: oneshot::Sender<Result<()>>,
     },
     Kill,
     GetProviders {
         id: kad::RecordKey,
-        sender: oneshot::Sender<HashSet<PeerId>>,
+        response_sender: oneshot::Sender<HashSet<PeerId>>,
     },
     PublishFile {
         id: kad::RecordKey,
         path: PathBuf,
-        sender: oneshot::Sender<()>,
+        response_sender: oneshot::Sender<()>,
     },
     DownloadFile {
         id: kad::RecordKey,
         peer: PeerId,
-        sender: oneshot::Sender<Vec<u8>>,
+        response_sender: oneshot::Sender<Vec<u8>>,
     },
 }
 
@@ -56,7 +56,10 @@ impl SwarmContext {
     ) -> Result<bool> {
         match message {
             // Echo message, just send the message back, testing purposes
-            SwarmRunnerMessage::Echo { message, resp } => {
+            SwarmRunnerMessage::Echo {
+                message,
+                response_sender: resp,
+            } => {
                 debug!(message = message, "Received Echo!");
                 let _ = resp.send(Ok(message));
                 Ok(false)
@@ -65,7 +68,7 @@ impl SwarmContext {
             SwarmRunnerMessage::Dial {
                 peer_id,
                 peer_addr,
-                sender,
+                response_sender,
             } => {
                 if let hash_map::Entry::Vacant(entry) = self.behaviour.pending_dial.entry(peer_id) {
                     self.swarm
@@ -74,10 +77,10 @@ impl SwarmContext {
                         .add_address(&peer_id, peer_addr.clone());
                     match self.swarm.dial(peer_addr.with(Protocol::P2p(peer_id))) {
                         Ok(()) => {
-                            entry.insert(sender);
+                            entry.insert(response_sender);
                         }
                         Err(err) => {
-                            let _ = sender.send(Err(anyhow!(err)));
+                            let _ = response_sender.send(Err(anyhow!(err)));
                         }
                     }
                 } else {
@@ -89,7 +92,11 @@ impl SwarmContext {
             SwarmRunnerMessage::Kill => Ok(true),
 
             // Publish a file to the network
-            SwarmRunnerMessage::PublishFile { id, path, sender } => {
+            SwarmRunnerMessage::PublishFile {
+                id,
+                path,
+                response_sender,
+            } => {
                 if self.behaviour.published.contains_key(&id) {
                     info!(
                         node = self.node.name,
@@ -109,25 +116,36 @@ impl SwarmContext {
                     .behaviour_mut()
                     .kademlia
                     .start_providing(id.clone())?;
-                self.behaviour.pending_start_providing.insert(qid, sender);
+                self.behaviour
+                    .pending_start_providing
+                    .insert(qid, response_sender);
                 Ok(false)
             }
 
             // Get providers for a file ID
-            SwarmRunnerMessage::GetProviders { id, sender } => {
+            SwarmRunnerMessage::GetProviders {
+                id,
+                response_sender,
+            } => {
                 let query_id = self.swarm.behaviour_mut().kademlia.get_providers(id);
                 self.behaviour
                     .pending_get_providers
-                    .insert(query_id, sender);
+                    .insert(query_id, response_sender);
                 Ok(false)
             }
-            SwarmRunnerMessage::DownloadFile { id, peer, sender } => {
+            SwarmRunnerMessage::DownloadFile {
+                id,
+                peer,
+                response_sender,
+            } => {
                 let qid = self
                     .swarm
                     .behaviour_mut()
                     .file_share
                     .send_request(&peer, file_share::FileRequest { id: id.to_vec() });
-                self.behaviour.pending_download_file.insert(qid, sender);
+                self.behaviour
+                    .pending_download_file
+                    .insert(qid, response_sender);
                 Ok(false)
             }
         }

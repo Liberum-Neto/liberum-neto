@@ -89,7 +89,10 @@ impl Node {
             let (send, recv) = oneshot::channel();
             debug!("Node sends GetProviders to swarm");
             sender
-                .send(SwarmRunnerMessage::GetProviders { id, sender: send })
+                .send(SwarmRunnerMessage::GetProviders {
+                    id,
+                    response_sender: send,
+                })
                 .await?;
             if let Ok(received) = recv.await {
                 debug!("Got providers: {received:?}");
@@ -119,7 +122,7 @@ impl Node {
             .send(SwarmRunnerMessage::PublishFile {
                 id: id.clone(),
                 path,
-                sender: resp_send,
+                response_sender: resp_send,
             })
             .await?;
         resp_recv.await?;
@@ -144,7 +147,7 @@ impl Node {
         sender
             .send(SwarmRunnerMessage::GetProviders {
                 id: id.clone(),
-                sender: resp_send,
+                response_sender: resp_send,
             })
             .await?;
         let providers = resp_recv.await?;
@@ -157,7 +160,7 @@ impl Node {
             let result = sender.send(SwarmRunnerMessage::DownloadFile {
                 id: id.clone(),
                 peer: peer.clone(),
-                sender: file_sender,
+                response_sender: file_sender,
             });
             if let Err(e) = result.await {
                 error!(err = e.to_string(), "Failed to send download file message");
