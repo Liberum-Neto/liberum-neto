@@ -2674,6 +2674,7 @@ dependencies = [
  "liberum_core",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
