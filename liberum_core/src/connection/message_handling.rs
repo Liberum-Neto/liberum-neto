@@ -104,6 +104,7 @@ pub async fn handle_get_providers(
     })
 }
 
+// TODO! Downloading a file is blocking now, it should be done in background in some way
 pub async fn handle_download_file(
     node_name: String,
     id: String,
