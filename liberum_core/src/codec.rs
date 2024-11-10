@@ -1,68 +1,56 @@
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{Bytes, BytesMut};
+use postcard::{from_bytes, to_allocvec};
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
-use tokio_util::codec::{Decoder, Encoder};
-use tracing::error;
+use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
 
-/// A codec to use a byte stream to encode and decode messages of different types
-/// - create a stream of structs from a stream of bytes
-pub struct AsymmetricMessageCodec<T, U> {
-    encoded_type: PhantomData<T>,
-    decoded_type: PhantomData<U>,
+pub struct AsymmetricMessageCodec<U, V> {
+    framing_codec: LengthDelimitedCodec,
+    encoded_type: PhantomData<U>,
+    decoded_type: PhantomData<V>,
 }
 
-impl<T, U> Encoder<T> for AsymmetricMessageCodec<T, U>
+impl<U, V> Encoder<U> for AsymmetricMessageCodec<U, V>
 where
-    T: Serialize + DeserializeOwned,
     U: Serialize + DeserializeOwned,
+    V: Serialize + DeserializeOwned,
 {
     type Error = std::io::Error;
 
-    fn encode(&mut self, item: T, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let serialized = bincode::serialize::<T>(&item).or_else(|e| {
-            error!(err = e.to_string(), "Failed to serialize");
-            Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "fail serializing message",
-            ))
-        })?;
-        dst.put(serialized.as_slice());
-        Ok(())
+    fn encode(&mut self, item: U, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        let serialized: Vec<u8> = to_allocvec(&item).unwrap();
+        self.framing_codec.encode(Bytes::from(serialized), dst)
     }
 }
 
-impl<T, U> Decoder for AsymmetricMessageCodec<T, U>
+impl<U, V> Decoder for AsymmetricMessageCodec<U, V>
 where
-    T: Serialize + DeserializeOwned,
     U: Serialize + DeserializeOwned,
+    V: Serialize + DeserializeOwned,
 {
-    type Item = U;
+    type Item = V;
     type Error = std::io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if src.len() == 0 {
-            return Ok(None);
-        }
-        let result = bincode::deserialize::<U>(&src);
-        src.advance(src.len());
+        let result = self.framing_codec.decode(src)?;
+
         match result {
-            Ok(message) => Ok(Some(message)),
-            Err(e) => {
-                error!(err = e.to_string(), "Failed to deserialize");
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "fail deserializing message",
-                ))
-            }
+            Some(data) => Ok(Some(from_bytes::<Self::Item>(&data).unwrap())),
+            None => Ok(None),
         }
     }
 }
 
-impl<T, U> AsymmetricMessageCodec<T, U> {
+impl<U, V> AsymmetricMessageCodec<U, V>
+where
+    U: Serialize + DeserializeOwned,
+    V: Serialize + DeserializeOwned,
+{
     pub fn new() -> Self {
-        AsymmetricMessageCodec {
+        Self {
             encoded_type: PhantomData,
             decoded_type: PhantomData,
+            framing_codec: LengthDelimitedCodec::new(),
         }
     }
 }
