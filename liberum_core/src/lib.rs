@@ -69,11 +69,11 @@ pub async fn get_file_id(path: &Path) -> Result<libp2p::kad::RecordKey> {
     let k = libp2p::kad::RecordKey::from(k.to_vec());
     Ok(k)
 }
-pub async fn str_to_file_id(s: &str) -> Result<libp2p::kad::RecordKey> {
+pub fn str_to_file_id(s: &str) -> Result<libp2p::kad::RecordKey> {
     let k: Vec<u8> = bs58::decode::<Vec<u8>>(s.into()).into_vec()?;
     let k = libp2p::kad::RecordKey::from(k);
     Ok(k)
 }
-pub async fn file_id_to_str(id: libp2p::kad::RecordKey) -> String {
+pub fn file_id_to_str(id: libp2p::kad::RecordKey) -> String {
     bs58::encode(id.to_vec()).into_string()
 }
