@@ -84,7 +84,7 @@ impl Node {
     #[message]
     pub async fn get_providers(&mut self, id: String) -> Result<HashSet<PeerId>> {
         debug!("Node got GetProviders");
-        let id = str_to_file_id(&id).await?;
+        let id = str_to_file_id(&id)?;
         if let Some(sender) = &mut self.swarm_sender {
             let (send, recv) = oneshot::channel();
             debug!("Node sends GetProviders to swarm");
@@ -118,7 +118,7 @@ impl Node {
                 })
                 .await?;
             resp_recv.await?;
-            let id_str = liberum_core::file_id_to_str(id).await;
+            let id_str = liberum_core::file_id_to_str(id);
             Ok(id_str)
         } else {
             error!("Swarm is None!");
@@ -130,7 +130,7 @@ impl Node {
     #[message]
     pub async fn download_file(&mut self, id: String) -> Result<Vec<u8>> {
         let id_str = id;
-        let id = liberum_core::str_to_file_id(&id_str).await?;
+        let id = liberum_core::str_to_file_id(&id_str)?;
         if let Some(sender) = &mut self.swarm_sender {
             // first get the providers of the file
             // Maybe getting the providers could be reused from GetProviders node message handler??
