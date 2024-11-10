@@ -1,20 +1,12 @@
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Result};
 use egui::Color32;
-use kameo::{
-    actor::ActorRef, mailbox::bounded::BoundedMailbox, message::Message,
-    request::BlockingMessageSend, Actor,
-};
 use liberum_core::{types::NodeInfo, DaemonRequest, DaemonResponse, DaemonResult};
-use tokio::{
-    sync::{
-        mpsc::{Receiver, Sender},
-        Mutex,
-    },
-    task::{spawn_blocking, JoinHandle},
-};
-use tracing::error;
+use tokio::sync::mpsc::{Receiver, Sender};
+
+use std::sync::Mutex;
+use tracing::{debug, error, info};
 
 #[derive(Default, Clone)]
 struct SystemState {
@@ -22,46 +14,114 @@ struct SystemState {
 }
 
 struct SystemObserver {
+    rt: tokio::runtime::Runtime,
     system_state: Arc<Mutex<Option<SystemState>>>,
-    updater_loop_handle: Option<JoinHandle<()>>,
-    to_daemon_sender: Option<Sender<DaemonRequest>>,
-    from_daemon_receiver: Option<Receiver<DaemonResult>>,
+    to_daemon_sender: Sender<DaemonRequest>,
+    from_daemon_receiver: Receiver<DaemonResult>,
 }
 
-struct GetState;
+struct EventHandler {
+    rt: tokio::runtime::Runtime,
+    to_daemon_sender: Sender<DaemonRequest>,
+    from_daemon_receiver: Receiver<DaemonResult>,
+}
 
-impl SystemObserver {
-    fn new(
-        to_daemon_sender: Sender<DaemonRequest>,
-        from_daemon_receiver: Receiver<DaemonResult>,
-    ) -> Self {
-        Self {
-            system_state: Arc::new(Mutex::new(None)),
-            updater_loop_handle: None,
-            to_daemon_sender: Some(to_daemon_sender),
-            from_daemon_receiver: Some(from_daemon_receiver),
-        }
+impl EventHandler {
+    fn new() -> Result<Self> {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let path = Path::new("/tmp/liberum-core/");
+        let contact =
+            rt.block_on(async { liberum_core::connect(path.join("liberum-core-socket")).await });
+        let (to_daemon_sender, from_daemon_receiver) = match contact {
+            Ok(c) => c,
+            Err(e) => {
+                error!(
+                    err = e.to_string(),
+                    "Failed to connect to the core. Make sure the core is running!"
+                );
+                Err(anyhow!(e))?
+            }
+        };
+
+        Ok(Self {
+            rt,
+            to_daemon_sender,
+            from_daemon_receiver,
+        })
+    }
+
+    fn run_node(&mut self, name: &str) -> Result<()> {
+        debug!(name = name.to_string(), "Trying to run node");
+
+        self.rt.block_on(async {
+            self.to_daemon_sender
+                .send(DaemonRequest::StartNode {
+                    name: name.to_string(),
+                })
+                .await?;
+
+            match self.from_daemon_receiver.recv().await {
+                Some(r) => info!(response = format!("{r:?}"), "Daemon responds: {:?}", r),
+                None => {
+                    error!("Failed to receive response");
+                }
+            }
+
+            anyhow::Ok(())
+        })?;
+
+        Ok(())
     }
 }
 
-impl Actor for SystemObserver {
-    type Mailbox = BoundedMailbox<Self>;
+struct MyApp {
+    system_state: Arc<Mutex<Option<SystemState>>>,
+    event_handler: EventHandler,
+}
 
-    async fn on_start(
-        &mut self,
-        _: kameo::actor::ActorRef<Self>,
-    ) -> std::result::Result<(), kameo::error::BoxError> {
-        let tds = self.to_daemon_sender.take().unwrap();
-        let mut fdr = self.from_daemon_receiver.take().unwrap();
-        let state = self.system_state.clone();
+impl SystemObserver {
+    fn new() -> Result<Self> {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let path = Path::new("/tmp/liberum-core/");
+        let contact =
+            rt.block_on(async { liberum_core::connect(path.join("liberum-core-socket")).await });
+        let (to_daemon_sender, from_daemon_receiver) = match contact {
+            Ok(c) => c,
+            Err(e) => {
+                error!(
+                    err = e.to_string(),
+                    "Failed to connect to the core. Make sure the core is running!"
+                );
+                Err(anyhow!(e))?
+            }
+        };
 
-        self.updater_loop_handle = Some(tokio::spawn(async move {
+        Ok(Self {
+            rt,
+            system_state: Arc::new(Mutex::new(None)),
+            to_daemon_sender,
+            from_daemon_receiver,
+        })
+    }
+
+    fn run_update_loop(mut self) -> tokio::task::JoinHandle<()> {
+        debug!("Spawning update loop");
+
+        let update_loop_handle = self.rt.spawn(async move {
             loop {
-                tds.send(DaemonRequest::ListNodes)
+                debug!("Updating state");
+
+                self.to_daemon_sender
+                    .send(DaemonRequest::ListNodes)
                     .await
                     .expect("Failed to send message to the daemon");
 
-                let nodes = fdr
+                let nodes = self
+                    .from_daemon_receiver
                     .recv()
                     .await
                     .expect("No response from the daemon")
@@ -72,63 +132,41 @@ impl Actor for SystemObserver {
                     _ => panic!("expected node list"),
                 };
 
-                state
+                self.system_state
                     .lock()
-                    .await
+                    .unwrap()
                     .replace(SystemState { node_infos: nodes });
+
+                tokio::time::sleep(Duration::from_secs(1)).await;
             }
-        }));
+        });
 
-        Ok(())
+        debug!("Update loop spawned");
+
+        update_loop_handle
     }
+}
 
-    async fn on_stop(
-        self,
-        _: kameo::actor::WeakActorRef<Self>,
-        _: kameo::error::ActorStopReason,
-    ) -> std::result::Result<(), kameo::error::BoxError> {
-        if let Some(handle) = self.updater_loop_handle {
-            handle.abort();
+impl MyApp {
+    fn new(system_state: Arc<Mutex<Option<SystemState>>>, event_handler: EventHandler) -> Self {
+        Self {
+            system_state,
+            event_handler,
         }
-
-        Ok(())
     }
 }
 
-impl Message<GetState> for SystemObserver {
-    type Reply = Option<SystemState>;
+fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
 
-    async fn handle(
-        &mut self,
-        _: GetState,
-        _: kameo::message::Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.system_state.lock().await.clone()
-    }
-}
+    let system_observer = SystemObserver::new()?;
+    let event_handler = EventHandler::new()?;
+    let my_app = MyApp::new(system_observer.system_state.clone(), event_handler);
 
-struct MyApp {
-    observer: ActorRef<SystemObserver>,
-}
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    let path = Path::new("/tmp/liberum-core/");
-    let contact = liberum_core::connect(path.join("liberum-core-socket")).await;
-    let (request_sender, response_receiver) = match contact {
-        Ok(c) => c,
-        Err(e) => {
-            error!(
-                err = e.to_string(),
-                "Failed to connect to the core. Make sure the core is running!"
-            );
-            Err(anyhow!(e))?
-        }
-    };
-
-    let system_observer = SystemObserver::new(request_sender, response_receiver);
-    let system_observer = kameo::spawn(system_observer);
-    let my_app = MyApp::new(system_observer)?;
+    debug!("Running observer loop...");
+    system_observer.run_update_loop();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
@@ -146,41 +184,38 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-impl MyApp {
-    fn new(observer: ActorRef<SystemObserver>) -> Result<Self> {
-        Ok(Self { observer })
-    }
-}
-
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
-        spawn_blocking(|| {
-            let system_state = self.observer.ask(GetState).blocking_send().unwrap();
+        let state = self.system_state.lock().unwrap();
+        let state = (*state).clone();
 
-            egui::CentralPanel::default().show(ctx, |ui| {
-                let system_state = match system_state {
-                    Some(state) => state,
-                    None => {
-                        ui.heading("No system state available");
-                        return;
-                    }
-                };
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let state = match state {
+                Some(s) => s,
+                None => {
+                    ui.heading("No system state available");
+                    return;
+                }
+            };
 
-                ui.heading("Nodes list:");
-                system_state.node_infos.iter().for_each(|n| {
-                    ui.horizontal(|ui| {
-                        ui.vertical(|ui| {
-                            ui.colored_label(
-                                Color32::from_rgb(0, 100, 200),
-                                format!("Node: {}", n.name),
-                            );
-                            ui.label(format!("Is running: {}", n.is_running));
-                            ui.add_space(10.0);
-                        });
-                        ui.vertical(|ui| if ui.button("Run").clicked() {});
+            ui.heading("Nodes list:");
+            state.node_infos.iter().for_each(|n| {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.colored_label(
+                            Color32::from_rgb(0, 100, 200),
+                            format!("Node: {}", n.name),
+                        );
+                        ui.label(format!("Is running: {}", n.is_running));
+                        ui.add_space(10.0);
                     });
-                })
-            });
+                    ui.vertical(|ui| {
+                        if ui.button("Run").clicked() {
+                            let _ = self.event_handler.run_node(&n.name);
+                        }
+                    });
+                });
+            })
         });
     }
 }
