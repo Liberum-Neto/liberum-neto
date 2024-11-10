@@ -78,7 +78,7 @@ async fn main() -> Result<()> {
                 .send(DaemonRequest::NewNode { name })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            generic_print_response(&mut response_receiver).await;
+            handle_response(&mut response_receiver).await?;
         }
 
         Commands::StartNode { name } => {
@@ -87,7 +87,7 @@ async fn main() -> Result<()> {
                 .send(DaemonRequest::StartNode { name })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            generic_print_response(&mut response_receiver).await;
+            handle_response(&mut response_receiver).await?;
         }
 
         Commands::StopNode { name } => {
@@ -96,7 +96,7 @@ async fn main() -> Result<()> {
                 .send(DaemonRequest::StopNode { name })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            generic_print_response(&mut response_receiver).await;
+            handle_response(&mut response_receiver).await?;
         }
         Commands::PublishFile { node_name, path } => {
             debug!(path = format!("{path:?}"), "Publishing file");
@@ -106,47 +106,38 @@ async fn main() -> Result<()> {
                 .send(DaemonRequest::PublishFile { node_name, path })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            generic_print_response(&mut response_receiver).await;
+            handle_response(&mut response_receiver).await?;
         }
         Commands::DownloadFile { node_name, id } => {
             request_sender
                 .send(DaemonRequest::DownloadFile { node_name, id })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            match response_receiver.recv().await {
-                Some(Ok(DaemonResponse::FileDownloaded { data })) => info!(
-                    response = format!("{}", String::from_utf8(data)?),
-                    "Daemon responds"
-                ),
-                Some(r) => info!(response = format!("{r:?}"), "Daemon responds"),
-                None => {
-                    error!("Failed to receive response");
-                }
-            };
+            handle_response(&mut response_receiver).await?;
         }
         Commands::GetProviders { node_name, id } => {
             request_sender
                 .send(DaemonRequest::GetProviders { node_name, id })
                 .await
                 .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-            generic_print_response(&mut response_receiver).await;
+            handle_response(&mut response_receiver).await?;
         }
     };
 
     Ok(())
 }
 
-async fn generic_print_response(
+async fn handle_response(
     response_receiver: &mut tokio::sync::mpsc::Receiver<Result<DaemonResponse, DaemonError>>,
-) {
+) -> Result<()> {
     match response_receiver.recv().await {
-        Some(Ok(DaemonResponse::FileDownloaded { data })) => info!(
-            response = String::from_utf8(data).unwrap_or("Failed to decode utf8".to_string()),
-            "Daemon responds"
-        ),
+        Some(Ok(DaemonResponse::FileDownloaded { data })) => {
+            info!(response = String::from_utf8(data)?, "Daemon responds")
+        }
         Some(r) => info!(response = format!("{r:?}"), "Daemon responds"),
         None => {
             error!("Failed to receive response");
         }
     };
+    Ok(())
 }
