@@ -2,6 +2,7 @@ pub mod behaviour;
 pub mod messages;
 
 use crate::node::{self, BootstrapNode, Node};
+use anyhow::anyhow;
 use anyhow::Result;
 use behaviour::*;
 use futures::StreamExt;
@@ -126,9 +127,6 @@ async fn run_swarm_main(
             .behaviour_mut()
             .kademlia
             .add_address(&node.id, node.addr.clone());
-        context
-            .swarm
-            .dial(node.addr.clone().with(Protocol::P2p(node.id)))?;
         debug!("Bootstrap node: {}", serde_json::to_string(&node)?);
     }
 
@@ -147,6 +145,7 @@ async fn run_swarm_main(
             event = context.swarm.select_next_some() => {
                 context.handle_swarm_event(event).await?;
             }
+            else => {break Err(anyhow!("Channel to Node closed"));}
         }
     }
 }
