@@ -27,7 +27,7 @@ pub enum DaemonResponse {
     NodeList(Vec<String>),
     FilePublished { id: String },
     Providers { ids: Vec<String> },
-    FileDownloaded { data: Vec<u8> },
+    FileDownloaded { data: Vec<u8> }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
 }
 
 /// Errors that can be returned by the daemon
