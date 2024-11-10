@@ -74,11 +74,58 @@ impl EventHandler {
 
         Ok(())
     }
+
+    fn stop_node(&mut self, name: &str) -> Result<()> {
+        debug!(name = name.to_string(), "Trying to stop node");
+
+        self.rt.block_on(async {
+            self.to_daemon_sender
+                .send(DaemonRequest::StopNode {
+                    name: name.to_string(),
+                })
+                .await?;
+
+            match self.from_daemon_receiver.recv().await {
+                Some(r) => info!(response = format!("{r:?}"), "Daemon responds: {:?}", r),
+                None => {
+                    error!("Failed to receive response");
+                }
+            }
+
+            anyhow::Ok(())
+        })?;
+
+        Ok(())
+    }
+
+    fn create_node(&mut self, name: &str) -> Result<()> {
+        debug!(name = name.to_string(), "Trying to create node");
+
+        self.rt.block_on(async {
+            self.to_daemon_sender
+                .send(DaemonRequest::NewNode {
+                    name: name.to_string(),
+                })
+                .await?;
+
+            match self.from_daemon_receiver.recv().await {
+                Some(r) => info!(response = format!("{r:?}"), "Daemon responds: {:?}", r),
+                None => {
+                    error!("Failed to receive response");
+                }
+            }
+
+            anyhow::Ok(())
+        })?;
+
+        Ok(())
+    }
 }
 
 struct MyApp {
     system_state: Arc<Mutex<Option<SystemState>>>,
     event_handler: EventHandler,
+    create_node_name: String,
 }
 
 impl SystemObserver {
@@ -160,6 +207,7 @@ impl MyApp {
         Self {
             system_state,
             event_handler,
+            create_node_name: String::new(),
         }
     }
 }
@@ -208,6 +256,19 @@ impl eframe::App for MyApp {
                 }
             };
 
+            ui.heading("Create a new node");
+            ui.horizontal(|ui| {
+                ui.text_edit_singleline(&mut self.create_node_name);
+
+                if ui.button("Create").clicked() {
+                    self.event_handler
+                        .create_node(&self.create_node_name)
+                        .unwrap();
+                }
+            });
+
+            ui.add_space(10.0);
+
             ui.heading("Nodes list:");
             state.node_infos.iter().for_each(|n| {
                 ui.horizontal(|ui| {
@@ -219,11 +280,14 @@ impl eframe::App for MyApp {
                         ui.label(format!("Is running: {}", n.is_running));
                         ui.add_space(10.0);
                     });
-                    ui.vertical(|ui| {
-                        if ui.button("Run").clicked() {
-                            let _ = self.event_handler.run_node(&n.name);
-                        }
-                    });
+
+                    if ui.button("Run").clicked() {
+                        let _ = self.event_handler.run_node(&n.name);
+                    }
+
+                    if ui.button("Stop").clicked() {
+                        let _ = self.event_handler.stop_node(&n.name);
+                    }
                 });
             })
         });
