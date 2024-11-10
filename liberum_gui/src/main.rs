@@ -16,8 +16,8 @@ struct SystemState {
 struct SystemObserver {
     rt: tokio::runtime::Runtime,
     system_state: Arc<Mutex<Option<SystemState>>>,
-    to_daemon_sender: Sender<DaemonRequest>,
-    from_daemon_receiver: Receiver<DaemonResult>,
+    to_daemon_sender: Option<Sender<DaemonRequest>>,
+    from_daemon_receiver: Option<Receiver<DaemonResult>>,
 }
 
 struct EventHandler {
@@ -83,7 +83,8 @@ struct MyApp {
 
 impl SystemObserver {
     fn new() -> Result<Self> {
-        let rt = tokio::runtime::Builder::new_current_thread()
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
             .enable_all()
             .build()?;
         let path = Path::new("/tmp/liberum-core/");
@@ -103,36 +104,43 @@ impl SystemObserver {
         Ok(Self {
             rt,
             system_state: Arc::new(Mutex::new(None)),
-            to_daemon_sender,
-            from_daemon_receiver,
+            to_daemon_sender: Some(to_daemon_sender),
+            from_daemon_receiver: Some(from_daemon_receiver),
         })
     }
 
-    fn run_update_loop(mut self) -> tokio::task::JoinHandle<()> {
+    fn run_update_loop(&mut self) -> tokio::task::JoinHandle<()> {
         debug!("Spawning update loop");
+
+        let to_daemon_sender = self.to_daemon_sender.take().unwrap();
+        let mut from_daemon_receiver = self.from_daemon_receiver.take().unwrap();
+        let system_state = self.system_state.clone();
 
         let update_loop_handle = self.rt.spawn(async move {
             loop {
                 debug!("Updating state");
 
-                self.to_daemon_sender
+                to_daemon_sender
                     .send(DaemonRequest::ListNodes)
                     .await
                     .expect("Failed to send message to the daemon");
 
-                let nodes = self
-                    .from_daemon_receiver
+                debug!("Send list nodes");
+
+                let nodes = from_daemon_receiver
                     .recv()
                     .await
                     .expect("No response from the daemon")
                     .expect("Daemon returned error");
+
+                debug!("Got list nodes");
 
                 let nodes = match nodes {
                     DaemonResponse::NodeList(list) => list,
                     _ => panic!("expected node list"),
                 };
 
-                self.system_state
+                system_state
                     .lock()
                     .unwrap()
                     .replace(SystemState { node_infos: nodes });
@@ -161,17 +169,19 @@ fn main() -> Result<()> {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
-    let system_observer = SystemObserver::new()?;
+    let mut system_observer = SystemObserver::new()?;
     let event_handler = EventHandler::new()?;
     let my_app = MyApp::new(system_observer.system_state.clone(), event_handler);
 
     debug!("Running observer loop...");
-    system_observer.run_update_loop();
+    let update_loop_handle = system_observer.run_update_loop();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
         ..Default::default()
     };
+
+    println!("{}", update_loop_handle.is_finished());
 
     eframe::run_native(
         "liberum-gui",
