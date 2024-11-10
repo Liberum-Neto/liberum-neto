@@ -40,11 +40,20 @@ impl SwarmContext {
                         match file {
                             SharedResource::File { path } => {
                                 if let Ok(data) = tokio::fs::read(path).await {
-                                    self.swarm
+                                    let r = self
+                                        .swarm
                                         .behaviour_mut()
                                         .file_share
                                         .send_response(channel, FileResponse { data })
-                                        .expect("Connection to peer to be still open.");
+                                        .inspect_err(|e| {
+                                            debug!("Connection closed: {:?}", e);
+                                        });
+                                    if let Err(e) = r {
+                                        debug!(
+                                            requested = liberum_core::file_id_to_str(id),
+                                            "Failed to send response: {:?}", e
+                                        );
+                                    }
                                 }
                             }
                         }
