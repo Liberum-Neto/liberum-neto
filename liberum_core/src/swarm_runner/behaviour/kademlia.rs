@@ -6,6 +6,9 @@ use tracing::{debug, info};
 
 use crate::swarm_runner::SwarmContext;
 
+/// Methods on SwarmContext for handling Kademlia
+/// On QueryProgressed events generally it is required to remember the query ID
+/// from when the query was started to react to the event
 impl SwarmContext {
     pub(crate) fn handle_kademlia(&mut self, event: kad::Event) {
         match event {
