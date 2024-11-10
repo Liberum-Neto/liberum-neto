@@ -67,7 +67,16 @@ impl Node {
     #[message]
     pub async fn swarm_died(&mut self) {
         debug!(node = self.name, "Swarm died! Killing myself!");
-        self.self_actor_ref.as_mut().unwrap().kill();
+        if let Err(e) = self
+            .self_actor_ref
+            .as_mut()
+            .unwrap()
+            .stop_gracefully()
+            .await
+        {
+            error!(err = format!("{e:?}"), "Failed to kill node!");
+            self.self_actor_ref.as_mut().unwrap().kill();
+        }
     }
 
     /// Message called on the node from the daemon to get the list of providers
