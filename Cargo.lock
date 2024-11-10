@@ -2670,6 +2670,7 @@ dependencies = [
  "chrono",
  "eframe",
  "egui",
+ "kameo",
  "liberum_core",
  "tokio",
  "tracing",
