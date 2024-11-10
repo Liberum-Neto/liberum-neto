@@ -68,17 +68,14 @@ pub async fn handle_publish_file(
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish file"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    let resp = node
+    let resp_id = node
         .ask(PublishFile { path })
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish file"))
-        .map_err(|e| DaemonError::Other(e.to_string()));
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    match resp {
-        Err(e) => Err(DaemonError::Other(e.to_string())),
-        Ok(id) => Ok(DaemonResponse::FilePublished { id }),
-    }
+    Ok(DaemonResponse::FilePublished { id: resp_id })
 }
 
 pub async fn handle_get_providers(
