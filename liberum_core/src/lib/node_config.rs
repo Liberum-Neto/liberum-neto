@@ -21,7 +21,6 @@ impl NodeConfig {
 
     pub async fn save(&self, path: &Path) -> Result<()> {
         let content = serde_json::to_string(&self)?;
-        error!("SAVING CONFIG: {content}");
         tokio::fs::write(path, content)
             .await
             .inspect_err(|e| error!(err = e.to_string(), "could not write node config"))?;
