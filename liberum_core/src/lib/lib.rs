@@ -161,8 +161,3 @@ pub fn node_keypair_from_seed(seed: &str) -> libp2p::identity::Keypair {
     id_buf[..bytes.len()].copy_from_slice(bytes.as_slice()); // copy the bytes to the buffer
     libp2p::identity::Keypair::ed25519_from_bytes(id_buf).unwrap()
 }
-
-pub fn peer_id_from_seed(seed: &str) -> libp2p::PeerId {
-    let key = node_keypair_from_seed(seed);
-    PeerId::from_public_key(&key.public())
-}
