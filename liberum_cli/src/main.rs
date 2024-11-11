@@ -336,7 +336,21 @@ async fn handle_download_file(
     .await
     .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
-    handle_response(&mut res).await
+    let response = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))??;
+
+    match response {
+        DaemonResponse::FileDownloaded { data } => {
+            println!("{}", String::from_utf8(data)?);
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
+        }
+    }
+
+    Ok(())
 }
 
 async fn handle_get_providers(
@@ -358,9 +372,6 @@ async fn handle_response(
     response_receiver: &mut tokio::sync::mpsc::Receiver<Result<DaemonResponse, DaemonError>>,
 ) -> Result<()> {
     match response_receiver.recv().await {
-        Some(Ok(DaemonResponse::FileDownloaded { data })) => {
-            info!(response = String::from_utf8(data)?, "Daemon responds")
-        }
         Some(r) => info!(response = format!("{r:?}"), "Daemon responds"),
         None => {
             error!("Failed to receive response");
