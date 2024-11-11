@@ -19,7 +19,8 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 const KAD_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/kad/1.0.0");
 const FILE_SHARE_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/file-share/1.0.0");
-const DEFAULT_MULTIADDR_STR: &str = "/ip6/::/udp/0/quic-v1";
+const DEFAULT_MULTIADDR_STR_IP6: &str = "/ip6/::/udp/0/quic-v1";
+const DEFAULT_MULTIADDR_STR_IP4: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 
 struct SwarmContext {
     swarm: Swarm<LiberumNetoBehavior>,
@@ -89,20 +90,31 @@ async fn run_swarm_main(
         behaviour: BehaviourContext::new(),
     };
 
-    let swarm_default_addr = Multiaddr::from_str(DEFAULT_MULTIADDR_STR).inspect_err(|e| {
-        error!(
-            err = e.to_string(),
-            addr = DEFAULT_MULTIADDR_STR,
-            "Could not create swarm listen address"
-        );
-    })?;
+    let swarm_default_addr_ip6 =
+        Multiaddr::from_str(DEFAULT_MULTIADDR_STR_IP6).inspect_err(|e| {
+            error!(
+                err = e.to_string(),
+                addr = DEFAULT_MULTIADDR_STR_IP6,
+                "Could not create swarm listen address IP6"
+            );
+        })?;
+    let swarm_default_addr_ip4 =
+        Multiaddr::from_str(DEFAULT_MULTIADDR_STR_IP4).inspect_err(|e| {
+            error!(
+                err = e.to_string(),
+                addr = DEFAULT_MULTIADDR_STR_IP4,
+                "Could not create swarm listen address IP4"
+            );
+        })?;
+
+    let default_addr = vec![swarm_default_addr_ip6, swarm_default_addr_ip4];
 
     // Add the external addresses to the swarm
     if context.node.external_addresses.is_empty() {
-        context
-            .swarm
-            .add_external_address(swarm_default_addr.clone());
-        context.swarm.listen_on(swarm_default_addr.clone())?;
+        for addr in default_addr {
+            context.swarm.add_external_address(addr.clone());
+            context.swarm.listen_on(addr.clone())?;
+        }
     } else {
         for addr in &context.node.external_addresses {
             context.swarm.add_external_address(addr.clone());
