@@ -156,10 +156,9 @@ pub fn file_id_to_str(id: libp2p::kad::RecordKey) -> String {
 }
 
 pub fn node_keypair_from_seed(seed: &str) -> libp2p::identity::Keypair {
-    let mut id_buf = [0u8; 32];
     let bytes = blake3::hash(seed.as_bytes()).as_bytes().to_vec(); // hash so that the seed can be of any length
-    let bytes = &bytes[..bytes.len().min(32)]; // truncate to 32 bytes, copy_from_slice panics if the lengths are different
-    id_buf[..bytes.len()].copy_from_slice(bytes); // copy the bytes to the buffer
+    let mut id_buf = [0u8; 32];
+    id_buf[..bytes.len()].copy_from_slice(bytes.as_slice()); // copy the bytes to the buffer
     libp2p::identity::Keypair::ed25519_from_bytes(id_buf).unwrap()
 }
 
