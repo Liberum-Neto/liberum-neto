@@ -19,3 +19,5 @@ jobs:
       run: cargo fmt --check
     - name: Run tests
       run: cargo test
+    - name: Run test cases
+      run: ./run-tests.sh
