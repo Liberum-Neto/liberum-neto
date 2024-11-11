@@ -12,6 +12,7 @@ use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::{fmt, path::Path};
 use swarm_runner::messages::SwarmRunnerMessage;
 use tokio::sync::{mpsc, oneshot};
@@ -181,6 +182,29 @@ impl Node {
     #[message]
     pub fn get_peer_id(&mut self) -> Result<PeerId> {
         Ok(PeerId::from(self.keypair.public()))
+    }
+
+    #[message]
+    pub async fn dial_peer(&mut self, peer_id: String, peer_addr: String) -> Result<()> {
+        debug!("Node got DialPeer");
+        if let Some(sender) = &mut self.swarm_sender {
+            let (send, recv) = oneshot::channel();
+            let peer_id = PeerId::from_str(&peer_id)?;
+            let peer_addr = peer_addr.parse::<Multiaddr>()?;
+            sender
+                .send(SwarmRunnerMessage::Dial {
+                    peer_id,
+                    peer_addr,
+                    response_sender: send,
+                })
+                .await?;
+
+            return match recv.await {
+                Ok(r) => r,
+                Err(e) => Err(e.into()),
+            };
+        }
+        Err(anyhow!("Swarm sender is None"))
     }
 }
 

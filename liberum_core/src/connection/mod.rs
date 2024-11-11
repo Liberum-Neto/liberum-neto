@@ -7,6 +7,7 @@ use crate::node::manager::NodeManager;
 use crate::node::store::ListNodes;
 use crate::node::store::LoadNode;
 use crate::node::store::NodeStore;
+use crate::node::DialPeer;
 use crate::node::DownloadFile;
 use crate::node::GetProviders;
 use crate::node::Node;
@@ -115,6 +116,11 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
             handle_get_providers(node_name, id, context).await
         }
         DaemonRequest::GetPeerId { node_name } => handle_get_peer_id(node_name, context).await,
+        DaemonRequest::Dial {
+            node_name,
+            peer_id,
+            addr,
+        } => handle_dial(node_name, peer_id, addr, context).await,
     }
 }
 
@@ -348,4 +354,33 @@ async fn handle_download_file(node_name: String, id: String, context: &AppContex
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
     Ok(DaemonResponse::FileDownloaded { data: file })
+}
+
+async fn handle_dial(
+    node_name: String,
+    peer_id: String,
+    addr: String,
+    context: &AppContext,
+) -> DaemonResult {
+    let node = context
+        .node_manager
+        .ask(GetNode {
+            name: node_name.to_string(),
+        })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle dial"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    node.ask(DialPeer {
+        peer_id: peer_id.clone(),
+        peer_addr: addr.clone(),
+    })
+    .send()
+    .await
+    .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle dial"))
+    .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    debug!("Dialed peer: {}", peer_id);
+    Ok(DaemonResponse::Dialed)
 }

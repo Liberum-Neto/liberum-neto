@@ -163,6 +163,13 @@ impl SwarmContext {
             SwarmEvent::ConnectionEstablished {
                 peer_id, endpoint, ..
             } => {
+                // If it was caused by using the Dial message, then send the response
+                if endpoint.is_dialer() {
+                    if let Some(sender) = self.behaviour.pending_dial.remove(&peer_id) {
+                        let _ = sender.send(Ok(()));
+                    }
+                }
+
                 let addr = endpoint.get_remote_address().clone();
                 info!(
                     peer_id = format!("{peer_id:?}"),
@@ -182,12 +189,6 @@ impl SwarmContext {
                     });
             }
             SwarmEvent::ConnectionClosed { .. } => {}
-            SwarmEvent::Dialing {
-                peer_id: Some(peer_id),
-                ..
-            } => {
-                debug!("Dialing {peer_id}");
-            }
             SwarmEvent::NewListenAddr {
                 listener_id: _,
                 address,
