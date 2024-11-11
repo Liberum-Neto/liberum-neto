@@ -177,6 +177,11 @@ impl Node {
         }
         Err(anyhow!("Could not download file"))
     }
+
+    #[message]
+    pub fn get_peer_id(&mut self) -> Result<PeerId> {
+        Ok(PeerId::from(self.keypair.public()))
+    }
 }
 
 impl Node {

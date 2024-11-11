@@ -20,6 +20,8 @@ type ReseponseReceiver = Receiver<Result<DaemonResponse, DaemonError>>;
 struct Cli {
     #[command(subcommand)]
     command: Command,
+    #[arg(long, short)]
+    debug_log: bool,
 }
 
 /// Subcommands for the CLI
@@ -36,12 +38,17 @@ enum Command {
     PublishFile(PublishFile),
     GetProviders(GetProviders),
     DownloadFile(DownloadFile),
+    GetPeerID(GetPeerID),
 }
 
 #[derive(Parser)]
 struct NewNode {
     #[arg()]
     name: String,
+    /// WARNING - the seed is as dangerous as the private key
+    /// Not recommended to use outside of testing
+    #[arg(long)]
+    id_seed: Option<String>,
 }
 
 #[derive(Parser)]
@@ -107,6 +114,12 @@ struct DownloadFile {
     id: String,
 }
 
+#[derive(Parser)]
+struct GetPeerID {
+    #[arg()]
+    node_name: String,
+}
+
 #[derive(Tabled)]
 struct NodeInfoRow {
     pub name: String,
@@ -116,9 +129,6 @@ struct NodeInfoRow {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .init();
     let path = Path::new("/tmp/liberum-core/");
     let conn = liberum_core::connect(path.join("liberum-core-socket")).await;
 
@@ -134,6 +144,13 @@ async fn main() -> Result<()> {
     };
 
     let cli = Cli::parse();
+
+    if cli.debug_log {
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .init();
+    }
+
     handle_command(cli.command, request_sender, response_receiver).await?;
 
     Ok(())
@@ -149,6 +166,7 @@ async fn handle_command(cmd: Command, req: RequestSender, res: ReseponseReceiver
         Command::PublishFile(cmd) => handle_publish_file(cmd, req, res).await,
         Command::DownloadFile(cmd) => handle_download_file(cmd, req, res).await,
         Command::GetProviders(cmd) => handle_get_providers(cmd, req, res).await,
+        Command::GetPeerID(cmd) => handle_get_peer_id(cmd, req, res).await,
     }
 }
 
@@ -158,9 +176,12 @@ async fn handle_new_node(
     mut res: ReseponseReceiver,
 ) -> Result<()> {
     debug!(name = cmd.name, "Creating node");
-    req.send(DaemonRequest::NewNode { name: cmd.name })
-        .await
-        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+    req.send(DaemonRequest::NewNode {
+        node_name: cmd.name,
+        id_seed: cmd.id_seed,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
     handle_response(&mut res).await
 }
@@ -171,9 +192,11 @@ async fn handle_start_node(
     mut res: ReseponseReceiver,
 ) -> Result<()> {
     debug!(name = cmd.name, "Starting node");
-    req.send(DaemonRequest::StartNode { name: cmd.name })
-        .await
-        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+    req.send(DaemonRequest::StartNode {
+        node_name: cmd.name,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
     handle_response(&mut res).await
 }
@@ -237,7 +260,7 @@ async fn handle_add_bootstrap_node(
     config.bootstrap_nodes.push(new_bootstrap_node);
 
     req.send(DaemonRequest::OverwriteNodeConfig {
-        name: name.to_string(),
+        node_name: name.to_string(),
         new_cfg: config,
     })
     .await?;
@@ -257,7 +280,7 @@ async fn handle_add_external_addr(
     config.external_addresses.push(new_external_addr);
 
     req.send(DaemonRequest::OverwriteNodeConfig {
-        name: name.to_string(),
+        node_name: name.to_string(),
         new_cfg: config,
     })
     .await?;
@@ -271,7 +294,7 @@ async fn get_current_config(
     res: &mut ReseponseReceiver,
 ) -> Result<NodeConfig> {
     req.send(DaemonRequest::GetNodeConfig {
-        name: node_name.to_string(),
+        node_name: node_name.to_string(),
     })
     .await?;
 
@@ -299,9 +322,11 @@ async fn handle_stop_node(
     mut res: ReseponseReceiver,
 ) -> Result<()> {
     debug!(name = cmd.name, "Stopping node");
-    req.send(DaemonRequest::StopNode { name: cmd.name })
-        .await
-        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+    req.send(DaemonRequest::StopNode {
+        node_name: cmd.name,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
     handle_response(&mut res).await
 }
@@ -379,6 +404,20 @@ async fn handle_response(
     };
 
     Ok(())
+}
+
+async fn handle_get_peer_id(
+    cmd: GetPeerID,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    req.send(DaemonRequest::GetPeerId {
+        node_name: cmd.node_name,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    handle_response(&mut res).await
 }
 
 impl From<&NodeInfo> for NodeInfoRow {
