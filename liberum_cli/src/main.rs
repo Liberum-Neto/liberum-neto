@@ -393,19 +393,6 @@ async fn handle_get_providers(
     handle_response(&mut res).await
 }
 
-async fn handle_response(
-    response_receiver: &mut tokio::sync::mpsc::Receiver<Result<DaemonResponse, DaemonError>>,
-) -> Result<()> {
-    match response_receiver.recv().await {
-        Some(r) => info!(response = format!("{r:?}"), "Daemon responds"),
-        None => {
-            error!("Failed to receive response");
-        }
-    };
-
-    Ok(())
-}
-
 async fn handle_get_peer_id(
     cmd: GetPeerID,
     req: RequestSender,
@@ -417,7 +404,34 @@ async fn handle_get_peer_id(
     .await
     .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
-    handle_response(&mut res).await
+    let response = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))??;
+
+    match response {
+        DaemonResponse::PeerId { id } => {
+            println!("{id}");
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_response(
+    response_receiver: &mut tokio::sync::mpsc::Receiver<Result<DaemonResponse, DaemonError>>,
+) -> Result<()> {
+    match response_receiver.recv().await {
+        Some(r) => info!(response = format!("{r:?}"), "Daemon responds"),
+        None => {
+            error!("Failed to receive response");
+        }
+    };
+
+    Ok(())
 }
 
 impl From<&NodeInfo> for NodeInfoRow {
