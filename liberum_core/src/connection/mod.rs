@@ -93,16 +93,17 @@ async fn handle_connection(
 /// Only one UI connection is possible at a time
 async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonResult {
     match message {
-        DaemonRequest::NewNode { name: node_name } => handle_new_node(node_name, context).await,
-        DaemonRequest::StartNode { name: node_name } => handle_start_node(node_name, context).await,
-        DaemonRequest::GetNodeConfig { name: node_name } => {
+        DaemonRequest::NewNode { node_name, id_seed } => {
+            handle_new_node(node_name, id_seed, context).await
+        }
+        DaemonRequest::StartNode { node_name } => handle_start_node(node_name, context).await,
+        DaemonRequest::GetNodeConfig { node_name } => {
             handle_get_node_config(node_name, context).await
         }
-        DaemonRequest::OverwriteNodeConfig {
-            name: node_name,
-            new_cfg,
-        } => handle_overwrite_node_config(node_name, new_cfg, context).await,
-        DaemonRequest::StopNode { name: node_name } => handle_stop_node(node_name, context).await,
+        DaemonRequest::OverwriteNodeConfig { node_name, new_cfg } => {
+            handle_overwrite_node_config(node_name, new_cfg, context).await
+        }
+        DaemonRequest::StopNode { node_name } => handle_stop_node(node_name, context).await,
         DaemonRequest::ListNodes => handle_list_nodes(context).await,
         DaemonRequest::PublishFile { node_name, path } => {
             handle_publish_file(&node_name, path, context).await
@@ -113,13 +114,43 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         DaemonRequest::GetProviders { node_name, id } => {
             handle_get_providers(node_name, id, context).await
         }
+        DaemonRequest::GetPeerId { node_name } => handle_get_peer_id(node_name, context).await,
     }
 }
 
-async fn handle_new_node(name: String, context: &AppContext) -> DaemonResult {
+async fn handle_get_peer_id(node_name: String, context: &AppContext) -> DaemonResult {
+    let node = context
+        .node_manager
+        .ask(node::manager::GetNode { name: node_name })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to get peer id"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    let peer_id = node
+        .ask(node::GetPeerId)
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to get peer id"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    Ok(DaemonResponse::PeerId {
+        id: peer_id.to_base58(),
+    })
+}
+
+async fn handle_new_node(
+    name: String,
+    id_seed: Option<String>,
+    context: &AppContext,
+) -> DaemonResult {
+    let keypair = match id_seed {
+        Some(seed) => liberum_core::node_keypair_from_seed(&seed),
+        None => Keypair::generate_ed25519(),
+    };
     let node = Node::builder()
         .name(name)
-        .keypair(Keypair::generate_ed25519())
+        .keypair(keypair)
         .build()
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 

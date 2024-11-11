@@ -3,7 +3,7 @@ use std::{path::Path, str::FromStr};
 use anyhow::Result;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use tracing::error;
+use tracing::{debug, error};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeConfig {
@@ -20,7 +20,9 @@ impl NodeConfig {
     }
 
     pub async fn save(&self, path: &Path) -> Result<()> {
-        tokio::fs::write(path, serde_json::to_string(&self)?)
+        let content = serde_json::to_string(&self)?;
+        error!("SAVING CONFIG: {content}");
+        tokio::fs::write(path, content)
             .await
             .inspect_err(|e| error!(err = e.to_string(), "could not write node config"))?;
 

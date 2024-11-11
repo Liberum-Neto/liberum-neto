@@ -2,7 +2,7 @@ pub mod codec;
 pub mod node_config;
 pub mod types;
 
-use libp2p::futures::StreamExt;
+use libp2p::{futures::StreamExt, PeerId};
 use node_config::NodeConfig;
 use std::path::{Path, PathBuf};
 use tokio::fs::File;
@@ -23,15 +23,39 @@ use thiserror::Error;
 /// Messages that can be sent from the UI to the daemon
 #[derive(Serialize, Deserialize, Debug)]
 pub enum DaemonRequest {
-    NewNode { name: String },
-    StartNode { name: String },
-    GetNodeConfig { name: String },
-    OverwriteNodeConfig { name: String, new_cfg: NodeConfig },
-    StopNode { name: String },
+    NewNode {
+        node_name: String,
+        id_seed: Option<String>,
+    },
+    StartNode {
+        node_name: String,
+    },
+    GetNodeConfig {
+        node_name: String,
+    },
+    OverwriteNodeConfig {
+        node_name: String,
+        new_cfg: NodeConfig,
+    },
+    StopNode {
+        node_name: String,
+    },
     ListNodes,
-    PublishFile { node_name: String, path: PathBuf },
-    DownloadFile { node_name: String, id: String },
-    GetProviders { node_name: String, id: String },
+    PublishFile {
+        node_name: String,
+        path: PathBuf,
+    },
+    DownloadFile {
+        node_name: String,
+        id: String,
+    },
+    GetProviders {
+        node_name: String,
+        id: String,
+    },
+    GetPeerId {
+        node_name: String,
+    },
 }
 
 /// Messages that are sent from the daemon as a reponse
@@ -49,6 +73,7 @@ pub enum DaemonResponse {
     FilePublished { id: String },
     Providers { ids: Vec<String> },
     FileDownloaded { data: Vec<u8> }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
+    PeerId { id: String },
 }
 
 /// Errors that can be returned by the daemon
@@ -128,4 +153,17 @@ pub fn str_to_file_id(s: &str) -> Result<libp2p::kad::RecordKey> {
 }
 pub fn file_id_to_str(id: libp2p::kad::RecordKey) -> String {
     bs58::encode(id.to_vec()).into_string()
+}
+
+pub fn node_keypair_from_seed(seed: &str) -> libp2p::identity::Keypair {
+    let mut id_buf = [0u8; 32];
+    let bytes = blake3::hash(seed.as_bytes()).as_bytes().to_vec(); // hash so that the seed can be of any length
+    let bytes = &bytes[..bytes.len().min(32)]; // truncate to 32 bytes, copy_from_slice panics if the lengths are different
+    id_buf[..bytes.len()].copy_from_slice(bytes); // copy the bytes to the buffer
+    libp2p::identity::Keypair::ed25519_from_bytes(id_buf).unwrap()
+}
+
+pub fn peer_id_from_seed(seed: &str) -> libp2p::PeerId {
+    let key = node_keypair_from_seed(seed);
+    PeerId::from_public_key(&key.public())
 }
