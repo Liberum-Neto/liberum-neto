@@ -98,7 +98,7 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
             name: node_name,
             new_cfg,
         } => handle_overwrite_node_config(node_name, new_cfg, context).await,
-        DaemonRequest::StopNode { name: node_name } => handle_stop_nodes(node_name, context).await,
+        DaemonRequest::StopNode { name: node_name } => handle_stop_node(node_name, context).await,
         DaemonRequest::ListNodes => handle_list_nodes(context).await,
         DaemonRequest::PublishFile { node_name, path } => {
             handle_publish_file(&node_name, path, context).await
@@ -184,7 +184,7 @@ async fn handle_overwrite_node_config(
     Ok(DaemonResponse::NodeConfigUpdated)
 }
 
-async fn handle_stop_nodes(name: String, context: &AppContext) -> DaemonResult {
+async fn handle_stop_node(name: String, context: &AppContext) -> DaemonResult {
     let resp = context
         .node_manager
         .ask(node::manager::StopNode { name })
