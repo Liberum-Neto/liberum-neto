@@ -61,6 +61,10 @@ pub enum DaemonRequest {
         peer_id: String,
         addr: String,
     },
+    PublishFile {
+        node_name: String,
+        path: PathBuf,
+    },
 }
 
 /// Messages that are sent from the daemon as a reponse
@@ -80,6 +84,7 @@ pub enum DaemonResponse {
     FileDownloaded { data: Vec<u8> }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
     PeerId { id: String },
     Dialed,
+    FilePublished { id: String },
 }
 
 /// Errors that can be returned by the daemon

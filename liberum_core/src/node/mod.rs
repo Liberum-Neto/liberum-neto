@@ -11,7 +11,7 @@ use liberum_core::str_to_file_id;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{self, PathBuf};
 use std::str::FromStr;
 use std::{fmt, path::Path};
 use swarm_runner::messages::SwarmRunnerMessage;
@@ -200,6 +200,46 @@ impl Node {
                 .await?;
 
             return recv.await?.map_err(|e| e.into());
+        }
+        Err(anyhow!("Swarm sender is None"))
+    }
+
+    #[message]
+    pub async fn publish_file(&mut self, path: PathBuf) -> Result<()> {
+        debug!("Node got PublishFile");
+        if let Some(sender) = &mut self.swarm_sender {
+            let id = liberum_core::get_file_id(&path).await.map_err(|e| {
+                error!(err = e.to_string(), "Failed to hash file");
+                e
+            })?;
+            let (send, recv) = oneshot::channel();
+
+            // The file has to be read to the memory to be published. There is no other way without
+            // a new behaviour kademlia could talk to, which would provide streams of data.
+            // (Maybe could be implemented on the existing request_response if it would be generalised more?)
+            let data = tokio::fs::read(&path).await.map_err(|e| {
+                error!(err = e.to_string(), "Failed to read file");
+                e
+            })?;
+
+            let record = libp2p::kad::Record {
+                key: id.clone(),
+                value: data,
+                publisher: Some(PeerId::from(self.keypair.public())),
+                expires: None,
+            };
+
+            sender
+                .send(SwarmRunnerMessage::PublishFile {
+                    record,
+                    response_sender: send,
+                })
+                .await?;
+
+            return match recv.await {
+                Ok(r) => r,
+                Err(e) => Err(e.into()),
+            };
         }
         Err(anyhow!("Swarm sender is None"))
     }
