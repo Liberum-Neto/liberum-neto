@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use tokio::sync::oneshot;
 use tracing::{debug, info};
+use tracing_subscriber::field::debug;
 
 pub enum SwarmRunnerError {}
 
@@ -75,7 +76,7 @@ impl SwarmContext {
                         .behaviour_mut()
                         .kademlia
                         .add_address(&peer_id, peer_addr.clone());
-                    match self.swarm.dial(peer_addr.with(Protocol::P2p(peer_id))) {
+                    match self.swarm.dial(peer_addr) {
                         Ok(()) => {
                             entry.insert(response_sender);
                         }

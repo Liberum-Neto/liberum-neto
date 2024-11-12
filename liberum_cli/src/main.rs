@@ -39,6 +39,7 @@ enum Command {
     GetProviders(GetProviders),
     DownloadFile(DownloadFile),
     GetPeerID(GetPeerID),
+    Dial(Dial),
 }
 
 #[derive(Parser)]
@@ -120,6 +121,16 @@ struct GetPeerID {
     node_name: String,
 }
 
+#[derive(Parser)]
+struct Dial {
+    #[arg()]
+    node_name: String,
+    #[arg()]
+    peer_id: String,
+    #[arg()]
+    addr: String,
+}
+
 #[derive(Tabled)]
 struct NodeInfoRow {
     pub name: String,
@@ -167,6 +178,7 @@ async fn handle_command(cmd: Command, req: RequestSender, res: ReseponseReceiver
         Command::DownloadFile(cmd) => handle_download_file(cmd, req, res).await,
         Command::GetProviders(cmd) => handle_get_providers(cmd, req, res).await,
         Command::GetPeerID(cmd) => handle_get_peer_id(cmd, req, res).await,
+        Command::Dial(cmd) => handle_dial(cmd, req, res).await,
     }
 }
 
@@ -419,6 +431,18 @@ async fn handle_get_peer_id(
     }
 
     Ok(())
+}
+
+async fn handle_dial(cmd: Dial, req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
+    req.send(DaemonRequest::Dial {
+        node_name: cmd.node_name,
+        peer_id: cmd.peer_id,
+        addr: cmd.addr,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    handle_response(&mut res).await
 }
 
 async fn handle_response(

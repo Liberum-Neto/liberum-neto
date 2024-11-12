@@ -56,6 +56,11 @@ pub enum DaemonRequest {
     GetPeerId {
         node_name: String,
     },
+    Dial {
+        node_name: String,
+        peer_id: String,
+        addr: String,
+    },
 }
 
 /// Messages that are sent from the daemon as a reponse
@@ -74,6 +79,7 @@ pub enum DaemonResponse {
     Providers { ids: Vec<String> },
     FileDownloaded { data: Vec<u8> }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
     PeerId { id: String },
+    Dialed,
 }
 
 /// Errors that can be returned by the daemon
