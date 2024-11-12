@@ -25,11 +25,31 @@ struct EventHandler {
     to_daemon_sender: Sender<DaemonRequest>,
     from_daemon_receiver: Receiver<DaemonResult>,
 }
-
 struct MyApp {
+    current_view: Box<dyn AppView>,
     system_state: Arc<Mutex<Option<SystemState>>>,
     event_handler: EventHandler,
+}
+
+trait AppView {
+    fn draw(&mut self, ctx: ViewContext) -> ViewAction;
+}
+
+enum ViewAction {
+    Stay,
+    SwitchView { view: Box<dyn AppView> },
+}
+
+#[derive(Default)]
+struct NodesListView {
     create_node_name: String,
+}
+
+struct ViewContext<'a> {
+    system_state: Arc<Mutex<Option<SystemState>>>,
+    event_handler: &'a mut EventHandler,
+    egui_ctx: &'a egui::Context,
+    egui_frame: &'a mut eframe::Frame,
 }
 
 impl EventHandler {
@@ -205,19 +225,32 @@ impl SystemObserver {
 impl MyApp {
     fn new(system_state: Arc<Mutex<Option<SystemState>>>, event_handler: EventHandler) -> Self {
         Self {
+            current_view: Box::new(NodesListView::default()),
             system_state,
             event_handler,
-            create_node_name: String::new(),
         }
     }
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
-        let state = self.system_state.lock().unwrap();
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        let view_ctx = ViewContext {
+            system_state: self.system_state.clone(),
+            event_handler: &mut self.event_handler,
+            egui_ctx: ctx,
+            egui_frame: frame,
+        };
+
+        self.current_view.draw(view_ctx);
+    }
+}
+
+impl AppView for NodesListView {
+    fn draw(&mut self, ctx: ViewContext) -> ViewAction {
+        let state = ctx.system_state.lock().unwrap();
         let state = (*state).clone();
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ctx.egui_ctx, |ui| {
             let state = match state {
                 Some(s) => s,
                 None => {
@@ -231,8 +264,8 @@ impl eframe::App for MyApp {
                 ui.text_edit_singleline(&mut self.create_node_name);
 
                 if ui.button("Create").clicked() {
-                    self.event_handler
-                        .create_node(&self.create_node_name)
+                    ctx.event_handler
+                        .create_node(&mut self.create_node_name)
                         .unwrap();
                 }
             });
@@ -252,15 +285,17 @@ impl eframe::App for MyApp {
                     });
 
                     if ui.button("Run").clicked() {
-                        let _ = self.event_handler.run_node(&n.name);
+                        let _ = ctx.event_handler.run_node(&n.name);
                     }
 
                     if ui.button("Stop").clicked() {
-                        let _ = self.event_handler.stop_node(&n.name);
+                        let _ = ctx.event_handler.stop_node(&n.name);
                     }
                 });
             })
         });
+
+        ViewAction::Stay
     }
 }
 
