@@ -35,7 +35,7 @@ enum Command {
     ConfigNode(ConfigNode),
     ListNodes,
     StopNode(StopNode),
-    PublishFile(PublishFile),
+    ProvideFile(ProvideFile),
     GetProviders(GetProviders),
     DownloadFile(DownloadFile),
     GetPeerID(GetPeerID),
@@ -92,7 +92,7 @@ struct AddExternalAddr {
 }
 
 #[derive(Parser)]
-struct PublishFile {
+struct ProvideFile {
     #[arg()]
     node_name: String,
     #[arg()]
@@ -174,7 +174,7 @@ async fn handle_command(cmd: Command, req: RequestSender, res: ReseponseReceiver
         Command::ConfigNode(cmd) => handle_config_node(cmd, req, res).await,
         Command::ListNodes => handle_list_nodes(req, res).await,
         Command::StopNode(cmd) => handle_stop_node(cmd, req, res).await,
-        Command::PublishFile(cmd) => handle_publish_file(cmd, req, res).await,
+        Command::ProvideFile(cmd) => handle_provide_file(cmd, req, res).await,
         Command::DownloadFile(cmd) => handle_download_file(cmd, req, res).await,
         Command::GetProviders(cmd) => handle_get_providers(cmd, req, res).await,
         Command::GetPeerID(cmd) => handle_get_peer_id(cmd, req, res).await,
@@ -343,15 +343,15 @@ async fn handle_stop_node(
     handle_response(&mut res).await
 }
 
-async fn handle_publish_file(
-    cmd: PublishFile,
+async fn handle_provide_file(
+    cmd: ProvideFile,
     req: RequestSender,
     mut res: ReseponseReceiver,
 ) -> Result<()> {
-    debug!(path = format!("{:?}", &cmd.path), "Publishing file");
+    debug!(path = format!("{:?}", &cmd.path), "Providing file");
     let path = std::path::absolute(&cmd.path).expect("Path to be converted into absolute path");
 
-    req.send(DaemonRequest::PublishFile {
+    req.send(DaemonRequest::ProvideFile {
         node_name: cmd.node_name,
         path,
     })

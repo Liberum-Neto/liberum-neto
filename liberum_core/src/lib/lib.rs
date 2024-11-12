@@ -41,7 +41,7 @@ pub enum DaemonRequest {
         node_name: String,
     },
     ListNodes,
-    PublishFile {
+    ProvideFile {
         node_name: String,
         path: PathBuf,
     },
@@ -75,7 +75,7 @@ pub enum DaemonResponse {
     NodeConfigUpdated,
     NodeStopped,
     NodeList(Vec<NodeInfo>),
-    FilePublished { id: String },
+    FileProvided { id: String },
     Providers { ids: Vec<String> },
     FileDownloaded { data: Vec<u8> }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
     PeerId { id: String },

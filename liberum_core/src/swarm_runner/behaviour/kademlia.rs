@@ -19,13 +19,13 @@ impl SwarmContext {
                 info!(
                     node = self.node.name,
                     id = format!("{id:?}"),
-                    "Published file"
+                    "Started providing file"
                 );
                 let sender = self.behaviour.pending_start_providing.remove(&id);
 
                 if let Some(sender) = sender {
                     // Node is waiting on its oneshot for this message to know
-                    // that the file was published
+                    // that the file was started being proovided
                     let _ = sender.send(());
                 } else {
                     debug!(qid = format!("{id}"), "Channel closed");

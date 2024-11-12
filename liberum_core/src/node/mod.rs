@@ -100,11 +100,11 @@ impl Node {
         Err(anyhow!("Could not get providers"))
     }
 
-    /// Message called on the node from the daemon to publish a file.
+    /// Message called on the node from the daemon to provide a file.
     /// Calculates the ID of the file and passes it to the swarm. Responds with
     /// the ID of the file using which it can be found.
     #[message]
-    pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
+    pub async fn provide_file(&mut self, path: PathBuf) -> Result<String> {
         let id = liberum_core::get_file_id(&path)
             .await
             .map_err(|e| error!(err = e.to_string(), "Failed to hash file"))
@@ -117,7 +117,7 @@ impl Node {
         let sender = self.swarm_sender.as_mut().unwrap(); // won't panic due to the if let above
         let (resp_send, resp_recv) = oneshot::channel();
         sender
-            .send(SwarmRunnerMessage::PublishFile {
+            .send(SwarmRunnerMessage::ProvideFile {
                 id: id.clone(),
                 path,
                 response_sender: resp_send,
