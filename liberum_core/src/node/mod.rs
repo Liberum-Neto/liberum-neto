@@ -199,10 +199,7 @@ impl Node {
                 })
                 .await?;
 
-            return match recv.await {
-                Ok(r) => r,
-                Err(e) => Err(e.into()),
-            };
+            return recv.await?.map_err(|e| e.into());
         }
         Err(anyhow!("Swarm sender is None"))
     }
