@@ -1,7 +1,12 @@
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use egui::Color32;
+use egui_file::FileDialog;
 use liberum_core::{types::NodeInfo, DaemonRequest, DaemonResponse, DaemonResult};
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -47,6 +52,9 @@ struct NodesListView {
 
 struct NodeView {
     node_name: String,
+    file_to_send_path: Option<PathBuf>,
+    file_to_send_dialog: Option<FileDialog>,
+    status_line: String,
 }
 
 struct ViewContext<'a> {
@@ -142,6 +150,40 @@ impl EventHandler {
                 Some(r) => info!(response = format!("{r:?}"), "Daemon responds: {:?}", r),
                 None => {
                     error!("Failed to receive response");
+                }
+            }
+
+            anyhow::Ok(())
+        })?;
+
+        Ok(())
+    }
+
+    fn publish_file(&mut self, node_name: &str, file_path: &Path) -> Result<()> {
+        debug!(
+            name = node_name.to_string(),
+            path = file_path.display().to_string(),
+            "Trying to publish file"
+        );
+
+        self.rt.block_on(async {
+            self.to_daemon_sender
+                .send(DaemonRequest::PublishFile {
+                    node_name: node_name.to_string(),
+                    path: file_path.to_path_buf(),
+                })
+                .await?;
+
+            match self.from_daemon_receiver.recv().await {
+                Some(r) => {
+                    if let Err(e) = r {
+                        error!(err = e.to_string(), "Error ocurred while publishing file!");
+                        bail!("Error occured while publishing file: {}", e.to_string());
+                    }
+                }
+                None => {
+                    error!("Failed to receive response");
+                    bail!("Failed to receive response from the daemon");
                 }
             }
 
@@ -332,7 +374,9 @@ impl AppView for NodeView {
                 }
             };
 
-            let node_infos = system_state.node_infos.into_iter()
+            let node_infos = system_state
+                .node_infos
+                .into_iter()
                 .filter(|n| n.name == self.node_name)
                 .collect::<Vec<NodeInfo>>();
 
@@ -344,30 +388,21 @@ impl AppView for NodeView {
                     return;
                 }
             };
-            
+
             ui.heading(format!("Node {}", node_info.name));
-            
+
             ui.horizontal(|ui| {
-                ui.colored_label(
-                    Color32::from_rgb(0, 100, 200),
-                    "Name:"
-                );
+                ui.colored_label(Color32::from_rgb(0, 100, 200), "Name:");
                 ui.label(&node_info.name);
             });
-            
+
             ui.horizontal(|ui| {
-                ui.colored_label(
-                    Color32::from_rgb(0, 100, 200),
-                    "Is running:"
-                );
+                ui.colored_label(Color32::from_rgb(0, 100, 200), "Is running:");
                 ui.label(&node_info.is_running.to_string());
             });
 
             ui.horizontal(|ui| {
-                ui.colored_label(
-                    Color32::from_rgb(0, 100, 200),
-                    "Addresses:"
-                );
+                ui.colored_label(Color32::from_rgb(0, 100, 200), "Addresses:");
 
                 ui.vertical(|ui| {
                     for addr in &node_info.addresses {
@@ -393,12 +428,62 @@ impl AppView for NodeView {
             });
 
             ui.add_space(20.0);
+            ui.heading("Send files");
+
+            let file_selected_text = self
+                .file_to_send_path
+                .as_ref()
+                .map(|path| path.to_str().unwrap_or("Unprintable path"))
+                .unwrap_or("No file selected");
+
+            ui.horizontal(|ui| {
+                ui.colored_label(Color32::from_rgb(0, 100, 200), "File selected:");
+                ui.label(file_selected_text);
+            });
+
+            ui.horizontal(|ui| {
+                if ui.button("Select file").clicked() {
+                    let filter = Box::new({ move |path: &Path| -> bool { path.is_file() } });
+                    let mut dialog = FileDialog::open_file(self.file_to_send_path.clone())
+                        .show_files_filter(filter);
+                    dialog.open();
+                    self.file_to_send_dialog = Some(dialog);
+                }
+
+                if let Some(dialog) = &mut self.file_to_send_dialog {
+                    if dialog.show(ctx.egui_ctx).selected() {
+                        if let Some(file_path) = dialog.path() {
+                            self.file_to_send_path = Some(file_path.to_path_buf());
+                        }
+                    }
+                }
+
+                if ui.button("Publish file").clicked() {
+                    match &self.file_to_send_path {
+                        Some(path) => {
+                            let result = ctx.event_handler.publish_file(&self.node_name, &path);
+                            match result {
+                                Ok(_) => self.status_line = "File published!".to_string(),
+                                Err(e) => self.status_line = e.to_string(),
+                            };
+                        }
+                        None => {
+                            self.status_line = "Error: No file selected".to_string();
+                        }
+                    }
+                }
+            });
+
+            ui.add_space(20.0);
 
             if ui.button("Back to nodes list").clicked() {
                 action = ViewAction::SwitchView {
                     view: Box::new(NodesListView::default()),
                 }
             }
+
+            ui.add_space(20.0);
+            ui.label(&self.status_line);
         });
 
         action
@@ -406,9 +491,12 @@ impl AppView for NodeView {
 }
 
 impl NodeView {
-    fn new(text: &str) -> Self {
+    fn new(node_name: &str) -> Self {
         Self {
-            node_name: text.to_string(),
+            node_name: node_name.to_string(),
+            file_to_send_path: None,
+            file_to_send_dialog: None,
+            status_line: String::new(),
         }
     }
 }
