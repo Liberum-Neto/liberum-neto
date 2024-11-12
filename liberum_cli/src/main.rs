@@ -40,6 +40,7 @@ enum Command {
     DownloadFile(DownloadFile),
     GetPeerID(GetPeerID),
     Dial(Dial),
+    PublishFile(PublishFile),
 }
 
 #[derive(Parser)]
@@ -131,6 +132,14 @@ struct Dial {
     addr: String,
 }
 
+#[derive(Parser)]
+struct PublishFile {
+    #[arg()]
+    node_name: String,
+    #[arg()]
+    path: PathBuf,
+}
+
 #[derive(Tabled)]
 struct NodeInfoRow {
     pub name: String,
@@ -179,6 +188,7 @@ async fn handle_command(cmd: Command, req: RequestSender, res: ReseponseReceiver
         Command::GetProviders(cmd) => handle_get_providers(cmd, req, res).await,
         Command::GetPeerID(cmd) => handle_get_peer_id(cmd, req, res).await,
         Command::Dial(cmd) => handle_dial(cmd, req, res).await,
+        Command::PublishFile(cmd) => handle_publish_file(cmd, req, res).await,
     }
 }
 
@@ -443,6 +453,33 @@ async fn handle_dial(cmd: Dial, req: RequestSender, mut res: ReseponseReceiver) 
     .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
     handle_response(&mut res).await
+}
+
+async fn handle_publish_file(
+    cmd: PublishFile,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    req.send(DaemonRequest::PublishFile {
+        node_name: cmd.node_name,
+        path: cmd.path,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    let resp = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))?;
+    match resp {
+        Ok(DaemonResponse::FilePublished { id }) => {
+            info!(id = id, "File published");
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
+        }
+    }
+    Ok(())
 }
 
 async fn handle_response(

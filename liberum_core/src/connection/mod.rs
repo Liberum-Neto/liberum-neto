@@ -121,6 +121,9 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
             peer_id,
             addr,
         } => handle_dial(node_name, peer_id, addr, context).await,
+        DaemonRequest::PublishFile { node_name, path } => {
+            handle_publish_file(node_name, path, context).await
+        }
     }
 }
 
@@ -383,4 +386,29 @@ async fn handle_dial(
 
     debug!("Dialed peer: {}", peer_id);
     Ok(DaemonResponse::Dialed)
+}
+
+async fn handle_publish_file(
+    node_name: String,
+    path: PathBuf,
+    context: &AppContext,
+) -> DaemonResult {
+    let node = context
+        .node_manager
+        .ask(GetNode {
+            name: node_name.to_string(),
+        })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish file"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    let resp_id = node
+        .ask(ProvideFile { path })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish file"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    Ok(DaemonResponse::FilePublished { id: resp_id })
 }

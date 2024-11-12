@@ -33,12 +33,16 @@ pub enum SwarmRunnerMessage {
     ProvideFile {
         id: kad::RecordKey,
         path: PathBuf,
-        response_sender: oneshot::Sender<()>,
+        response_sender: oneshot::Sender<Result<()>>,
     },
     DownloadFile {
         id: kad::RecordKey,
         peer: PeerId,
         response_sender: oneshot::Sender<Vec<u8>>,
+    },
+    PublishFile {
+        record: kad::Record,
+        response_sender: oneshot::Sender<Result<()>>,
     },
 }
 
@@ -65,6 +69,7 @@ impl SwarmContext {
                 let _ = resp.send(Ok(message));
                 Ok(false)
             }
+
             // Dial a peer and remember it as a contact
             SwarmRunnerMessage::Dial {
                 peer_id,
@@ -136,6 +141,7 @@ impl SwarmContext {
                     .insert(query_id, response_sender);
                 Ok(false)
             }
+
             SwarmRunnerMessage::DownloadFile {
                 id,
                 peer,
@@ -148,6 +154,22 @@ impl SwarmContext {
                     .send_request(&peer, file_share::FileRequest { id: id.to_vec() });
                 self.behaviour
                     .pending_download_file
+                    .insert(qid, response_sender);
+                Ok(false)
+            }
+
+            SwarmRunnerMessage::PublishFile {
+                record,
+                response_sender,
+            } => {
+                let qid = self
+                    .swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .put_record(record, kad::Quorum::One)?; // at least one node MUST store to consider it successful, counting itself
+
+                self.behaviour
+                    .pending_publish_file
                     .insert(qid, response_sender);
                 Ok(false)
             }
