@@ -20,20 +20,24 @@ pub struct LiberumNetoBehavior {
     pub file_share: request_response::cbor::Behaviour<FileRequest, FileResponse>,
 }
 pub struct BehaviourContext {
-    pub published: HashMap<kad::RecordKey, SharedResource>,
-    pub pending_start_providing: HashMap<kad::QueryId, oneshot::Sender<()>>,
+    pub providing: HashMap<kad::RecordKey, SharedResource>,
+    pub pending_start_providing: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
+    pub pending_publish_file: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
     pub pending_get_providers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
     pub pending_download_file: HashMap<OutboundRequestId, oneshot::Sender<Vec<u8>>>,
+    pub pending_download_file_dht: HashMap<kad::QueryId, oneshot::Sender<Vec<u8>>>,
     pub pending_dial: HashMap<PeerId, oneshot::Sender<Result<()>>>,
 }
 
 impl BehaviourContext {
     pub fn new() -> Self {
         BehaviourContext {
-            published: HashMap::new(),
+            providing: HashMap::new(),
             pending_start_providing: HashMap::new(),
+            pending_publish_file: HashMap::new(),
             pending_get_providers: HashMap::new(),
             pending_download_file: HashMap::new(),
+            pending_download_file_dht: HashMap::new(),
             pending_dial: HashMap::new(),
         }
     }

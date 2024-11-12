@@ -35,11 +35,13 @@ enum Command {
     ConfigNode(ConfigNode),
     ListNodes,
     StopNode(StopNode),
-    PublishFile(PublishFile),
+    ProvideFile(ProvideFile),
     GetProviders(GetProviders),
     DownloadFile(DownloadFile),
+    DownloadFileRR(DownloadFileRequestResponse),
     GetPeerID(GetPeerID),
     Dial(Dial),
+    PublishFile(PublishFile),
 }
 
 #[derive(Parser)]
@@ -92,7 +94,7 @@ struct AddExternalAddr {
 }
 
 #[derive(Parser)]
-struct PublishFile {
+struct ProvideFile {
     #[arg()]
     node_name: String,
     #[arg()]
@@ -116,6 +118,14 @@ struct DownloadFile {
 }
 
 #[derive(Parser)]
+struct DownloadFileRequestResponse {
+    #[arg()]
+    node_name: String,
+    #[arg()]
+    id: String,
+}
+
+#[derive(Parser)]
 struct GetPeerID {
     #[arg()]
     node_name: String,
@@ -129,6 +139,14 @@ struct Dial {
     peer_id: String,
     #[arg()]
     addr: String,
+}
+
+#[derive(Parser)]
+struct PublishFile {
+    #[arg()]
+    node_name: String,
+    #[arg()]
+    path: PathBuf,
 }
 
 #[derive(Tabled)]
@@ -174,11 +192,13 @@ async fn handle_command(cmd: Command, req: RequestSender, res: ReseponseReceiver
         Command::ConfigNode(cmd) => handle_config_node(cmd, req, res).await,
         Command::ListNodes => handle_list_nodes(req, res).await,
         Command::StopNode(cmd) => handle_stop_node(cmd, req, res).await,
-        Command::PublishFile(cmd) => handle_publish_file(cmd, req, res).await,
+        Command::ProvideFile(cmd) => handle_provide_file(cmd, req, res).await,
         Command::DownloadFile(cmd) => handle_download_file(cmd, req, res).await,
+        Command::DownloadFileRR(cmd) => handle_download_file_request_response(cmd, req, res).await,
         Command::GetProviders(cmd) => handle_get_providers(cmd, req, res).await,
         Command::GetPeerID(cmd) => handle_get_peer_id(cmd, req, res).await,
         Command::Dial(cmd) => handle_dial(cmd, req, res).await,
+        Command::PublishFile(cmd) => handle_publish_file(cmd, req, res).await,
     }
 }
 
@@ -343,15 +363,15 @@ async fn handle_stop_node(
     handle_response(&mut res).await
 }
 
-async fn handle_publish_file(
-    cmd: PublishFile,
+async fn handle_provide_file(
+    cmd: ProvideFile,
     req: RequestSender,
     mut res: ReseponseReceiver,
 ) -> Result<()> {
-    debug!(path = format!("{:?}", &cmd.path), "Publishing file");
+    debug!(path = format!("{:?}", &cmd.path), "Providing file");
     let path = std::path::absolute(&cmd.path).expect("Path to be converted into absolute path");
 
-    req.send(DaemonRequest::PublishFile {
+    req.send(DaemonRequest::ProvideFile {
         node_name: cmd.node_name,
         path,
     })
@@ -367,6 +387,35 @@ async fn handle_download_file(
     mut res: ReseponseReceiver,
 ) -> Result<()> {
     req.send(DaemonRequest::DownloadFile {
+        node_name: cmd.node_name,
+        id: cmd.id,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    let response = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))??;
+
+    match response {
+        DaemonResponse::FileDownloaded { data } => {
+            println!("{}", String::from_utf8(data)?);
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_download_file_request_response(
+    cmd: DownloadFileRequestResponse,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    req.send(DaemonRequest::DownloadFileRequestResponse {
         node_name: cmd.node_name,
         id: cmd.id,
     })
@@ -443,6 +492,33 @@ async fn handle_dial(cmd: Dial, req: RequestSender, mut res: ReseponseReceiver) 
     .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
     handle_response(&mut res).await
+}
+
+async fn handle_publish_file(
+    cmd: PublishFile,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    req.send(DaemonRequest::PublishFile {
+        node_name: cmd.node_name,
+        path: cmd.path,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    let resp = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))?;
+    match resp {
+        Ok(DaemonResponse::FilePublished { id }) => {
+            info!(id = id, "File published");
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
+        }
+    }
+    Ok(())
 }
 
 async fn handle_response(

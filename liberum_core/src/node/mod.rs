@@ -100,11 +100,11 @@ impl Node {
         Err(anyhow!("Could not get providers"))
     }
 
-    /// Message called on the node from the daemon to publish a file.
+    /// Message called on the node from the daemon to provide a file.
     /// Calculates the ID of the file and passes it to the swarm. Responds with
     /// the ID of the file using which it can be found.
     #[message]
-    pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
+    pub async fn provide_file(&mut self, path: PathBuf) -> Result<String> {
         let id = liberum_core::get_file_id(&path)
             .await
             .map_err(|e| error!(err = e.to_string(), "Failed to hash file"))
@@ -117,13 +117,13 @@ impl Node {
         let sender = self.swarm_sender.as_mut().unwrap(); // won't panic due to the if let above
         let (resp_send, resp_recv) = oneshot::channel();
         sender
-            .send(SwarmRunnerMessage::PublishFile {
+            .send(SwarmRunnerMessage::ProvideFile {
                 id: id.clone(),
                 path,
                 response_sender: resp_send,
             })
             .await?;
-        resp_recv.await?;
+        resp_recv.await??;
         let id_str = liberum_core::file_id_to_str(id);
         Ok(id_str)
     }
@@ -131,6 +131,28 @@ impl Node {
     /// Message called on the node from the daemon to download a file of a given ID.
     #[message]
     pub async fn download_file(&mut self, id: String) -> Result<Vec<u8>> {
+        let id_str = id;
+        let id = liberum_core::str_to_file_id(&id_str)?;
+        if let None = self.swarm_sender {
+            error!("Swarm is None!");
+            return Err(anyhow!("Swarm is None!"));
+        }
+        let sender = self.swarm_sender.as_mut().unwrap(); // won't panic due to the if let above
+
+        let (resp_send, resp_recv) = oneshot::channel();
+        sender
+            .send(SwarmRunnerMessage::DownloadFileDHT {
+                id: id.clone(),
+                response_sender: resp_send,
+            })
+            .await?;
+
+        let file = resp_recv.await?;
+
+        Ok(file)
+    }
+    #[message]
+    pub async fn download_file_request_response(&mut self, id: String) -> Result<Vec<u8>> {
         let id_str = id;
         let id = liberum_core::str_to_file_id(&id_str)?;
         if let None = self.swarm_sender {
@@ -155,7 +177,7 @@ impl Node {
 
         for peer in &providers {
             let (file_sender, file_receiver) = oneshot::channel();
-            let result = sender.send(SwarmRunnerMessage::DownloadFile {
+            let result = sender.send(SwarmRunnerMessage::DownloadFileRequestResponse {
                 id: id.clone(),
                 peer: peer.clone(),
                 response_sender: file_sender,
@@ -200,6 +222,48 @@ impl Node {
                 .await?;
 
             return recv.await?.map_err(|e| e.into());
+        }
+        Err(anyhow!("Swarm sender is None"))
+    }
+
+    #[message]
+    pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
+        debug!("Node got PublishFile");
+        if let Some(sender) = &mut self.swarm_sender {
+            let id = liberum_core::get_file_id(&path).await.map_err(|e| {
+                error!(err = e.to_string(), "Failed to hash file");
+                e
+            })?;
+            let (send, recv) = oneshot::channel();
+
+            // The file has to be read to the memory to be published. There is no other way without
+            // a new behaviour kademlia could talk to, which would provide streams of data.
+            // (Maybe could be implemented on the existing request_response if it would be generalised more?)
+            let data = tokio::fs::read(&path).await.map_err(|e| {
+                error!(err = e.to_string(), "Failed to read file");
+                e
+            })?;
+
+            let record = libp2p::kad::Record {
+                key: id.clone(),
+                value: data,
+                publisher: Some(PeerId::from(self.keypair.public())),
+                expires: None,
+            };
+
+            sender
+                .send(SwarmRunnerMessage::PublishFile {
+                    record,
+                    response_sender: send,
+                })
+                .await?;
+
+            let id_str = liberum_core::file_id_to_str(id);
+
+            return match recv.await {
+                Ok(_r) => Ok(id_str),
+                Err(e) => Err(e.into()),
+            };
         }
         Err(anyhow!("Swarm sender is None"))
     }

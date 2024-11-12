@@ -2,7 +2,7 @@ pub mod codec;
 pub mod node_config;
 pub mod types;
 
-use libp2p::{futures::StreamExt, PeerId};
+use libp2p::futures::StreamExt;
 use node_config::NodeConfig;
 use std::path::{Path, PathBuf};
 use tokio::fs::File;
@@ -41,11 +41,15 @@ pub enum DaemonRequest {
         node_name: String,
     },
     ListNodes,
-    PublishFile {
+    ProvideFile {
         node_name: String,
         path: PathBuf,
     },
     DownloadFile {
+        node_name: String,
+        id: String,
+    },
+    DownloadFileRequestResponse {
         node_name: String,
         id: String,
     },
@@ -61,6 +65,10 @@ pub enum DaemonRequest {
         peer_id: String,
         addr: String,
     },
+    PublishFile {
+        node_name: String,
+        path: PathBuf,
+    },
 }
 
 /// Messages that are sent from the daemon as a reponse
@@ -75,11 +83,12 @@ pub enum DaemonResponse {
     NodeConfigUpdated,
     NodeStopped,
     NodeList(Vec<NodeInfo>),
-    FilePublished { id: String },
+    FileProvided { id: String },
     Providers { ids: Vec<String> },
     FileDownloaded { data: Vec<u8> }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
     PeerId { id: String },
     Dialed,
+    FilePublished { id: String },
 }
 
 /// Errors that can be returned by the daemon
