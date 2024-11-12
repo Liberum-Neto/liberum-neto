@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use file_share::*;
 use libp2p::{
-    kad::{self, QueryId},
+    kad,
     request_response::{self, OutboundRequestId},
     swarm::NetworkBehaviour,
     PeerId,

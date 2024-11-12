@@ -11,7 +11,7 @@ use liberum_core::str_to_file_id;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use std::collections::HashSet;
-use std::path::{self, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::{fmt, path::Path};
 use swarm_runner::messages::SwarmRunnerMessage;
@@ -261,7 +261,7 @@ impl Node {
             let id_str = liberum_core::file_id_to_str(id);
 
             return match recv.await {
-                Ok(r) => Ok(id_str),
+                Ok(_r) => Ok(id_str),
                 Err(e) => Err(e.into()),
             };
         }
