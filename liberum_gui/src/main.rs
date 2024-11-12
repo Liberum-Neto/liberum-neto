@@ -59,7 +59,7 @@ fn main() -> Result<()> {
     let update_loop_handle = system_observer.run_update_loop();
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
+        viewport: egui::ViewportBuilder::default(),
         ..Default::default()
     };
 
