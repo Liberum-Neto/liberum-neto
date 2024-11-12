@@ -32,7 +32,7 @@ impl MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        let view_ctx = ViewContext {
+        let mut view_ctx = ViewContext {
             system_state: self.system_state.clone(),
             event_handler: &mut self.event_handler,
             system_observer: self.system_observer.clone(),
@@ -40,11 +40,15 @@ impl eframe::App for MyApp {
             _egui_frame: frame,
         };
 
-        let action = self.current_view.draw(view_ctx);
+        let action = self.current_view.draw(&mut view_ctx);
 
         match action {
             ViewAction::Stay => {}
-            ViewAction::SwitchView { view } => self.current_view = view,
+            ViewAction::SwitchView { view } => {
+                self.current_view.teardown(&mut view_ctx);
+                self.current_view = view;
+                self.current_view.setup(&mut view_ctx);
+            }
         }
     }
 }

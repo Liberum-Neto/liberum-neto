@@ -14,7 +14,9 @@ use crate::system_observer::SystemObserver;
 use crate::{event_handler::EventHandler, system_observer::SystemState};
 
 pub trait AppView {
-    fn draw(&mut self, ctx: ViewContext) -> ViewAction;
+    fn setup(&mut self, _: &mut ViewContext) {}
+    fn draw(&mut self, ctx: &mut ViewContext) -> ViewAction;
+    fn teardown(&mut self, _: &mut ViewContext) {}
 }
 
 pub enum ViewAction {
