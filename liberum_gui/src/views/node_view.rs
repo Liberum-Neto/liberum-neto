@@ -179,7 +179,22 @@ impl NodeView {
         egui::Window::new("Configuration")
             .open(&mut self.config_window_opened)
             .show(ctx.egui_ctx, |ui| {
-                ui.label("some config options here");
+                let system_state = ctx.system_state.lock().unwrap();
+                let system_state = (*system_state).clone();
+                let system_state = match system_state {
+                    Some(s) => s,
+                    None => {
+                        ui.heading("Could not get system state");
+                        return;
+                    }
+                };
+
+                let node_config = system_state.node_configs.get(&self.node_name);
+
+                match node_config {
+                    Some(cfg) => ui.label("Config found"),
+                    None => ui.label("Config not found"),
+                };
             });
     }
 
@@ -204,10 +219,22 @@ impl NodeView {
 }
 
 impl AppView for NodeView {
-    fn draw(&mut self, mut ctx: ViewContext) -> ViewAction {
+    fn setup(&mut self, ctx: &mut ViewContext) {
+        ctx.system_observer
+            .borrow_mut()
+            .add_observed_config(&self.node_name);
+    }
+
+    fn draw(&mut self, mut ctx: &mut ViewContext) -> ViewAction {
         self.show_default_panel(&mut ctx);
         self.show_config_window(&mut ctx);
         self.show_node_window(&mut ctx);
         self.show_status_bar(&mut ctx)
+    }
+
+    fn teardown(&mut self, ctx: &mut ViewContext) {
+        ctx.system_observer
+            .borrow_mut()
+            .remove_observed_config(&self.node_name);
     }
 }

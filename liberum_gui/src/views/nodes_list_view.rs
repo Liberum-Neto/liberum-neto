@@ -8,7 +8,7 @@ pub struct NodesListView {
 }
 
 impl AppView for NodesListView {
-    fn draw(&mut self, ctx: ViewContext) -> ViewAction {
+    fn draw(&mut self, ctx: &mut ViewContext) -> ViewAction {
         let state = ctx.system_state.lock().unwrap();
         let state = (*state).clone();
         let mut action = ViewAction::Stay;

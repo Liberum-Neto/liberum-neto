@@ -57,6 +57,7 @@ impl SystemObserver {
     }
 
     pub fn add_observed_config(&mut self, name: &str) {
+        debug!(name = name.to_string(), "Adding observed config");
         self.observed_node_configs
             .lock()
             .unwrap()
@@ -64,6 +65,7 @@ impl SystemObserver {
     }
 
     pub fn remove_observed_config(&mut self, name: &str) {
+        debug!(name = name.to_string(), "Removing observed config");
         self.observed_node_configs.lock().unwrap().remove(name);
     }
 
