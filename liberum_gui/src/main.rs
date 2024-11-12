@@ -2,7 +2,6 @@ use std::{path::Path, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Result};
 use egui::Color32;
-use kameo::Reply;
 use liberum_core::{types::NodeInfo, DaemonRequest, DaemonResponse, DaemonResult};
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -54,7 +53,7 @@ struct ViewContext<'a> {
     system_state: Arc<Mutex<Option<SystemState>>>,
     event_handler: &'a mut EventHandler,
     egui_ctx: &'a egui::Context,
-    egui_frame: &'a mut eframe::Frame,
+    _egui_frame: &'a mut eframe::Frame,
 }
 
 impl EventHandler {
@@ -243,7 +242,7 @@ impl eframe::App for MyApp {
             system_state: self.system_state.clone(),
             event_handler: &mut self.event_handler,
             egui_ctx: ctx,
-            egui_frame: frame,
+            _egui_frame: frame,
         };
 
         let action = self.current_view.draw(view_ctx);
@@ -323,7 +322,77 @@ impl AppView for NodeView {
         let mut action = ViewAction::Stay;
 
         egui::CentralPanel::default().show(ctx.egui_ctx, |ui| {
-            ui.heading(&self.node_name);
+            let system_state = ctx.system_state.lock().unwrap();
+            let system_state = (*system_state).clone();
+            let system_state = match system_state {
+                Some(s) => s,
+                None => {
+                    ui.heading("Could not get system state");
+                    return;
+                }
+            };
+
+            let node_infos = system_state.node_infos.into_iter()
+                .filter(|n| n.name == self.node_name)
+                .collect::<Vec<NodeInfo>>();
+
+            let node_info = match node_infos.first() {
+                Some(n) => n,
+                None => {
+                    ui.heading("No node info available");
+                    ui.label("No such node found in the system");
+                    return;
+                }
+            };
+            
+            ui.heading(format!("Node {}", node_info.name));
+            
+            ui.horizontal(|ui| {
+                ui.colored_label(
+                    Color32::from_rgb(0, 100, 200),
+                    "Name:"
+                );
+                ui.label(&node_info.name);
+            });
+            
+            ui.horizontal(|ui| {
+                ui.colored_label(
+                    Color32::from_rgb(0, 100, 200),
+                    "Is running:"
+                );
+                ui.label(&node_info.is_running.to_string());
+            });
+
+            ui.horizontal(|ui| {
+                ui.colored_label(
+                    Color32::from_rgb(0, 100, 200),
+                    "Addresses:"
+                );
+
+                ui.vertical(|ui| {
+                    for addr in &node_info.addresses {
+                        ui.label(addr);
+                    }
+                });
+
+                if node_info.addresses.is_empty() {
+                    ui.label("No addresses");
+                }
+            });
+
+            ui.add_space(10.0);
+
+            ui.horizontal(|ui| {
+                if ui.button("Run").clicked() {
+                    let _ = ctx.event_handler.run_node(&node_info.name);
+                }
+
+                if ui.button("Stop").clicked() {
+                    let _ = ctx.event_handler.stop_node(&node_info.name);
+                }
+            });
+
+            ui.add_space(20.0);
 
             if ui.button("Back to nodes list").clicked() {
                 action = ViewAction::SwitchView {
