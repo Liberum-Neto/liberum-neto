@@ -2,7 +2,7 @@ pub mod event_handler;
 pub mod system_observer;
 pub mod views;
 
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use event_handler::EventHandler;
@@ -15,14 +15,16 @@ use tracing::debug;
 struct MyApp {
     current_view: Box<dyn AppView>,
     system_state: Arc<Mutex<Option<SystemState>>>,
+    system_observer: Rc<RefCell<SystemObserver>>,
     event_handler: EventHandler,
 }
 
 impl MyApp {
-    fn new(system_state: Arc<Mutex<Option<SystemState>>>, event_handler: EventHandler) -> Self {
+    fn new(system_observer: Rc<RefCell<SystemObserver>>, event_handler: EventHandler) -> Self {
         Self {
             current_view: Box::new(NodesListView::default()),
-            system_state,
+            system_state: system_observer.borrow().system_state.clone(),
+            system_observer: system_observer.clone(),
             event_handler,
         }
     }
@@ -33,6 +35,7 @@ impl eframe::App for MyApp {
         let view_ctx = ViewContext {
             system_state: self.system_state.clone(),
             event_handler: &mut self.event_handler,
+            system_observer: self.system_observer.clone(),
             egui_ctx: ctx,
             _egui_frame: frame,
         };
@@ -51,12 +54,12 @@ fn main() -> Result<()> {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
-    let mut system_observer = SystemObserver::new()?;
+    let system_observer = Rc::new(RefCell::new(SystemObserver::new()?));
     let event_handler = EventHandler::new()?;
-    let my_app = MyApp::new(system_observer.system_state.clone(), event_handler);
+    let my_app = MyApp::new(system_observer.clone(), event_handler);
 
     debug!("Running observer loop");
-    let update_loop_handle = system_observer.run_update_loop();
+    let update_loop_handle = system_observer.borrow_mut().run_update_loop();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default(),

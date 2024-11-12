@@ -1,5 +1,10 @@
-use liberum_core::types::NodeInfo;
-use std::{path::Path, sync::Arc, time::Duration};
+use liberum_core::{node_config::NodeConfig, types::NodeInfo};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::{anyhow, Result};
 use liberum_core::{DaemonRequest, DaemonResponse, DaemonResult};
@@ -11,6 +16,7 @@ use tracing::{debug, error};
 #[derive(Default, Clone)]
 pub struct SystemState {
     pub node_infos: Vec<NodeInfo>,
+    pub node_configs: HashMap<String, NodeConfig>,
 }
 
 pub struct SystemObserver {
@@ -18,6 +24,7 @@ pub struct SystemObserver {
     pub system_state: Arc<Mutex<Option<SystemState>>>,
     to_daemon_sender: Option<Sender<DaemonRequest>>,
     from_daemon_receiver: Option<Receiver<DaemonResult>>,
+    observed_node_configs: Arc<Mutex<HashSet<String>>>,
 }
 
 impl SystemObserver {
@@ -45,7 +52,19 @@ impl SystemObserver {
             system_state: Arc::new(Mutex::new(None)),
             to_daemon_sender: Some(to_daemon_sender),
             from_daemon_receiver: Some(from_daemon_receiver),
+            observed_node_configs: Arc::new(Mutex::new(HashSet::new())),
         })
+    }
+
+    pub fn add_observed_config(&mut self, name: &str) {
+        self.observed_node_configs
+            .lock()
+            .unwrap()
+            .insert(name.to_string());
+    }
+
+    pub fn remove_observed_config(&mut self, name: &str) {
+        self.observed_node_configs.lock().unwrap().remove(name);
     }
 
     pub fn run_update_loop(&mut self) -> tokio::task::JoinHandle<()> {
@@ -54,6 +73,7 @@ impl SystemObserver {
         let to_daemon_sender = self.to_daemon_sender.take().unwrap();
         let mut from_daemon_receiver = self.from_daemon_receiver.take().unwrap();
         let system_state = self.system_state.clone();
+        let observed_configs = self.observed_node_configs.clone();
 
         let update_loop_handle = self.rt.spawn(async move {
             loop {
@@ -79,10 +99,45 @@ impl SystemObserver {
                     _ => panic!("expected node list"),
                 };
 
-                system_state
+                let mut configs = HashMap::new();
+
+                debug!("Getting observed configs");
+
+                let config_node_names = observed_configs
                     .lock()
                     .unwrap()
-                    .replace(SystemState { node_infos: nodes });
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
+
+                for config_node_name in config_node_names {
+                    to_daemon_sender
+                        .send(DaemonRequest::GetNodeConfig {
+                            name: config_node_name.to_string(),
+                        })
+                        .await
+                        .expect("Failed to send message to the daemon");
+
+                    let node_config = from_daemon_receiver
+                        .recv()
+                        .await
+                        .expect("No response from the daemon")
+                        .expect("Daemon returned error");
+
+                    let node_config = match node_config {
+                        DaemonResponse::NodeConfig(config) => config,
+                        _ => panic!("expected node config"),
+                    };
+
+                    configs.insert(config_node_name.to_string(), node_config);
+                }
+
+                debug!("Got observed configs");
+
+                system_state.lock().unwrap().replace(SystemState {
+                    node_infos: nodes,
+                    node_configs: configs,
+                });
 
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
