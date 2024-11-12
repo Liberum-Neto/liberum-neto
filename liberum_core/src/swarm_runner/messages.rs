@@ -2,6 +2,7 @@ use super::behaviour::file_share;
 use super::SwarmContext;
 use anyhow::anyhow;
 use anyhow::Result;
+use bincode::de;
 use libp2p::multiaddr::Protocol;
 use libp2p::PeerId;
 use libp2p::{kad, Multiaddr};
@@ -9,7 +10,7 @@ use std::collections::hash_map;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use tokio::sync::oneshot;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use tracing_subscriber::field::debug;
 
 pub enum SwarmRunnerError {}
@@ -35,9 +36,13 @@ pub enum SwarmRunnerMessage {
         path: PathBuf,
         response_sender: oneshot::Sender<Result<()>>,
     },
-    DownloadFile {
+    DownloadFileRequestResponse {
         id: kad::RecordKey,
         peer: PeerId,
+        response_sender: oneshot::Sender<Vec<u8>>,
+    },
+    DownloadFileDHT {
+        id: kad::RecordKey,
         response_sender: oneshot::Sender<Vec<u8>>,
     },
     PublishFile {
@@ -142,7 +147,7 @@ impl SwarmContext {
                 Ok(false)
             }
 
-            SwarmRunnerMessage::DownloadFile {
+            SwarmRunnerMessage::DownloadFileRequestResponse {
                 id,
                 peer,
                 response_sender,
@@ -152,8 +157,21 @@ impl SwarmContext {
                     .behaviour_mut()
                     .file_share
                     .send_request(&peer, file_share::FileRequest { id: id.to_vec() });
+
                 self.behaviour
                     .pending_download_file
+                    .insert(qid, response_sender);
+                Ok(false)
+            }
+
+            SwarmRunnerMessage::DownloadFileDHT {
+                id,
+                response_sender,
+            } => {
+                debug!("Downloading file from DHT {:?}", id);
+                let qid = self.swarm.behaviour_mut().kademlia.get_record(id);
+                self.behaviour
+                    .pending_download_file_dht
                     .insert(qid, response_sender);
                 Ok(false)
             }
@@ -162,6 +180,7 @@ impl SwarmContext {
                 record,
                 response_sender,
             } => {
+                debug!("Publishing file {:?}", record.key);
                 let qid = self
                     .swarm
                     .behaviour_mut()

@@ -49,6 +49,10 @@ pub enum DaemonRequest {
         node_name: String,
         id: String,
     },
+    DownloadFileRequestResponse {
+        node_name: String,
+        id: String,
+    },
     GetProviders {
         node_name: String,
         id: String,

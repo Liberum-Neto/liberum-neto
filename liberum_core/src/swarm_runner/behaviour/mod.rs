@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use file_share::*;
 use libp2p::{
-    kad,
+    kad::{self, QueryId},
     request_response::{self, OutboundRequestId},
     swarm::NetworkBehaviour,
     PeerId,
@@ -25,6 +25,7 @@ pub struct BehaviourContext {
     pub pending_publish_file: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
     pub pending_get_providers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
     pub pending_download_file: HashMap<OutboundRequestId, oneshot::Sender<Vec<u8>>>,
+    pub pending_download_file_dht: HashMap<kad::QueryId, oneshot::Sender<Vec<u8>>>,
     pub pending_dial: HashMap<PeerId, oneshot::Sender<Result<()>>>,
 }
 
@@ -36,6 +37,7 @@ impl BehaviourContext {
             pending_publish_file: HashMap::new(),
             pending_get_providers: HashMap::new(),
             pending_download_file: HashMap::new(),
+            pending_download_file_dht: HashMap::new(),
             pending_dial: HashMap::new(),
         }
     }
