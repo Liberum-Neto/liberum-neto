@@ -9,9 +9,11 @@ use crate::node::store::LoadNode;
 use crate::node::store::NodeStore;
 use crate::node::DialPeer;
 use crate::node::DownloadFile;
+use crate::node::DownloadFileRequestResponse;
 use crate::node::GetProviders;
 use crate::node::Node;
 use crate::node::ProvideFile;
+use crate::node::PublishFile;
 use anyhow::Result;
 use futures::SinkExt;
 use futures::StreamExt;
@@ -26,9 +28,10 @@ use liberum_core::DaemonResponse;
 use liberum_core::DaemonResult;
 use libp2p::identity::Keypair;
 use tokio::net::UnixListener;
+use tokio::sync::mpsc::error;
 use tokio_util::codec::Decoder;
 use tokio_util::codec::Framed;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 type SocketFramed =
     Framed<tokio::net::UnixStream, AsymmetricMessageCodec<DaemonResult, DaemonRequest>>;
@@ -111,6 +114,9 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         }
         DaemonRequest::DownloadFile { node_name, id } => {
             handle_download_file(node_name, id, context).await
+        }
+        DaemonRequest::DownloadFileRequestResponse { node_name, id } => {
+            handle_download_file_request_response(node_name, id, context).await
         }
         DaemonRequest::GetProviders { node_name, id } => {
             handle_get_providers(node_name, id, context).await
@@ -338,6 +344,31 @@ async fn handle_get_providers(node_name: String, id: String, context: &AppContex
 }
 
 // TODO! Downloading a file is blocking now, it should be done in background in some way
+async fn handle_download_file_request_response(
+    node_name: String,
+    id: String,
+    context: &AppContext,
+) -> DaemonResult {
+    let node = context
+        .node_manager
+        .ask(GetNode {
+            name: node_name.to_string(),
+        })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    let file = node
+        .ask(DownloadFileRequestResponse { id })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    Ok(DaemonResponse::FileDownloaded { data: file })
+}
+
 async fn handle_download_file(node_name: String, id: String, context: &AppContext) -> DaemonResult {
     let node = context
         .node_manager
@@ -404,7 +435,7 @@ async fn handle_publish_file(
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
     let resp_id = node
-        .ask(ProvideFile { path })
+        .ask(PublishFile { path })
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish file"))

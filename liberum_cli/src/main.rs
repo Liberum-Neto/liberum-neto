@@ -38,6 +38,7 @@ enum Command {
     ProvideFile(ProvideFile),
     GetProviders(GetProviders),
     DownloadFile(DownloadFile),
+    DownloadFileRR(DownloadFileRequestResponse),
     GetPeerID(GetPeerID),
     Dial(Dial),
     PublishFile(PublishFile),
@@ -117,6 +118,14 @@ struct DownloadFile {
 }
 
 #[derive(Parser)]
+struct DownloadFileRequestResponse {
+    #[arg()]
+    node_name: String,
+    #[arg()]
+    id: String,
+}
+
+#[derive(Parser)]
 struct GetPeerID {
     #[arg()]
     node_name: String,
@@ -185,6 +194,7 @@ async fn handle_command(cmd: Command, req: RequestSender, res: ReseponseReceiver
         Command::StopNode(cmd) => handle_stop_node(cmd, req, res).await,
         Command::ProvideFile(cmd) => handle_provide_file(cmd, req, res).await,
         Command::DownloadFile(cmd) => handle_download_file(cmd, req, res).await,
+        Command::DownloadFileRR(cmd) => handle_download_file_request_response(cmd, req, res).await,
         Command::GetProviders(cmd) => handle_get_providers(cmd, req, res).await,
         Command::GetPeerID(cmd) => handle_get_peer_id(cmd, req, res).await,
         Command::Dial(cmd) => handle_dial(cmd, req, res).await,
@@ -377,6 +387,35 @@ async fn handle_download_file(
     mut res: ReseponseReceiver,
 ) -> Result<()> {
     req.send(DaemonRequest::DownloadFile {
+        node_name: cmd.node_name,
+        id: cmd.id,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    let response = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))??;
+
+    match response {
+        DaemonResponse::FileDownloaded { data } => {
+            println!("{}", String::from_utf8(data)?);
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_download_file_request_response(
+    cmd: DownloadFileRequestResponse,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    req.send(DaemonRequest::DownloadFileRequestResponse {
         node_name: cmd.node_name,
         id: cmd.id,
     })

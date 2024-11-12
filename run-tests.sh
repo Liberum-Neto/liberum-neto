@@ -1,14 +1,23 @@
 #!/bin/bash
-
+ARGS=$*;
+TESTS_DIR="tests"
 TESTS=()
 RESULTS=()
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
 NC='\033[0m'
 
-for f in tests/*.sh; do
-  TESTS+=("$f")
-  bash "$f"
+if [[ -z $ARGS ]]; then
+  TO_RUN=($( ls $TESTS_DIR/*.sh ));
+else
+  TO_RUN=($ARGS);
+fi
+
+for test_file in ${TO_RUN[@]}; do
+  TESTS+=("$test_file")
+  printf "${YELLOW}Running test: ${test_file}${NC}\n"
+  bash -x "$test_file"
   RESULTS+=("$?")
 done
 

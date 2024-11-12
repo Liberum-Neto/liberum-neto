@@ -2,7 +2,7 @@
 
 N1="test_n1"
 N1_SEED=1
-N1_ADDR="/ip6/::1/udp/52138/quic-v1"
+N1_ADDR="/ip6/::1/udp/52137/quic-v1"
 N2="test_n2"
 N2_SEED=2
 FILE_NAME="test-file.txt"
@@ -32,10 +32,10 @@ cargo run -p liberum_cli -- -d start-node $N2 2> /dev/null
 # create and provide file
 echo "${FILE_CONTENT}" > "$FILE_NAME"
 
-cargo run -p liberum_cli -- -d publish-file $N1 "$FILE_NAME" &> /dev/null
+cargo run -p liberum_cli -- -d provide-file $N1 "$FILE_NAME" &> /dev/null
 
 # download file
-RESULT=$(cargo run -p liberum_cli -- -d download-file $N2 "${BLAKE3_HASH}" 2> /dev/null)
+RESULT=$(cargo run -p liberum_cli -- -d download-file-rr $N2 "${BLAKE3_HASH}" 2> /dev/null)
 
 # cleanup
 cargo run -p liberum_cli -- -d stop-node $N1 2> /dev/null
