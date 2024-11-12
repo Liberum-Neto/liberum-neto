@@ -11,7 +11,7 @@ use crate::node::DialPeer;
 use crate::node::DownloadFile;
 use crate::node::GetProviders;
 use crate::node::Node;
-use crate::node::PublishFile;
+use crate::node::ProvideFile;
 use anyhow::Result;
 use futures::SinkExt;
 use futures::StreamExt;
@@ -106,8 +106,8 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         }
         DaemonRequest::StopNode { node_name } => handle_stop_node(node_name, context).await,
         DaemonRequest::ListNodes => handle_list_nodes(context).await,
-        DaemonRequest::PublishFile { node_name, path } => {
-            handle_publish_file(&node_name, path, context).await
+        DaemonRequest::ProvideFile { node_name, path } => {
+            handle_provide_file(&node_name, path, context).await
         }
         DaemonRequest::DownloadFile { node_name, id } => {
             handle_download_file(node_name, id, context).await
@@ -290,7 +290,7 @@ async fn handle_list_nodes(context: &AppContext) -> DaemonResult {
     Ok(DaemonResponse::NodeList(node_infos))
 }
 
-async fn handle_publish_file(node_name: &str, path: PathBuf, context: &AppContext) -> DaemonResult {
+async fn handle_provide_file(node_name: &str, path: PathBuf, context: &AppContext) -> DaemonResult {
     let node = context
         .node_manager
         .ask(GetNode {
@@ -298,17 +298,17 @@ async fn handle_publish_file(node_name: &str, path: PathBuf, context: &AppContex
         })
         .send()
         .await
-        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish file"))
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle provide file"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
     let resp_id = node
-        .ask(PublishFile { path })
+        .ask(ProvideFile { path })
         .send()
         .await
-        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish file"))
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle provide file"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    Ok(DaemonResponse::FilePublished { id: resp_id })
+    Ok(DaemonResponse::FileProvided { id: resp_id })
 }
 
 async fn handle_get_providers(node_name: String, id: String, context: &AppContext) -> DaemonResult {
