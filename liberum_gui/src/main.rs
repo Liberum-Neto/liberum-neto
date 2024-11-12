@@ -348,6 +348,8 @@ impl AppView for NodesListView {
                     ctx.event_handler
                         .create_node(&mut self.create_node_name)
                         .unwrap();
+
+                    self.create_node_name = String::new();
                 }
             });
 
