@@ -3,7 +3,7 @@ use std::{path::Path, str::FromStr};
 use anyhow::Result;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use tracing::{debug, error};
+use tracing::error;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeConfig {
