@@ -2,17 +2,13 @@ use super::behaviour::file_share;
 use super::SwarmContext;
 use anyhow::anyhow;
 use anyhow::Result;
-use bincode::de;
-use libp2p::multiaddr::Protocol;
 use libp2p::PeerId;
 use libp2p::{kad, Multiaddr};
 use std::collections::hash_map;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use tokio::sync::oneshot;
-use tracing::{debug, error, info};
-use tracing_subscriber::field::debug;
-
+use tracing::{debug, info};
 pub enum SwarmRunnerError {}
 
 /// Messages that can be send from a Node to the SwarmRunner

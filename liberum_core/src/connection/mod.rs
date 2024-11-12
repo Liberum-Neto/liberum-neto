@@ -28,10 +28,9 @@ use liberum_core::DaemonResponse;
 use liberum_core::DaemonResult;
 use libp2p::identity::Keypair;
 use tokio::net::UnixListener;
-use tokio::sync::mpsc::error;
 use tokio_util::codec::Decoder;
 use tokio_util::codec::Framed;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 type SocketFramed =
     Framed<tokio::net::UnixStream, AsymmetricMessageCodec<DaemonResult, DaemonRequest>>;

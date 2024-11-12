@@ -2,7 +2,6 @@ use std::collections::HashSet;
 
 use anyhow::anyhow;
 use libp2p::kad::{self, store::RecordStore};
-use tokio::sync::oneshot;
 use tracing::{debug, error, info};
 
 use crate::swarm_runner::SwarmContext;
@@ -236,7 +235,7 @@ impl SwarmContext {
                 id,
                 result:
                     kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FinishedWithNoAdditionalRecord {
-                        cache_candidates,
+                        ..
                     })),
                 ..
             } => {

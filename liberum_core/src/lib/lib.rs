@@ -2,7 +2,7 @@ pub mod codec;
 pub mod node_config;
 pub mod types;
 
-use libp2p::{futures::StreamExt, PeerId};
+use libp2p::futures::StreamExt;
 use node_config::NodeConfig;
 use std::path::{Path, PathBuf};
 use tokio::fs::File;
