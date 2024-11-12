@@ -54,6 +54,7 @@ struct NodeView {
     node_name: String,
     file_to_send_path: Option<PathBuf>,
     file_to_send_dialog: Option<FileDialog>,
+    file_to_download_id: String,
     status_line: String,
 }
 
@@ -179,6 +180,34 @@ impl EventHandler {
                     if let Err(e) = r {
                         error!(err = e.to_string(), "Error ocurred while publishing file!");
                         bail!("Error occured while publishing file: {}", e.to_string());
+                    }
+                }
+                None => {
+                    error!("Failed to receive response");
+                    bail!("Failed to receive response from the daemon");
+                }
+            }
+
+            anyhow::Ok(())
+        })?;
+
+        Ok(())
+    }
+
+    fn download_file(&mut self, node_name: &str, file_id: &str) -> Result<()> {
+        self.rt.block_on(async {
+            self.to_daemon_sender
+                .send(DaemonRequest::DownloadFile {
+                    node_name: node_name.to_string(),
+                    id: file_id.to_string(),
+                })
+                .await?;
+
+            match self.from_daemon_receiver.recv().await {
+                Some(r) => {
+                    if let Err(e) = r {
+                        error!(err = e.to_string(), "Error ocurred while downloading file!");
+                        bail!("Error occured while downloading file: {}", e.to_string());
                     }
                 }
                 None => {
@@ -443,7 +472,7 @@ impl AppView for NodeView {
 
             ui.horizontal(|ui| {
                 if ui.button("Select file").clicked() {
-                    let filter = Box::new({ move |path: &Path| -> bool { path.is_file() } });
+                    let filter = Box::new(move |path: &Path| -> bool { path.is_file() });
                     let mut dialog = FileDialog::open_file(self.file_to_send_path.clone())
                         .show_files_filter(filter);
                     dialog.open();
@@ -476,6 +505,26 @@ impl AppView for NodeView {
 
             ui.add_space(20.0);
 
+            ui.heading("Download file");
+            ui.label("File ID:");
+            ui.text_edit_singleline(&mut self.file_to_download_id);
+            ui.add_space(10.0);
+
+            if ui.button("Download").clicked() {
+                match ctx
+                    .event_handler
+                    .download_file(&self.node_name, &self.file_to_download_id)
+                {
+                    Ok(_) => {
+                        self.status_line = "File downloaded".to_string();
+                        self.file_to_download_id = String::new();
+                    }
+                    Err(e) => self.status_line = e.to_string(),
+                }
+            }
+
+            ui.add_space(20.0);
+
             if ui.button("Back to nodes list").clicked() {
                 action = ViewAction::SwitchView {
                     view: Box::new(NodesListView::default()),
@@ -497,6 +546,7 @@ impl NodeView {
             file_to_send_path: None,
             file_to_send_dialog: None,
             status_line: String::new(),
+            file_to_download_id: String::new(),
         }
     }
 }
