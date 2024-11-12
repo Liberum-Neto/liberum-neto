@@ -30,7 +30,7 @@ pub enum SwarmRunnerMessage {
         id: kad::RecordKey,
         response_sender: oneshot::Sender<HashSet<PeerId>>,
     },
-    PublishFile {
+    ProvideFile {
         id: kad::RecordKey,
         path: PathBuf,
         response_sender: oneshot::Sender<()>,
@@ -92,24 +92,26 @@ impl SwarmContext {
             // Stops the swarm and informs the node
             SwarmRunnerMessage::Kill => Ok(true),
 
-            // Publish a file to the network
-            SwarmRunnerMessage::PublishFile {
+            // Start providing a file in the network
+            SwarmRunnerMessage::ProvideFile {
                 id,
                 path,
                 response_sender,
             } => {
-                if self.behaviour.published.contains_key(&id) {
+                if self.behaviour.providing.contains_key(&id) {
                     info!(
                         node = self.node.name,
                         id = format!("{id:?}"),
-                        "File is already published"
+                        "File is already being provided"
                     );
                     return Ok(false);
                 }
-                // Add the file to the published list
-                self.behaviour.published.insert(
+                // Add the file to the providing list
+                self.behaviour.providing.insert(
                     id.clone(),
-                    file_share::SharedResource::File { path: path.clone() },
+                    file_share::SharedResource::File(file_share::FileResource {
+                        path: path.clone(),
+                    }),
                 );
                 // Strat a query to be providing the file ID in kademlia
                 let qid = self

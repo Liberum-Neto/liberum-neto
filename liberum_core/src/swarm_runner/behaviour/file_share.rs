@@ -5,9 +5,13 @@ use tracing::debug;
 
 use super::super::SwarmContext;
 
-/// The enum that represents anything that can be published in the network.
+/// The enum that represents anything that can be provided in the network.
 pub enum SharedResource {
-    File { path: PathBuf },
+    File(FileResource),
+}
+
+pub struct FileResource {
+    pub path: PathBuf,
 }
 
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq)]
@@ -32,13 +36,13 @@ impl SwarmContext {
                     request, channel, ..
                 } => {
                     debug!("Request_response request!");
-                    // Get the file from the published hashmap
+                    // Get the file from the providing hashmap
                     let id = kad::RecordKey::from(request.id.clone());
-                    let file = self.behaviour.published.get(&id);
+                    let file = self.behaviour.providing.get(&id);
                     // Send the file back to the peer if found
                     if let Some(file) = file {
                         match file {
-                            SharedResource::File { path } => {
+                            SharedResource::File(FileResource { path }) => {
                                 if let Ok(data) = tokio::fs::read(path).await {
                                     let r = self
                                         .swarm
