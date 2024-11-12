@@ -2,6 +2,7 @@ use std::{path::Path, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Result};
 use egui::Color32;
+use kameo::Reply;
 use liberum_core::{types::NodeInfo, DaemonRequest, DaemonResponse, DaemonResult};
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -43,6 +44,10 @@ enum ViewAction {
 #[derive(Default)]
 struct NodesListView {
     create_node_name: String,
+}
+
+struct NodeView {
+    node_name: String,
 }
 
 struct ViewContext<'a> {
@@ -241,7 +246,12 @@ impl eframe::App for MyApp {
             egui_frame: frame,
         };
 
-        self.current_view.draw(view_ctx);
+        let action = self.current_view.draw(view_ctx);
+
+        match action {
+            ViewAction::Stay => {}
+            ViewAction::SwitchView { view } => self.current_view = view,
+        }
     }
 }
 
@@ -249,6 +259,7 @@ impl AppView for NodesListView {
     fn draw(&mut self, ctx: ViewContext) -> ViewAction {
         let state = ctx.system_state.lock().unwrap();
         let state = (*state).clone();
+        let mut action = ViewAction::Stay;
 
         egui::CentralPanel::default().show(ctx.egui_ctx, |ui| {
             let state = match state {
@@ -291,11 +302,45 @@ impl AppView for NodesListView {
                     if ui.button("Stop").clicked() {
                         let _ = ctx.event_handler.stop_node(&n.name);
                     }
+
+                    if ui.button("Show").clicked() {
+                        action = ViewAction::SwitchView {
+                            view: Box::new(NodeView::new(&n.name)),
+                        };
+                    }
                 });
-            })
+            });
+
+            ui.add_space(10.0);
         });
 
-        ViewAction::Stay
+        action
+    }
+}
+
+impl AppView for NodeView {
+    fn draw(&mut self, ctx: ViewContext) -> ViewAction {
+        let mut action = ViewAction::Stay;
+
+        egui::CentralPanel::default().show(ctx.egui_ctx, |ui| {
+            ui.heading(&self.node_name);
+
+            if ui.button("Back to nodes list").clicked() {
+                action = ViewAction::SwitchView {
+                    view: Box::new(NodesListView::default()),
+                }
+            }
+        });
+
+        action
+    }
+}
+
+impl NodeView {
+    fn new(text: &str) -> Self {
+        Self {
+            node_name: text.to_string(),
+        }
     }
 }
 
