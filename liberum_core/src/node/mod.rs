@@ -123,7 +123,7 @@ impl Node {
                 response_sender: resp_send,
             })
             .await?;
-        resp_recv.await?;
+        resp_recv.await??;
         let id_str = liberum_core::file_id_to_str(id);
         Ok(id_str)
     }
@@ -131,6 +131,28 @@ impl Node {
     /// Message called on the node from the daemon to download a file of a given ID.
     #[message]
     pub async fn download_file(&mut self, id: String) -> Result<Vec<u8>> {
+        let id_str = id;
+        let id = liberum_core::str_to_file_id(&id_str)?;
+        if let None = self.swarm_sender {
+            error!("Swarm is None!");
+            return Err(anyhow!("Swarm is None!"));
+        }
+        let sender = self.swarm_sender.as_mut().unwrap(); // won't panic due to the if let above
+
+        let (resp_send, resp_recv) = oneshot::channel();
+        sender
+            .send(SwarmRunnerMessage::DownloadFileDHT {
+                id: id.clone(),
+                response_sender: resp_send,
+            })
+            .await?;
+
+        let file = resp_recv.await?;
+
+        Ok(file)
+    }
+    #[message]
+    pub async fn download_file_request_response(&mut self, id: String) -> Result<Vec<u8>> {
         let id_str = id;
         let id = liberum_core::str_to_file_id(&id_str)?;
         if let None = self.swarm_sender {
@@ -155,7 +177,7 @@ impl Node {
 
         for peer in &providers {
             let (file_sender, file_receiver) = oneshot::channel();
-            let result = sender.send(SwarmRunnerMessage::DownloadFile {
+            let result = sender.send(SwarmRunnerMessage::DownloadFileRequestResponse {
                 id: id.clone(),
                 peer: peer.clone(),
                 response_sender: file_sender,
@@ -205,7 +227,7 @@ impl Node {
     }
 
     #[message]
-    pub async fn publish_file(&mut self, path: PathBuf) -> Result<()> {
+    pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
         debug!("Node got PublishFile");
         if let Some(sender) = &mut self.swarm_sender {
             let id = liberum_core::get_file_id(&path).await.map_err(|e| {
@@ -236,8 +258,10 @@ impl Node {
                 })
                 .await?;
 
+            let id_str = liberum_core::file_id_to_str(id);
+
             return match recv.await {
-                Ok(r) => r,
+                Ok(r) => Ok(id_str),
                 Err(e) => Err(e.into()),
             };
         }
