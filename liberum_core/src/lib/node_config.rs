@@ -5,7 +5,7 @@ use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tracing::error;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NodeConfig {
     pub bootstrap_nodes: Vec<BootstrapNode>,
     pub external_addresses: Vec<Multiaddr>,
