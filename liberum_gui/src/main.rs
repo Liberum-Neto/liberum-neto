@@ -55,7 +55,7 @@ fn main() -> Result<()> {
     let event_handler = EventHandler::new()?;
     let my_app = MyApp::new(system_observer.system_state.clone(), event_handler);
 
-    debug!("Running observer loop...");
+    debug!("Running observer loop");
     let update_loop_handle = system_observer.run_update_loop();
 
     let options = eframe::NativeOptions {
@@ -63,8 +63,7 @@ fn main() -> Result<()> {
         ..Default::default()
     };
 
-    println!("{}", update_loop_handle.is_finished());
-
+    debug!("Opening window");
     eframe::run_native(
         "liberum-gui",
         options,
@@ -72,6 +71,8 @@ fn main() -> Result<()> {
     )
     .map_err(|e| anyhow!(e.to_string()))
     .unwrap();
+
+    update_loop_handle.abort();
 
     Ok(())
 }
