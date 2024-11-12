@@ -26,6 +26,12 @@ struct EventHandler {
     from_daemon_receiver: Receiver<DaemonResult>,
 }
 
+struct MyApp {
+    system_state: Arc<Mutex<Option<SystemState>>>,
+    event_handler: EventHandler,
+    create_node_name: String,
+}
+
 impl EventHandler {
     fn new() -> Result<Self> {
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -122,12 +128,6 @@ impl EventHandler {
     }
 }
 
-struct MyApp {
-    system_state: Arc<Mutex<Option<SystemState>>>,
-    event_handler: EventHandler,
-    create_node_name: String,
-}
-
 impl SystemObserver {
     fn new() -> Result<Self> {
         let rt = tokio::runtime::Builder::new_multi_thread()
@@ -212,36 +212,6 @@ impl MyApp {
     }
 }
 
-fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .init();
-
-    let mut system_observer = SystemObserver::new()?;
-    let event_handler = EventHandler::new()?;
-    let my_app = MyApp::new(system_observer.system_state.clone(), event_handler);
-
-    debug!("Running observer loop...");
-    let update_loop_handle = system_observer.run_update_loop();
-
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
-        ..Default::default()
-    };
-
-    println!("{}", update_loop_handle.is_finished());
-
-    eframe::run_native(
-        "liberum-gui",
-        options,
-        Box::new(|_| Ok(Box::<MyApp>::new(my_app))),
-    )
-    .map_err(|e| anyhow!(e.to_string()))
-    .unwrap();
-
-    Ok(())
-}
-
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         let state = self.system_state.lock().unwrap();
@@ -292,4 +262,34 @@ impl eframe::App for MyApp {
             })
         });
     }
+}
+
+fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
+
+    let mut system_observer = SystemObserver::new()?;
+    let event_handler = EventHandler::new()?;
+    let my_app = MyApp::new(system_observer.system_state.clone(), event_handler);
+
+    debug!("Running observer loop...");
+    let update_loop_handle = system_observer.run_update_loop();
+
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
+        ..Default::default()
+    };
+
+    println!("{}", update_loop_handle.is_finished());
+
+    eframe::run_native(
+        "liberum-gui",
+        options,
+        Box::new(|_| Ok(Box::<MyApp>::new(my_app))),
+    )
+    .map_err(|e| anyhow!(e.to_string()))
+    .unwrap();
+
+    Ok(())
 }
