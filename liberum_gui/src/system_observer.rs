@@ -115,7 +115,7 @@ impl SystemObserver {
                 for config_node_name in config_node_names {
                     to_daemon_sender
                         .send(DaemonRequest::GetNodeConfig {
-                            name: config_node_name.to_string(),
+                            node_name: config_node_name.to_string(),
                         })
                         .await
                         .expect("Failed to send message to the daemon");
