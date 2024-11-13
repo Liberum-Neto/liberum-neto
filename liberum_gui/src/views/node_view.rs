@@ -192,8 +192,46 @@ impl NodeView {
                 let node_config = system_state.node_configs.get(&self.node_name);
 
                 match node_config {
-                    Some(cfg) => ui.label("Config found"),
-                    None => ui.label("Config not found"),
+                    Some(cfg) => {
+                        egui::Grid::new("config_grid")
+                            .num_columns(2)
+                            .striped(true)
+                            .show(ui, |ui| {
+                                ui.label("Bootstrap nodes");
+                                ui.vertical(|ui| {
+                                    for b in cfg.bootstrap_nodes.iter() {
+                                        ui.label(format!("{} @ {}", b.id, b.addr));
+                                    }
+
+                                    let mut text = String::new();
+
+                                    ui.horizontal(|ui| {
+                                        let _ = ui.text_edit_singleline(&mut text);
+                                        let _ = ui.button("Add new");
+                                    });
+                                });
+                                ui.end_row();
+                                ui.label("External addresses");
+                                ui.vertical(|ui| {
+                                    for a in cfg.external_addresses.iter() {
+                                        ui.horizontal(|ui| {
+                                            ui.label(a.to_string());
+                                            let _ = ui.button("Remove");
+                                        });
+                                    }
+
+                                    let mut text = String::new();
+
+                                    ui.horizontal(|ui| {
+                                        let _ = ui.text_edit_singleline(&mut text);
+                                        let _ = ui.button("Add new");
+                                    });
+                                });
+                            });
+                    }
+                    None => {
+                        ui.label("Config not found");
+                    }
                 };
             });
     }
