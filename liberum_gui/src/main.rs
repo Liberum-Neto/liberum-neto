@@ -5,6 +5,7 @@ pub mod views;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Result};
+use egui::Visuals;
 use event_handler::EventHandler;
 use system_observer::{SystemObserver, SystemState};
 use views::{AppView, NodesListView, ViewAction, ViewContext};
@@ -32,7 +33,9 @@ impl MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        catppuccin_egui::set_theme(ctx, catppuccin_egui::LATTE);
+        ctx.style_mut(|style| {
+            style.visuals = Visuals::light();
+        });
 
         let mut view_ctx = ViewContext {
             system_state: self.system_state.clone(),
