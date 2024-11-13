@@ -37,13 +37,33 @@ to stop and hides away the libp2p implementation.
 * `swarm_runner` module defines the creation, management and the functionality of
 a swarm.
 
-Example usage:
+If our bootstrap node is running you can test it:
 ```
+# run daemon
 cargo run -p liberum_core -- --daemon
+
+# create and start your node
 cargo run -p liberum_cli new-node node1
-cargo run -p liberum_cli new-node node2
 cargo run -p liberum_cli start-node node1
-cargo run -p liberum_cli start-node node2
-cargo run -p liberum_cli publish-file node1 ./LICENSE
-cargo run -p liberum_cli download-file node2 HpyAhoZv9FkFNUmQX6qEQdvPEV2bKBCVJNSx2eQ1fQMJ
+
+# dial the bootstrap node
+cargo run -p liberum_cli dial node1 12D3KooWJE1MwwkHSB8JCErBFe6sfU9o6Ye3kKzQnjYchsq1iTnG /ip4/192.166.217.23/udp/52137/quic-v1
+
+#   the bootstrap node can be added to the config to connect to it automatically when starting your node
+# cargo run -p liberum_cli config-node add-bootstrap-node 12D3KooWJE1MwwkHSB8JCErBFe6sfU9o6Ye3kKzQnjYchsq1iTnG /ip4/192.166.217.23/udp/52137/quic-v1
+
+# Some files served by the network:
+cargo run -p liberum_cli download-file node1 48czMELuzA6y23AYLKwNwazuwTUK6WCV2zDWcrSo9zCi
+cargo run -p liberum_cli download-file node1 HpyAhoZv9FkFNUmQX6qEQdvPEV2bKBCVJNSx2eQ1fQMJ
+cargo run -p liberum_cli download-file node1 6uerPJKd8jkEfwvSgwr7zsC7eXtYhrmRh4chYM1kkqsb
+
+# You can publish a file of your own
+# The ID of the file will be printed
+cargo run -p liberum_cli publish-file node1 <file-path>
+
+# You and all the other nodes will be able to retrieve it
+cargo run -p liberum_cli download-file node1 <file-id>
+
+# kill the daemon
+killall liberum_core
 ```
