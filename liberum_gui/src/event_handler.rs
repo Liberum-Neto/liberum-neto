@@ -43,7 +43,7 @@ impl EventHandler {
         self.rt.block_on(async {
             self.to_daemon_sender
                 .send(DaemonRequest::StartNode {
-                    name: name.to_string(),
+                    node_name: name.to_string(),
                 })
                 .await?;
 
@@ -66,7 +66,7 @@ impl EventHandler {
         self.rt.block_on(async {
             self.to_daemon_sender
                 .send(DaemonRequest::StopNode {
-                    name: name.to_string(),
+                    node_name: name.to_string(),
                 })
                 .await?;
 
@@ -89,7 +89,8 @@ impl EventHandler {
         self.rt.block_on(async {
             self.to_daemon_sender
                 .send(DaemonRequest::NewNode {
-                    name: name.to_string(),
+                    node_name: name.to_string(),
+                    id_seed: None,
                 })
                 .await?;
 
