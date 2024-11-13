@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Result};
-use liberum_core::{DaemonRequest, DaemonResult};
+use liberum_core::{DaemonRequest, DaemonResponse, DaemonResult};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, error, info};
 
@@ -107,7 +107,7 @@ impl EventHandler {
         Ok(())
     }
 
-    pub fn publish_file(&mut self, node_name: &str, file_path: &Path) -> Result<()> {
+    pub fn publish_file(&mut self, node_name: &str, file_path: &Path) -> Result<String> {
         debug!(
             name = node_name.to_string(),
             path = file_path.display().to_string(),
@@ -124,21 +124,24 @@ impl EventHandler {
 
             match self.from_daemon_receiver.recv().await {
                 Some(r) => {
-                    if let Err(e) = r {
-                        error!(err = e.to_string(), "Error ocurred while publishing file!");
-                        bail!("Error occured while publishing file: {}", e.to_string());
-                    }
+                    match r {
+                        Ok(DaemonResponse::FilePublished { id }) => return Ok(id),
+                        Err(e) => {
+                            error!(err = e.to_string(), "Error ocurred while publishing file!");
+                            bail!("Error occured while publishing file: {}", e.to_string());
+                        }
+                        _ => {
+                            error!("Unexpected response type");
+                            bail!("Unexpected response type");
+                        }
+                    };
                 }
                 None => {
                     error!("Failed to receive response");
                     bail!("Failed to receive response from the daemon");
                 }
             }
-
-            anyhow::Ok(())
-        })?;
-
-        Ok(())
+        })
     }
 
     pub fn download_file(&mut self, node_name: &str, file_id: &str) -> Result<()> {
