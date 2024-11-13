@@ -140,7 +140,7 @@ impl NodeView {
                             Some(path) => {
                                 let result = ctx.event_handler.publish_file(&self.node_name, &path);
                                 match result {
-                                    Ok(_) => self.status_line = "File published!".to_string(),
+                                    Ok(id) => self.status_line = format!("File published; id={id}"),
                                     Err(e) => self.status_line = e.to_string(),
                                 };
                             }
