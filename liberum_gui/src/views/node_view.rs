@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use egui::Color32;
+use egui::{Align2, Color32};
 use egui_file::FileDialog;
 use liberum_core::types::NodeInfo;
 
@@ -15,6 +15,9 @@ pub struct NodeView {
     status_line: String,
     download_window_opened: bool,
     download_data: Vec<u8>,
+    dial_peer_id: String,
+    dial_addr: String,
+    dial_history: Vec<(String, String, bool)>,
 }
 
 impl NodeView {
@@ -28,6 +31,9 @@ impl NodeView {
             status_line: String::new(),
             download_window_opened: false,
             download_data: Vec::new(),
+            dial_peer_id: String::new(),
+            dial_addr: String::new(),
+            dial_history: Vec::new(),
         }
     }
 
@@ -181,6 +187,75 @@ impl NodeView {
             });
     }
 
+    fn show_dialer_window(&mut self, ctx: &mut ViewContext) {
+        egui::Window::new("Dialer")
+            .anchor(Align2::RIGHT_TOP, [-16.0, 16.0])
+            .show(ctx.egui_ctx, |ui| {
+                egui::TopBottomPanel::top("dial_controls").show_inside(ui, |ui| {
+                    ui.label("PeerID:");
+                    ui.text_edit_singleline(&mut self.dial_peer_id);
+                    ui.label("Peer address:");
+                    ui.text_edit_singleline(&mut self.dial_addr);
+
+                    ui.add_space(10.0);
+
+                    if ui.button("Dial").clicked() {
+                        match ctx.event_handler.dial(
+                            &self.node_name,
+                            &self.dial_peer_id,
+                            &self.dial_addr,
+                        ) {
+                            Ok(_) => {
+                                self.status_line = format!(
+                                    "Dial {} @ {} successful!",
+                                    self.dial_peer_id, self.dial_addr
+                                );
+
+                                self.dial_history.push((
+                                    self.dial_peer_id.clone(),
+                                    self.dial_addr.clone(),
+                                    true,
+                                ));
+
+                                self.dial_peer_id = String::new();
+                                self.dial_addr = String::new();
+                            }
+                            Err(e) => {
+                                self.status_line = e.to_string();
+
+                                self.dial_history.push((
+                                    self.dial_peer_id.clone(),
+                                    self.dial_addr.clone(),
+                                    false,
+                                ));
+                            }
+                        }
+                    }
+
+                    ui.add_space(10.0);
+
+                    if !self.dial_history.is_empty() {
+                        egui::Grid::new("dial_history")
+                            .num_columns(3)
+                            .striped(true)
+                            .show(ui, |ui| {
+                                ui.label("Peer ID");
+                                ui.label("Peer address");
+                                ui.label("Successful?");
+                                ui.end_row();
+
+                                for (peer_id, peer_addr, success) in &self.dial_history {
+                                    ui.label(peer_id);
+                                    ui.label(peer_addr);
+                                    ui.label(success.to_string());
+                                    ui.end_row();
+                                }
+                            });
+                    }
+                });
+            });
+    }
+
     fn show_config_window(&mut self, ctx: &mut ViewContext) {
         egui::Window::new("Configuration")
             .open(&mut self.config_window_opened)
@@ -284,6 +359,7 @@ impl AppView for NodeView {
         self.show_config_window(&mut ctx);
         self.show_node_window(&mut ctx);
         self.show_download_window(&mut ctx);
+        self.show_dialer_window(&mut ctx);
         self.show_status_bar(&mut ctx)
     }
 
