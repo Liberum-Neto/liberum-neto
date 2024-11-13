@@ -144,7 +144,7 @@ impl EventHandler {
         })
     }
 
-    pub fn download_file(&mut self, node_name: &str, file_id: &str) -> Result<()> {
+    pub fn download_file(&mut self, node_name: &str, file_id: &str) -> Result<Vec<u8>> {
         self.rt.block_on(async {
             self.to_daemon_sender
                 .send(DaemonRequest::DownloadFile {
@@ -155,20 +155,23 @@ impl EventHandler {
 
             match self.from_daemon_receiver.recv().await {
                 Some(r) => {
-                    if let Err(e) = r {
-                        error!(err = e.to_string(), "Error ocurred while downloading file!");
-                        bail!("Error occured while downloading file: {}", e.to_string());
-                    }
+                    match r {
+                        Ok(DaemonResponse::FileDownloaded { data }) => return Ok(data),
+                        Err(e) => {
+                            error!(err = e.to_string(), "Error ocurred while publishing file!");
+                            bail!("Error occured while publishing file: {}", e.to_string());
+                        }
+                        _ => {
+                            error!("Unexpected response type");
+                            bail!("Unexpected response type");
+                        }
+                    };
                 }
                 None => {
                     error!("Failed to receive response");
                     bail!("Failed to receive response from the daemon");
                 }
             }
-
-            anyhow::Ok(())
-        })?;
-
-        Ok(())
+        })
     }
 }

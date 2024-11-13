@@ -13,6 +13,8 @@ pub struct NodeView {
     file_to_download_id: String,
     config_window_opened: bool,
     status_line: String,
+    download_window_opened: bool,
+    download_data: Vec<u8>,
 }
 
 impl NodeView {
@@ -24,6 +26,8 @@ impl NodeView {
             file_to_download_id: String::new(),
             config_window_opened: false,
             status_line: String::new(),
+            download_window_opened: false,
+            download_data: Vec::new(),
         }
     }
 
@@ -163,9 +167,11 @@ impl NodeView {
                         .event_handler
                         .download_file(&self.node_name, &self.file_to_download_id)
                     {
-                        Ok(_) => {
+                        Ok(data) => {
                             self.status_line = "File downloaded".to_string();
                             self.file_to_download_id = String::new();
+                            self.download_window_opened = true;
+                            self.download_data = data;
                         }
                         Err(e) => self.status_line = e.to_string(),
                     }
@@ -236,6 +242,14 @@ impl NodeView {
             });
     }
 
+    fn show_download_window(&mut self, ctx: &mut ViewContext) {
+        egui::Window::new("Download info")
+            .open(&mut self.download_window_opened)
+            .show(ctx.egui_ctx, |ui| {
+                ui.label(String::from_utf8(self.download_data.clone()).unwrap());
+            });
+    }
+
     fn show_status_bar(&mut self, ctx: &mut ViewContext) -> ViewAction {
         let mut action = ViewAction::Stay;
 
@@ -269,6 +283,7 @@ impl AppView for NodeView {
         self.show_default_panel(&mut ctx);
         self.show_config_window(&mut ctx);
         self.show_node_window(&mut ctx);
+        self.show_download_window(&mut ctx);
         self.show_status_bar(&mut ctx)
     }
 
