@@ -32,6 +32,8 @@ impl MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        catppuccin_egui::set_theme(ctx, catppuccin_egui::LATTE);
+
         let mut view_ctx = ViewContext {
             system_state: self.system_state.clone(),
             event_handler: &mut self.event_handler,
