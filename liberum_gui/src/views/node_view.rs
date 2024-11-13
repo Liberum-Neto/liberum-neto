@@ -243,13 +243,15 @@ impl NodeView {
             .frame(egui::Frame::default().inner_margin(16.0))
             .show_separator_line(false)
             .show(ctx.egui_ctx, |ui| {
-                ui.label(&self.status_line);
-
-                if ui.button("Back to nodes list").clicked() {
-                    action = ViewAction::SwitchView {
-                        view: Box::new(NodesListView::default()),
+                ui.horizontal(|ui| {
+                    if ui.button("Back to nodes list").clicked() {
+                        action = ViewAction::SwitchView {
+                            view: Box::new(NodesListView::default()),
+                        }
                     }
-                }
+
+                    ui.label(&self.status_line);
+                });
             });
 
         action
