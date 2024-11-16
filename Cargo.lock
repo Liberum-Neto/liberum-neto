@@ -1524,6 +1524,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64",
+ "blake3",
+ "bs58",
  "kameo",
  "rand 0.8.5",
  "rusqlite",
@@ -1532,6 +1534,8 @@ dependencies = [
  "tokio-rusqlite",
  "tokio-stream",
  "tokio-util",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
