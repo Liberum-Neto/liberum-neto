@@ -4,6 +4,7 @@ use liberum_core::node_config::NodeConfig;
 use liberum_core::types::NodeInfo;
 use liberum_core::{node_config::BootstrapNode, DaemonError, DaemonRequest, DaemonResponse};
 use libp2p::Multiaddr;
+use std::any;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -451,7 +452,25 @@ async fn handle_get_providers(
     .await
     .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
-    handle_response(&mut res).await
+    let response = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))?;
+    match response {
+        Ok(DaemonResponse::Providers { ids }) => {
+            for provider in ids {
+                println!("{provider}");
+            }
+        }
+        Err(e) => {
+            error!(err = e.to_string(), "Error publishing file");
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
+        }
+    }
+
+    Ok(())
 }
 
 async fn handle_get_peer_id(
@@ -513,6 +532,10 @@ async fn handle_publish_file(
     match resp {
         Ok(DaemonResponse::FilePublished { id }) => {
             info!(id = id, "File published");
+        }
+        Err(e) => {
+            println!("Error publishing file: {e}");
+            bail!("Error publishing file");
         }
         _ => {
             bail!("Daemon returned wrong response");
