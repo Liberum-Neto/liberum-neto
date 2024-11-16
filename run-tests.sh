@@ -15,6 +15,11 @@ else
 fi
 
 for test_file in ${TO_RUN[@]}; do
+  if [[ ! -f $test_file ]]; then
+    printf "${RED}Test file not found: ${test_file}${NC}\n"
+    continue
+  fi
+
   TESTS+=("$test_file")
   printf "${YELLOW}Running test: ${test_file}${NC}\n"
   bash -x "$test_file"
@@ -37,6 +42,10 @@ for i in "${!RESULTS[@]}"; do
 done
 
 if [[ $PASS -eq 1 ]]; then
+  if [[ ${#RESULTS[@]} -eq 0 ]]; then
+    printf "\n\n${RED}No tests found!${NC}\n"
+    exit 1
+  fi
   printf "\n\n${GREEN}All tests passed!${NC}\n"
   exit 0
 else

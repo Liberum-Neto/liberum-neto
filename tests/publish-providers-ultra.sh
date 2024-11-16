@@ -1,30 +1,34 @@
 #!/bin/bash
 
+# 12D3KooWMuKGmUs6rXeNNGYKKiF53DKpeEQKr2GPNab7oUQujKj1
 N1="test_n1"
 N1_SEED=1
 N1_ADDR="/ip6/::1/udp/52137/quic-v1"
-FILE1_NAME="test-file1.txt"
+FILE1_NAME="$PWD/test-file1.txt"
 FILE1_CONTENT="11111 Hello, World! 11111"
 FILE1_HASH="FhFBdCe9PqTjgptawEAxybYUTMwGDdamafRjCJ2P8Gsx"
 
+# 12D3KooWHdZxC6sYDzNCKkHPvgdvAqESoNEb2ThCC6Pv9g6YyVTS
 N2="test_n2"
 N2_SEED=2
 N2_ADDR="/ip6/::1/udp/52138/quic-v1"
-FILE2_NAME="test-file2.txt"
+FILE2_NAME="$PWD/test-file2.txt"
 FILE2_CONTENT="22222 Hello, World! 22222"
 FILE2_HASH="4Xryc3R1pQjfjLrM7yG4rkvjoDrrW9rbe9qCK24kj4Pc"
 
+# 12D3KooWS8JMXPNwghcKvDsazagjdE2YKVW7RobBoqiVZvU38XSG
 N3="test_n3"
 N3_SEED=3
 N3_ADDR="/ip6/::1/udp/52139/quic-v1"
-FILE3_NAME="test-file3.txt"
+FILE3_NAME="$PWD/test-file3.txt"
 FILE3_CONTENT="33333 Hello, World! 33333"
 FILE3_HASH="6KxBVAEgRzM9fNFo3243wefmJTqgdoTdJ4hLmkNFaxrf"
 
+# 12D3KooWEEKLJ8c9u89npG77CPN9uJE6Jr2net22MYbzZ9n8KeTp
 N4="test_n4"
 N4_SEED=4
 N4_ADDR="/ip6/::1/udp/52140/quic-v1"
-FILE4_NAME="test-file4.txt"
+FILE4_NAME="$PWD/test-file4.txt"
 FILE4_CONTENT="44444 Hello, World! 44444"
 FILE4_HASH="EdfX8prcsmXYs7FxwSjp5hqCuB3kwinWvM6KwNdFFzNj"
 
@@ -78,104 +82,118 @@ cargo run -p liberum_cli -- -d start-node $N2 2> /dev/null
 cargo run -p liberum_cli -- -d start-node $N3 2> /dev/null
 cargo run -p liberum_cli -- -d start-node $N4 2> /dev/null
 
+
+
 # publish files
 cargo run -p liberum_cli -- -d publish-file $N1 "$FILE1_NAME" 2> /dev/null
 cargo run -p liberum_cli -- -d publish-file $N2 "$FILE2_NAME" 2> /dev/null
 cargo run -p liberum_cli -- -d publish-file $N3 "$FILE3_NAME" 2> /dev/null
-cargo run -p liberum_cli -- -d publish-file $N4 "$FILE4_NAME" 2> /dev/null
+
+# cargo run -p liberum_cli -- -d publish-file $N4 "$FILE4_NAME" 2> /dev/null
+# if [[ $? -ne 1 ]]; then
+#     echo "Should fail, 4 does not know any other nodes"
+#     exit 1
+# fi
 
 # dial
 cargo run -p liberum_cli -- -d dial $N4 $N3_ID $N3_ADDR 2> /dev/null
+cargo run -p liberum_cli -- -d publish-file $N4 "$FILE4_NAME" 2> /dev/null
+if [[ $? -ne 0 ]]; then
+    echo "Should succeed, 4 knows other nodes"
+    exit 1
+fi
+
 
 # download files
-RESULT11=$(cargo run -p liberum_cli download-file $N1 "${FILE1_HASH}" 2> /dev/null)
-RESULT12=$(cargo run -p liberum_cli download-file $N1 "${FILE2_HASH}" 2> /dev/null)
-RESULT13=$(cargo run -p liberum_cli download-file $N1 "${FILE3_HASH}" 2> /dev/null)
-RESULT14=$(cargo run -p liberum_cli download-file $N1 "${FILE4_HASH}" 2> /dev/null)
+RESULT11=$(cargo run -p liberum_cli get-providers $N1 "${FILE1_HASH}" 2> /dev/null)
+RESULT12=$(cargo run -p liberum_cli get-providers $N1 "${FILE2_HASH}" 2> /dev/null)
+RESULT13=$(cargo run -p liberum_cli get-providers $N1 "${FILE3_HASH}" 2> /dev/null)
+RESULT14=$(cargo run -p liberum_cli get-providers $N1 "${FILE4_HASH}" 2> /dev/null)
 
-RESULT21=$(cargo run -p liberum_cli download-file $N2 "${FILE1_HASH}" 2> /dev/null)
-RESULT22=$(cargo run -p liberum_cli download-file $N2 "${FILE2_HASH}" 2> /dev/null)
-RESULT23=$(cargo run -p liberum_cli download-file $N2 "${FILE3_HASH}" 2> /dev/null)
-RESULT24=$(cargo run -p liberum_cli download-file $N2 "${FILE4_HASH}" 2> /dev/null)
+RESULT21=$(cargo run -p liberum_cli get-providers $N2 "${FILE1_HASH}" 2> /dev/null)
+RESULT22=$(cargo run -p liberum_cli get-providers $N2 "${FILE2_HASH}" 2> /dev/null)
+RESULT23=$(cargo run -p liberum_cli get-providers $N2 "${FILE3_HASH}" 2> /dev/null)
+RESULT24=$(cargo run -p liberum_cli get-providers $N2 "${FILE4_HASH}" 2> /dev/null)
 
-RESULT31=$(cargo run -p liberum_cli download-file $N3 "${FILE1_HASH}" 2> /dev/null)
-RESULT32=$(cargo run -p liberum_cli download-file $N3 "${FILE2_HASH}" 2> /dev/null)
-RESULT33=$(cargo run -p liberum_cli download-file $N3 "${FILE3_HASH}" 2> /dev/null)
-RESULT34=$(cargo run -p liberum_cli download-file $N3 "${FILE4_HASH}" 2> /dev/null)
+RESULT31=$(cargo run -p liberum_cli get-providers $N3 "${FILE1_HASH}" 2> /dev/null)
+RESULT32=$(cargo run -p liberum_cli get-providers $N3 "${FILE2_HASH}" 2> /dev/null)
+RESULT33=$(cargo run -p liberum_cli get-providers $N3 "${FILE3_HASH}" 2> /dev/null)
+RESULT34=$(cargo run -p liberum_cli get-providers $N3 "${FILE4_HASH}" 2> /dev/null)
 
-RESULT41=$(cargo run -p liberum_cli download-file $N4 "${FILE1_HASH}" 2> /dev/null)
-RESULT42=$(cargo run -p liberum_cli download-file $N4 "${FILE2_HASH}" 2> /dev/null)
-RESULT43=$(cargo run -p liberum_cli download-file $N4 "${FILE3_HASH}" 2> /dev/null)
-RESULT44=$(cargo run -p liberum_cli download-file $N4 "${FILE4_HASH}" 2> /dev/null)
+RESULT41=$(cargo run -p liberum_cli get-providers $N4 "${FILE1_HASH}" 2> /dev/null)
+RESULT42=$(cargo run -p liberum_cli get-providers $N4 "${FILE2_HASH}" 2> /dev/null)
+RESULT43=$(cargo run -p liberum_cli get-providers $N4 "${FILE3_HASH}" 2> /dev/null)
+RESULT44=$(cargo run -p liberum_cli get-providers $N4 "${FILE4_HASH}" 2> /dev/null)
 
 RESULT=1
-if [[ ! "${RESULT11}" =~ "${FILE1_CONTENT}" ]]; then
+if [[ -z "${RESULT11}" ]]; then
     RESULT=0
-    echo "1-1: \"${RESULT11}\" does not contain \"${FILE1_CONTENT}\""
+    echo "1-1: \"${RESULT11}\" is empty"
 fi
-if [[ ! "${RESULT12}" =~ "${FILE2_CONTENT}" ]]; then
+if [[ -z "${RESULT12}" ]]; then
     RESULT=0
-    echo "1-2: \"${RESULT12}\" does not contain \"${FILE2_CONTENT}\""
+    echo "1-2: \"${RESULT12}\" is empty"
 fi
-if [[ ! "${RESULT13}" =~ "${FILE3_CONTENT}" ]]; then
+if [[ -z "${RESULT13}" ]]; then
     RESULT=0
-    echo "1-3: \"${RESULT13}\" does not contain \"${FILE3_CONTENT}\""
+    echo "1-3: \"${RESULT13}\" is empty"
 fi
-if [[ ! "${RESULT14}" =~ "${FILE4_CONTENT}" ]]; then
+if [[ -z "${RESULT14}" ]]; then
     RESULT=0
-    echo "1-4: \"${RESULT14}\" does not contain \"${FILE4_CONTENT}\""
-fi
-
-if [[ ! "${RESULT21}" =~ "${FILE1_CONTENT}" ]]; then
-    RESULT=0
-    echo "2-1: \"${RESULT21}\" does not contain \"${FILE1_CONTENT}\""
-fi
-if [[ ! "${RESULT22}" =~ "${FILE2_CONTENT}" ]]; then
-    RESULT=0
-    echo "2-2: \"${RESULT22}\" does not contain \"${FILE2_CONTENT}\""
-fi
-if [[ ! "${RESULT23}" =~ "${FILE3_CONTENT}" ]]; then
-    RESULT=0
-    echo "2-3: \"${RESULT23}\" does not contain \"${FILE3_CONTENT}\""
-fi
-if [[ ! "${RESULT24}" =~ "${FILE4_CONTENT}" ]]; then
-    RESULT=0
-    echo "2-4: \"${RESULT24}\" does not contain \"${FILE4_CONTENT}\""
+    echo "1-4: \"${RESULT14}\" is empty"
 fi
 
-if [[ ! "${RESULT31}" =~ "${FILE1_CONTENT}" ]]; then
+if [[ -z "${RESULT21}" ]]; then
     RESULT=0
-    echo "3-1: \"${RESULT31}\" does not contain \"${FILE1_CONTENT}\""
+    echo "2-1: \"${RESULT21}\" is empty"
 fi
-if [[ ! "${RESULT32}" =~ "${FILE2_CONTENT}" ]]; then
+if [[ -z "${RESULT22}" ]]; then
     RESULT=0
-    echo "3-2: \"${RESULT32}\" does not contain \"${FILE2_CONTENT}\""
+    echo "2-2: \"${RESULT22}\" is empty"
 fi
-if [[ ! "${RESULT33}" =~ "${FILE3_CONTENT}" ]]; then
+if [[ -z "${RESULT23}" ]]; then
     RESULT=0
-    echo "3-3: \"${RESULT33}\" does not contain \"${FILE3_CONTENT}\""
+    echo "2-3: \"${RESULT23}\" is empty"
 fi
-if [[ ! "${RESULT34}" =~ "${FILE4_CONTENT}" ]]; then
+if [[ -z "${RESULT24}" ]]; then
     RESULT=0
-    echo "3-4: \"${RESULT34}\" does not contain \"${FILE4_CONTENT}\""
+    echo "2-4: \"${RESULT24}\" is empty"
 fi
 
-if [[ ! "${RESULT41}" =~ "${FILE1_CONTENT}" ]]; then
+if [[ -z "${RESULT31}" ]]; then
     RESULT=0
-    echo "4-1: \"${RESULT41}\" does not contain \"${FILE1_CONTENT}\""
+    echo "3-1: \"${RESULT31}\" is empty"
 fi
-if [[ ! "${RESULT42}" =~ "${FILE2_CONTENT}" ]]; then
+if [[ -z "${RESULT32}" ]]; then
     RESULT=0
-    echo "4-2: \"${RESULT42}\" does not contain \"${FILE2_CONTENT}\""
+    echo "3-2: \"${RESULT32}\" is empty"
 fi
-if [[ ! "${RESULT43}" =~ "${FILE3_CONTENT}" ]]; then
+if [[ -z "${RESULT33}" ]]; then
     RESULT=0
-    echo "4-3: \"${RESULT43}\" does not contain \"${FILE3_CONTENT}\""
+    echo "3-3: \"${RESULT33}\" is empty"
 fi
-if [[ ! "${RESULT44}" =~ "${FILE4_CONTENT}" ]]; then
+if [[ -z "${RESULT34}" ]]; then
     RESULT=0
-    echo "4-4: \"${RESULT44}\" does not contain \"${FILE4_CONTENT}\""
+    echo "3-4: \"${RESULT34}\" is empty"
 fi
+
+if [[ -z "${RESULT41}" ]]; then
+    RESULT=0
+    echo "4-1: \"${RESULT41}\" is empty"
+fi
+if [[ -z "${RESULT42}" ]]; then
+    RESULT=0
+    echo "4-2: \"${RESULT42}\" is empty"
+fi
+if [[ -z "${RESULT43}" ]]; then
+    RESULT=0
+    echo "4-3: \"${RESULT43}\" is empty"
+fi
+if [[ -z "${RESULT44}" ]]; then
+    RESULT=0
+    echo "4-4: \"${RESULT44}\" is empty"
+fi
+
 
 # cleanup
 cargo run -p liberum_cli -- -d stop-node $N1 2> /dev/null
