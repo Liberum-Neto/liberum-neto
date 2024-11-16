@@ -1,3 +1,4 @@
+use core::hash;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -6,31 +7,44 @@ use anyhow::Result;
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::message::{Context, Message};
 use kameo::Actor;
+use rand::random;
 use rusqlite::OptionalExtension;
 use tokio::fs::File;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncSeekExt;
+use tokio::io::AsyncWriteExt;
 use tokio::io::Take;
 use tokio_rusqlite::Connection;
+use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
+use tracing::debug;
 
 use crate::fragment;
 use crate::fragment::key::Key;
-use crate::fragment::Fragment;
+use crate::fragment::FragmentInfo;
 
 pub struct Vault {
     db: Connection,
     vault_dir_path: PathBuf,
 }
 
-pub struct StoreFragment(Box<dyn AsyncRead + Send>);
-pub struct Store(pub Fragment);
+type FragmentData = Box<ReaderStream<Take<File>>>;
+
+pub struct StoreFragment(FragmentData);
+pub struct Store(pub FragmentInfo);
 pub struct Get(pub Key);
 pub struct Remove(pub Key);
 
 impl Vault {
-    pub async fn new(db_path: &Path, vault_dir_path: &Path) -> Result<Vault> {
+    const DEFAULT_VAULT_DATABASE_NAME: &'static str = "vault.db3";
+    const FRAGMENT_DIR_NAME: &'static str = "fragments";
+    const TEMP_DIR_NAME: &'static str = "temp";
+
+    pub async fn new(vault_dir_path: &Path) -> Result<Vault> {
+        Self::ensure_dirs(vault_dir_path).await?;
+
+        let db_path = Self::default_db_path(vault_dir_path);
         let db = Connection::open(db_path).await?;
 
         Ok(Vault {
@@ -78,7 +92,7 @@ impl Vault {
         Ok(())
     }
 
-    async fn load_fragment_info(&self, key: Key) -> Result<Option<Fragment>> {
+    async fn load_fragment_info(&self, key: Key) -> Result<Option<FragmentInfo>> {
         const SELECT_FRAGMENT_QUERY: &str = "
             SELECT path, size
             FROM fragment
@@ -108,7 +122,7 @@ impl Vault {
                             Err(e) => return Result::Err(e),
                         };
 
-                        Result::Ok(Fragment::new(key, path, size))
+                        Result::Ok(FragmentInfo::new(key, Path::new(&path), size))
                     })
                     .optional()?;
 
@@ -118,12 +132,38 @@ impl Vault {
             .map_err(|e| anyhow!(e))
     }
 
-    async fn store_fragment_info(&self, fragment: Fragment) -> Result<()> {
+    async fn store_fragment_info(&self, fragment: FragmentInfo) -> Result<()> {
+        const SELECT_FRAGMENT_QUERY: &str = "SELECT COUNT(*) FROM fragment WHERE hash0 = ?1 AND hash1 = ?2 AND hash2 = ?3 AND hash3 = ?4";
         const INSERT_FRAGMENT_QUERY: &str = "
                 INSERT INTO fragment (hash0, hash1, hash2, hash3, path, size)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ";
+
         let hash_as_u64 = fragment.hash.as_u64_slice_be();
+
+        let cnt = self
+            .db
+            .call(move |conn| {
+                let key_as_i64 = [
+                    hash_as_u64[0] as i64,
+                    hash_as_u64[1] as i64,
+                    hash_as_u64[2] as i64,
+                    hash_as_u64[3] as i64,
+                ];
+
+                let cnt = conn.query_row(SELECT_FRAGMENT_QUERY, key_as_i64, |r| {
+                    let cnt: usize = r.get(0)?;
+
+                    Ok(cnt)
+                })?;
+
+                Ok(cnt)
+            })
+            .await?;
+
+        if cnt != 0 {
+            return Ok(());
+        }
 
         self.db
             .call(move |conn| {
@@ -134,7 +174,7 @@ impl Vault {
                         hash_as_u64[1] as i64,
                         hash_as_u64[2] as i64,
                         hash_as_u64[3] as i64,
-                        fragment.path,
+                        fragment.path.to_str(),
                         fragment.size,
                     ),
                 )?;
@@ -143,6 +183,67 @@ impl Vault {
             })
             .await
             .map_err(|e| anyhow!(e))
+    }
+
+    async fn store_fragment(&self, data: &mut FragmentData) -> Result<Key> {
+        let uid = uuid::Uuid::new_v4();
+        let random_fragment_path = Self::temp_dir_path(&self.vault_dir_path).join(uid.to_string());
+        let mut fragment_file = File::create(&random_fragment_path).await?;
+        let mut hasher = blake3::Hasher::new();
+
+        while let Some(bytes) = data.next().await {
+            let bytes = bytes?;
+            hasher.update(&bytes);
+            fragment_file.write(&bytes).await?;
+        }
+
+        let key_bytes = hasher.finalize().as_bytes().to_vec();
+        let key_string = bs58::encode(&key_bytes).into_string();
+
+        let valid_fragment_path = Self::fragment_dir_path(&self.vault_dir_path).join(key_string);
+        tokio::fs::rename(random_fragment_path, &valid_fragment_path).await?;
+
+        let fragment_key = Key::try_from(key_bytes)?;
+        let fragment_info = FragmentInfo::new(fragment_key.clone(), &valid_fragment_path, 0);
+        self.store_fragment_info(fragment_info).await?;
+
+        Ok(fragment_key)
+    }
+
+    async fn ensure_dirs(vault_dir_path: &Path) -> Result<()> {
+        debug!(
+            path = vault_dir_path.display().to_string(),
+            "ensuring vault dir"
+        );
+        tokio::fs::create_dir_all(vault_dir_path).await?;
+
+        let fragment_dir_path = Self::fragment_dir_path(vault_dir_path);
+        debug!(
+            path = fragment_dir_path.display().to_string(),
+            "ensuring fragment dir"
+        );
+        tokio::fs::create_dir(fragment_dir_path).await?;
+
+        let temp_dir_path = Self::temp_dir_path(vault_dir_path);
+        debug!(
+            path = temp_dir_path.display().to_string(),
+            "ensuring temp dir"
+        );
+        tokio::fs::create_dir(temp_dir_path).await?;
+
+        Ok(())
+    }
+
+    fn fragment_dir_path(vault_dir_path: &Path) -> PathBuf {
+        vault_dir_path.join(Self::FRAGMENT_DIR_NAME)
+    }
+
+    fn temp_dir_path(vault_dir_path: &Path) -> PathBuf {
+        vault_dir_path.join(Self::TEMP_DIR_NAME)
+    }
+
+    fn default_db_path(base_path: &Path) -> PathBuf {
+        base_path.join(Self::DEFAULT_VAULT_DATABASE_NAME)
     }
 }
 
@@ -164,20 +265,38 @@ impl Message<StoreFragment> for Vault {
 
     async fn handle(
         &mut self,
-        msg: StoreFragment,
-        ctx: Context<'_, Self, Self::Reply>,
+        mut msg: StoreFragment,
+        _: Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        todo!()
+        Ok(self.store_fragment(&mut msg.0).await?)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use kameo::request::MessageSend;
     use tempdir::TempDir;
     use tokio::io::AsyncWriteExt;
     use tokio_stream::StreamExt;
 
     use super::*;
+
+    #[tokio::test]
+    async fn store_test() {
+        let tmp_dir = TempDir::new("liberum_tests").unwrap();
+        let vault = Vault::new(&tmp_dir.path()).await.unwrap();
+        let vault = kameo::spawn(vault);
+
+        let src_file_path = tmp_dir.path().join("src_file");
+        let mut src_file = File::create(&src_file_path).await.unwrap();
+        src_file.write(&[0; 9000]).await.unwrap();
+
+        let fragments = Vault::fragment(&src_file_path).await.unwrap();
+        for fragment in fragments {
+            let key_stored = vault.ask(StoreFragment(fragment)).send().await.unwrap();
+            println!("Stored {}", key_stored.as_base64());
+        }
+    }
 
     #[tokio::test]
     async fn fragment_test() {
@@ -197,7 +316,6 @@ mod tests {
             stream_contents.extend_from_slice(&chunk.unwrap());
         }
 
-        println!("{:?}", stream_contents);
         assert!(stream_contents.iter().all(|b| *b == 65));
 
         stream_contents = Vec::new();
@@ -205,7 +323,6 @@ mod tests {
             stream_contents.extend_from_slice(&chunk.unwrap());
         }
 
-        println!("{:?}", stream_contents);
         assert!(stream_contents.iter().all(|b| *b == 66));
     }
 }

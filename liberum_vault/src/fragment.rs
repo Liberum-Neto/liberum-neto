@@ -1,20 +1,22 @@
 pub mod key;
 
+use std::path::{Path, PathBuf};
+
 use key::*;
 
 #[derive(Debug)]
-pub struct Fragment {
+pub struct FragmentInfo {
     pub hash: Key,
-    pub path: String,
+    pub path: PathBuf,
     pub size: u64,
 }
 
-impl Fragment {
-    pub fn new(hash: Key, path: String, size: u64) -> Fragment {
-        return Fragment { hash, path, size };
-    }
-
-    pub fn random() -> Fragment {
-        Fragment::new(Key::random(), "".to_string(), 1)
+impl FragmentInfo {
+    pub fn new(hash: Key, path: &Path, size: u64) -> FragmentInfo {
+        return FragmentInfo {
+            hash,
+            path: path.to_path_buf(),
+            size,
+        };
     }
 }
