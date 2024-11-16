@@ -66,9 +66,14 @@ async fn run_swarm_main(
         .with_tokio()
         .with_quic()
         .with_behaviour(|key| {
-            let conf = kad::Config::new(KAD_PROTO_NAME);
-            let store = MemoryStore::new(key.public().to_peer_id());
+            let store_conf = kad::store::MemoryStoreConfig::default();
+            let store = MemoryStore::with_config(key.public().to_peer_id(), store_conf);
+
+            let mut conf = kad::Config::new(KAD_PROTO_NAME);
+
+            conf.set_record_filtering(kad::StoreInserts::FilterBoth);
             let kademlia = kad::Behaviour::with_config(id, store, conf);
+
             let req_resp = request_response::cbor::Behaviour::<
                 file_share::FileRequest,
                 file_share::FileResponse,
