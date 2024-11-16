@@ -1,6 +1,7 @@
 pub mod behaviour;
 pub mod messages;
 
+use crate::node::store;
 use crate::node::{self, Node};
 use anyhow::anyhow;
 use anyhow::Result;
@@ -188,17 +189,11 @@ impl SwarmContext {
                     address = format!("{addr}"),
                     "New connection"
                 );
-
-                debug!(node = self.node.name, "Neighbours:");
                 self.swarm
                     .behaviour_mut()
                     .kademlia
-                    .kbuckets()
-                    .for_each(|k| {
-                        k.iter().for_each(|e| {
-                            debug!("neighbour: {:?}: {:?}", e.node.key, e.node.value);
-                        });
-                    });
+                    .add_address(&peer_id, addr);
+                self.print_neighbours();
             }
             SwarmEvent::ConnectionClosed { .. } => {}
             SwarmEvent::NewListenAddr {
@@ -220,5 +215,18 @@ impl SwarmContext {
         }
 
         Ok(())
+    }
+
+    fn print_neighbours(&mut self) {
+        debug!(node = self.node.name, "Neighbours:");
+        self.swarm
+            .behaviour_mut()
+            .kademlia
+            .kbuckets()
+            .for_each(|k| {
+                k.iter().for_each(|e| {
+                    debug!("neighbour: {:?}: {:?}", e.node.key, e.node.value);
+                });
+            });
     }
 }
