@@ -108,72 +108,72 @@ RESULT42=$(cargo run -p liberum_cli download-file-rr $N4 "${FILE2_HASH}" 2> /dev
 RESULT43=$(cargo run -p liberum_cli download-file-rr $N4 "${FILE3_HASH}" 2> /dev/null)
 #RESULT44=$(cargo run -p liberum_cli download-file-rr $N4 "${FILE4_HASH}" 2> /dev/null)
 
-RESULT=0
+RESULT=1
 if [[ ! "${RESULT11}" =~ "${FILE1_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "1-1: \"${RESULT11}\" does not contain \"${FILE1_CONTENT}\""
 fi
 if [[ ! "${RESULT12}" =~ "${FILE2_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "1-2: \"${RESULT12}\" does not contain \"${FILE2_CONTENT}\""
 fi
 if [[ ! "${RESULT13}" =~ "${FILE3_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "1-3: \"${RESULT13}\" does not contain \"${FILE3_CONTENT}\""
 fi
 if [[ ! "${RESULT14}" =~ "${FILE4_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "1-4: \"${RESULT14}\" does not contain \"${FILE4_CONTENT}\""
 fi
 
 if [[ ! "${RESULT21}" =~ "${FILE1_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "2-1: \"${RESULT21}\" does not contain \"${FILE1_CONTENT}\""
 fi
 if [[ ! "${RESULT22}" =~ "${FILE2_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "2-2: \"${RESULT22}\" does not contain \"${FILE2_CONTENT}\""
 fi
 if [[ ! "${RESULT23}" =~ "${FILE3_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "2-3: \"${RESULT23}\" does not contain \"${FILE3_CONTENT}\""
 fi
 if [[ ! "${RESULT24}" =~ "${FILE4_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "2-4: \"${RESULT24}\" does not contain \"${FILE4_CONTENT}\""
 fi
 
 if [[ ! "${RESULT31}" =~ "${FILE1_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "3-1: \"${RESULT31}\" does not contain \"${FILE1_CONTENT}\""
 fi
 if [[ ! "${RESULT32}" =~ "${FILE2_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "3-2: \"${RESULT32}\" does not contain \"${FILE2_CONTENT}\""
 fi
 if [[ ! "${RESULT33}" =~ "${FILE3_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "3-3: \"${RESULT33}\" does not contain \"${FILE3_CONTENT}\""
 fi
 if [[ ! "${RESULT34}" =~ "${FILE4_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "3-4: \"${RESULT34}\" does not contain \"${FILE4_CONTENT}\""
 fi
 
 if [[ ! "${RESULT41}" =~ "${FILE1_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "4-1: \"${RESULT41}\" does not contain \"${FILE1_CONTENT}\""
 fi
 if [[ ! "${RESULT42}" =~ "${FILE2_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "4-2: \"${RESULT42}\" does not contain \"${FILE2_CONTENT}\""
 fi
 if [[ ! "${RESULT43}" =~ "${FILE3_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "4-3: \"${RESULT43}\" does not contain \"${FILE3_CONTENT}\""
 fi
 if [[ ! "${RESULT44}" =~ "${FILE4_CONTENT}" ]]; then
-    RESULT=1
+    RESULT=0
     echo "4-4: \"${RESULT44}\" does not contain \"${FILE4_CONTENT}\""
 fi
 
@@ -189,7 +189,7 @@ rm "$FILE3_NAME"
 rm "$FILE4_NAME"
 
 # check result
-if [[ "${RESULT}" == "0" ]]; then
+if [[ "${RESULT}" == "1" ]]; then
     echo "Success"
     exit 0
 else
