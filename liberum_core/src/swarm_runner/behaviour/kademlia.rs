@@ -154,85 +154,69 @@ impl SwarmContext {
                     });
                 }
             }
+
+            // #############################################################################################################
+            // Triggered when the node is asked to put a record into it's store as a part of the DHT
             kad::Event::InboundRequest {
-                request: kad::InboundRequest::GetProvider { .. },
+                request:
+                    kad::InboundRequest::PutRecord {
+                        source,
+                        connection,
+                        record,
+                    },
             } => {
-                debug!(node = self.node.name, "Received GetProvider")
+                debug!(node = self.node.name, "Kad Received PutRecord");
+                if record.is_none() {
+                    warn!("Received PutRecord with no record");
+                    return;
+                }
+                let record = record.unwrap();
+
+                let r = self
+                    .swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .store_mut()
+                    .put(record.clone());
+                if r.is_err() {
+                    debug!(
+                        node = self.node.name,
+                        err = format!("{r:?}"),
+                        "Kad Failed to put record"
+                    );
+                    return;
+                }
+
+                let id = record.key.clone();
+
+                // save record to filem should use a VAULT here instead
+                self.put_record_into_vault(record);
+
+                // Start a query to be providing the file ID in kademlia
+                let qid = self
+                    .swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .start_providing(id.clone());
+                if qid.is_err() {
+                    debug!(
+                        node = self.node.name,
+                        err = format!("{qid:?}"),
+                        "Failed to start providing file"
+                    );
+                    return;
+                }
+                let qid = qid.unwrap();
+
+                // We can't await for a response here because it would block the event loop
+                let (response_sender, _) = oneshot::channel();
+                self.behaviour
+                    .pending_start_providing
+                    .insert(qid, response_sender);
             }
-            // kad::Event::InboundRequest {
-            //     request:
-            //         kad::InboundRequest::PutRecord {
-            //             source,
-            //             connection,
-            //             record,
-            //         },
-            // } => 'break_inbound_put_record: {
-            //     if record.is_none() {
-            //         debug!("Received PutRecord with no record");
-            //         return;
-            //     }
-            //     let record = record.unwrap();
 
-            //     debug!(node = self.node.name, "Received PutRecord");
-
-            //     // To check if announcing providing is successfull we would need to wait for another event,
-            //     // but that would block the event loop, so we need to assume it is successful
-            //     // The record is being provided for sure, we just don't know if the information was
-            //     // published properly
-            //     let provide = self
-            //         .swarm
-            //         .behaviour_mut()
-            //         .kademlia
-            //         .start_providing(record.key.clone());
-            //     if provide.is_err() {
-            //         debug!(
-            //             node = self.node.name,
-            //             err = format!("{provide:?}"),
-            //             "Failed to start providing file"
-            //         );
-            //         break 'break_inbound_put_record;
-            //     }
-            //     let provide_qid = provide.unwrap();
-
-            //     let (sender, receiver) = oneshot::channel();
-            //     self.behaviour
-            //         .pending_start_providing
-            //         .insert(provide_qid, sender);
-
-            //     let r = self
-            //         .swarm
-            //         .behaviour_mut()
-            //         .kademlia
-            //         .store_mut()
-            //         .put(record.clone());
-            //     if r.is_err() {
-            //         debug!(
-            //             node = self.node.name,
-            //             err = format!("{r:?}"),
-            //             "Failed to put record"
-            //         );
-            //         break 'break_inbound_put_record;
-            //     }
-
-            //     let r = self
-            //         .swarm
-            //         .behaviour_mut()
-            //         .kademlia
-            //         .start_providing(record.key.clone());
-            //     if r.is_err() {
-            //         self.swarm
-            //             .behaviour_mut()
-            //             .kademlia
-            //             .store_mut()
-            //             .remove(&record.key);
-            //         debug!(
-            //             node = self.node.name,
-            //             err = format!("{r:?}"),
-            //             "Failed to start providing file"
-            //         );
-            //         break 'break_inbound_put_record;
-            //     }
-            // }
+            // #############################################################################################################
+            // Triggered when a record of ID is found in the DHT. The query must be finished manually
             kad::Event::OutboundQueryProgressed {
                 id,
                 result: kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(record))),
