@@ -2,12 +2,16 @@ use super::behaviour::file_share;
 use super::SwarmContext;
 use anyhow::anyhow;
 use anyhow::Result;
+use libp2p::quic;
 use libp2p::PeerId;
 use libp2p::{kad, Multiaddr};
 use std::collections::hash_map;
 use std::collections::HashSet;
+use std::num::NonZero;
 use std::path::PathBuf;
+use std::time::Duration;
 use tokio::sync::oneshot;
+use tokio::time;
 use tracing::{debug, info};
 pub enum SwarmRunnerError {}
 
@@ -177,11 +181,15 @@ impl SwarmContext {
                 response_sender,
             } => {
                 debug!("Publishing file {:?}", record.key);
+
+                //self.swarm.behaviour_mut().kademlia.start_providing(record.key.clone())?;
+                //self.put_record_into_vault(record.clone());
+
                 let qid = self
                     .swarm
                     .behaviour_mut()
                     .kademlia
-                    .put_record(record, kad::Quorum::One)?; // at least one node MUST store to consider it successful, counting itself
+                    .put_record(record, kad::Quorum::One)?; // at least one other node MUST store to consider it successful
 
                 self.behaviour
                     .pending_publish_file

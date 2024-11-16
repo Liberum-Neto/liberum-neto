@@ -72,7 +72,11 @@ impl Node {
             .stop_gracefully()
             .await
         {
-            error!(err = format!("{e:?}"), "Failed to kill node!");
+            error!(
+                node = self.name,
+                err = format!("{e:?}"),
+                "Failed to kill node!"
+            );
             self.self_actor_ref.as_mut().unwrap().kill();
         }
     }
@@ -81,11 +85,10 @@ impl Node {
     /// of an id. Changes the ID from string to libp2p format and just passes it to the swarm.
     #[message]
     pub async fn get_providers(&mut self, id: String) -> Result<HashSet<PeerId>> {
-        debug!("Node got GetProviders");
+        debug!(node = self.name, "Node got GetProviders");
         let id = str_to_file_id(&id)?;
         if let Some(sender) = &mut self.swarm_sender {
             let (send, recv) = oneshot::channel();
-            debug!("Node sends GetProviders to swarm");
             sender
                 .send(SwarmRunnerMessage::GetProviders {
                     id,
@@ -93,7 +96,7 @@ impl Node {
                 })
                 .await?;
             if let Ok(received) = recv.await {
-                debug!("Got providers: {received:?}");
+                debug!(node = self.name, "Got providers: {received:?}");
                 return Ok(received);
             }
         }
@@ -110,7 +113,7 @@ impl Node {
             .map_err(|e| error!(err = e.to_string(), "Failed to hash file"))
             .unwrap();
         if let None = self.swarm_sender {
-            error!("Swarm is None!");
+            error!(node = self.name, "Swarm is None!");
             return Err(anyhow!("Swarm is None!"));
         }
 
@@ -134,7 +137,7 @@ impl Node {
         let id_str = id;
         let id = liberum_core::str_to_file_id(&id_str)?;
         if let None = self.swarm_sender {
-            error!("Swarm is None!");
+            error!(node = self.name, "Swarm is None!");
             return Err(anyhow!("Swarm is None!"));
         }
         let sender = self.swarm_sender.as_mut().unwrap(); // won't panic due to the if let above
@@ -156,7 +159,7 @@ impl Node {
         let id_str = id;
         let id = liberum_core::str_to_file_id(&id_str)?;
         if let None = self.swarm_sender {
-            error!("Swarm is None!");
+            error!(node = self.name, "Swarm is None!");
             return Err(anyhow!("Swarm is None!"));
         }
         let sender = self.swarm_sender.as_mut().unwrap(); // won't panic due to the if let above
@@ -183,13 +186,18 @@ impl Node {
                 response_sender: file_sender,
             });
             if let Err(e) = result.await {
-                error!(err = e.to_string(), "Failed to send download file message");
+                error!(
+                    node = self.name,
+                    err = e.to_string(),
+                    "Failed to send download file message"
+                );
                 continue;
             }
             if let Ok(file) = file_receiver.await {
                 let hash = bs58::encode(blake3::hash(&file).as_bytes()).into_string();
                 if hash != id_str {
                     debug!(
+                        node = self.name,
                         from = format!("{peer}"),
                         "Received wrong file! {hash} != {id_str}"
                     );
@@ -208,7 +216,6 @@ impl Node {
 
     #[message]
     pub async fn dial_peer(&mut self, peer_id: String, peer_addr: String) -> Result<()> {
-        debug!("Node got DialPeer");
         if let Some(sender) = &mut self.swarm_sender {
             let (send, recv) = oneshot::channel();
             let peer_id = PeerId::from_str(&peer_id)?;
@@ -228,10 +235,13 @@ impl Node {
 
     #[message]
     pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
-        debug!("Node got PublishFile");
         if let Some(sender) = &mut self.swarm_sender {
             let id = liberum_core::get_file_id(&path).await.map_err(|e| {
-                error!(err = e.to_string(), "Failed to hash file");
+                error!(
+                    err = e.to_string(),
+                    path = format!("{path:?}"),
+                    "Failed to hash file"
+                );
                 e
             })?;
             let (send, recv) = oneshot::channel();
@@ -240,7 +250,7 @@ impl Node {
             // a new behaviour kademlia could talk to, which would provide streams of data.
             // (Maybe could be implemented on the existing request_response if it would be generalised more?)
             let data = tokio::fs::read(&path).await.map_err(|e| {
-                error!(err = e.to_string(), "Failed to read file");
+                error!(node = self.name, err = e.to_string(), "Failed to read file");
                 e
             })?;
 
@@ -261,7 +271,8 @@ impl Node {
             let id_str = liberum_core::file_id_to_str(id);
 
             return match recv.await {
-                Ok(_r) => Ok(id_str),
+                Ok(Ok(_)) => Ok(id_str),
+                Ok(Err(e)) => Err(e.into()),
                 Err(e) => Err(e.into()),
             };
         }
