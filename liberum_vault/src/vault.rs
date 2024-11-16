@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::path::PathBuf;
 
 use anyhow::anyhow;
 use anyhow::Result;
@@ -7,34 +8,35 @@ use kameo::message::{Context, Message};
 use kameo::Actor;
 use rusqlite::OptionalExtension;
 use tokio::fs::File;
+use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncSeekExt;
 use tokio::io::Take;
 use tokio_rusqlite::Connection;
 use tokio_util::io::ReaderStream;
 
+use crate::fragment;
 use crate::fragment::key::Key;
 use crate::fragment::Fragment;
 
 pub struct Vault {
     db: Connection,
+    vault_dir_path: PathBuf,
 }
 
+pub struct StoreFragment(Box<dyn AsyncRead + Send>);
 pub struct Store(pub Fragment);
 pub struct Get(pub Key);
 pub struct Remove(pub Key);
 
 impl Vault {
-    pub async fn new(db_path: &Path) -> Result<Vault> {
+    pub async fn new(db_path: &Path, vault_dir_path: &Path) -> Result<Vault> {
         let db = Connection::open(db_path).await?;
 
-        Ok(Vault { db })
-    }
-
-    pub async fn in_memory() -> Result<Vault> {
-        let db = Connection::open_in_memory().await?;
-
-        Ok(Vault { db })
+        Ok(Vault {
+            db,
+            vault_dir_path: vault_dir_path.to_path_buf(),
+        })
     }
 
     // TODO: Add logarithmic fragment sizes
@@ -55,15 +57,8 @@ impl Vault {
 
         Ok(result)
     }
-}
 
-impl Actor for Vault {
-    type Mailbox = BoundedMailbox<Self>;
-
-    async fn on_start(
-        &mut self,
-        _: kameo::actor::ActorRef<Self>,
-    ) -> std::result::Result<(), kameo::error::BoxError> {
+    async fn prepare_db(&self) -> Result<()> {
         const CREATE_FRAGMENT_TABLE_QUERY: &str = "
             CREATE TABLE IF NOT EXISTS fragment (
                 hash0 INTEGER,
@@ -82,47 +77,8 @@ impl Actor for Vault {
 
         Ok(())
     }
-}
 
-impl Message<Store> for Vault {
-    type Reply = Result<()>;
-
-    async fn handle(
-        &mut self,
-        Store(fragment): Store,
-        _: Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        const INSERT_FRAGMENT_QUERY: &str = "
-                INSERT INTO fragment (hash0, hash1, hash2, hash3, path, size)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-            ";
-        let hash_as_u64 = fragment.hash.as_u64_slice_be();
-
-        self.db
-            .call(move |conn| {
-                conn.execute(
-                    INSERT_FRAGMENT_QUERY,
-                    (
-                        hash_as_u64[0] as i64,
-                        hash_as_u64[1] as i64,
-                        hash_as_u64[2] as i64,
-                        hash_as_u64[3] as i64,
-                        fragment.path,
-                        fragment.size,
-                    ),
-                )?;
-
-                Ok(())
-            })
-            .await
-            .map_err(|e| anyhow!(e))
-    }
-}
-
-impl Message<Get> for Vault {
-    type Reply = Result<Option<Fragment>>;
-
-    async fn handle(&mut self, Get(key): Get, _: Context<'_, Self, Self::Reply>) -> Self::Reply {
+    async fn load_fragment_info(&self, key: Key) -> Result<Option<Fragment>> {
         const SELECT_FRAGMENT_QUERY: &str = "
             SELECT path, size
             FROM fragment
@@ -161,34 +117,67 @@ impl Message<Get> for Vault {
             .await
             .map_err(|e| anyhow!(e))
     }
+
+    async fn store_fragment_info(&self, fragment: Fragment) -> Result<()> {
+        const INSERT_FRAGMENT_QUERY: &str = "
+                INSERT INTO fragment (hash0, hash1, hash2, hash3, path, size)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ";
+        let hash_as_u64 = fragment.hash.as_u64_slice_be();
+
+        self.db
+            .call(move |conn| {
+                conn.execute(
+                    INSERT_FRAGMENT_QUERY,
+                    (
+                        hash_as_u64[0] as i64,
+                        hash_as_u64[1] as i64,
+                        hash_as_u64[2] as i64,
+                        hash_as_u64[3] as i64,
+                        fragment.path,
+                        fragment.size,
+                    ),
+                )?;
+
+                Ok(())
+            })
+            .await
+            .map_err(|e| anyhow!(e))
+    }
 }
 
-impl Message<Remove> for Vault {
-    type Reply = Result<()>;
+impl Actor for Vault {
+    type Mailbox = BoundedMailbox<Self>;
 
-    async fn handle(&mut self, _: Remove, _: Context<'_, Self, Self::Reply>) -> Self::Reply {
+    async fn on_start(
+        &mut self,
+        _: kameo::actor::ActorRef<Self>,
+    ) -> std::result::Result<(), kameo::error::BoxError> {
+        self.prepare_db().await?;
+
+        Ok(())
+    }
+}
+
+impl Message<StoreFragment> for Vault {
+    type Reply = Result<Key>;
+
+    async fn handle(
+        &mut self,
+        msg: StoreFragment,
+        ctx: Context<'_, Self, Self::Reply>,
+    ) -> Self::Reply {
         todo!()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use kameo::request::MessageSend;
     use tempdir::TempDir;
     use tokio::io::AsyncWriteExt;
     use tokio_stream::StreamExt;
 
     use super::*;
-
-    #[tokio::test]
-    async fn basic_test() {
-        let vault_ref = kameo::spawn(Vault::in_memory().await.unwrap());
-        vault_ref
-            .ask(Store(Fragment::random()))
-            .send()
-            .await
-            .unwrap();
-    }
 
     #[tokio::test]
     async fn fragment_test() {
