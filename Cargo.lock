@@ -1527,8 +1527,11 @@ dependencies = [
  "kameo",
  "rand 0.8.5",
  "rusqlite",
+ "tempdir",
  "tokio",
  "tokio-rusqlite",
+ "tokio-stream",
+ "tokio-util",
 ]
 
 [[package]]

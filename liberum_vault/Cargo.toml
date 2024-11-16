@@ -9,5 +9,8 @@ base64 = "0.22.1"
 kameo = "0.12.2"
 rand = "0.8.5"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
+tempdir = "0.3.7"
 tokio = { version = "1.40.0", features = ["full"] }
 tokio-rusqlite = "0.6.0"
+tokio-stream = "0.1.16"
+tokio-util = { version = "0.7.12", features = ["io"] }

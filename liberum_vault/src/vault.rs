@@ -6,7 +6,12 @@ use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::message::{Context, Message};
 use kameo::Actor;
 use rusqlite::OptionalExtension;
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncSeekExt;
+use tokio::io::Take;
 use tokio_rusqlite::Connection;
+use tokio_util::io::ReaderStream;
 
 use crate::fragment::key::Key;
 use crate::fragment::Fragment;
@@ -30,6 +35,25 @@ impl Vault {
         let db = Connection::open_in_memory().await?;
 
         Ok(Vault { db })
+    }
+
+    // TODO: Add logarithmic fragment sizes
+    pub async fn fragment(path: &Path) -> Result<Vec<Box<ReaderStream<Take<File>>>>> {
+        let file_size = tokio::fs::metadata(path).await?.len();
+        let mut current_pos = 0;
+        let mut result = Vec::new();
+
+        while current_pos < file_size {
+            let mut f = File::open(path).await?;
+            f.seek(std::io::SeekFrom::Start(current_pos)).await?;
+
+            let reader_stream = ReaderStream::new(f.take(4096));
+
+            result.push(Box::new(reader_stream));
+            current_pos += 4096;
+        }
+
+        Ok(result)
     }
 }
 
@@ -150,6 +174,9 @@ impl Message<Remove> for Vault {
 #[cfg(test)]
 mod tests {
     use kameo::request::MessageSend;
+    use tempdir::TempDir;
+    use tokio::io::AsyncWriteExt;
+    use tokio_stream::StreamExt;
 
     use super::*;
 
@@ -161,5 +188,35 @@ mod tests {
             .send()
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn fragment_test() {
+        let tmp_dir = TempDir::new("liberum_tests").unwrap();
+        let file_path = tmp_dir.path().join("to_fragment.txt");
+        let mut file = File::create(&file_path).await.unwrap();
+
+        file.write_all(&[65; 4096]).await.unwrap();
+        file.write_all(&[66; 4096]).await.unwrap();
+
+        let mut fragments = Vault::fragment(&file_path).await.unwrap();
+
+        assert_eq!(fragments.len(), 2);
+
+        let mut stream_contents = Vec::new();
+        while let Some(chunk) = fragments[0].next().await {
+            stream_contents.extend_from_slice(&chunk.unwrap());
+        }
+
+        println!("{:?}", stream_contents);
+        assert!(stream_contents.iter().all(|b| *b == 65));
+
+        stream_contents = Vec::new();
+        while let Some(chunk) = fragments[1].next().await {
+            stream_contents.extend_from_slice(&chunk.unwrap());
+        }
+
+        println!("{:?}", stream_contents);
+        assert!(stream_contents.iter().all(|b| *b == 66));
     }
 }
