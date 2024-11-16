@@ -147,6 +147,15 @@ async fn run_swarm_main(
             .add_address(&node.id, node.addr.clone());
         debug!("Bootstrap node: {}", serde_json::to_string(&node)?);
     }
+    context
+        .swarm
+        .behaviour_mut()
+        .kademlia
+        .bootstrap()
+        .inspect_err(|e| {
+            info!(err = e.to_string(), "Could not bootstrap the swarm");
+        })
+        .ok();
 
     // Main swarm loop for handling all events and messages
     loop {
