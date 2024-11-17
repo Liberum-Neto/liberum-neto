@@ -18,6 +18,7 @@ use tokio::io::Take;
 use tokio_rusqlite::Connection;
 use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
+use tokio_util::io::StreamReader;
 use tracing::debug;
 
 use crate::fragment;
@@ -32,9 +33,7 @@ pub struct Vault {
 type FragmentData = Box<ReaderStream<Take<File>>>;
 
 pub struct StoreFragment(FragmentData);
-pub struct Store(pub FragmentInfo);
-pub struct Get(pub Key);
-pub struct Remove(pub Key);
+pub struct LoadFragment(Key);
 
 impl Vault {
     const DEFAULT_VAULT_DATABASE_NAME: &'static str = "vault.db3";
@@ -185,16 +184,35 @@ impl Vault {
             .map_err(|e| anyhow!(e))
     }
 
+    async fn load_fragment(&self, key: Key) -> Result<Option<FragmentData>> {
+        let fragment_info = self.load_fragment_info(key.clone()).await?;
+
+        if let None = fragment_info {
+            return Ok(None);
+        }
+
+        let fragment_info = fragment_info.unwrap();
+        let fragment_path = fragment_info.path;
+        let fragment_file = File::open(&fragment_path).await?;
+
+        // TODO: Fix, is there any way to not use this take here?
+        Ok(Some(Box::new(ReaderStream::new(
+            fragment_file.take(fragment_info.size),
+        ))))
+    }
+
     async fn store_fragment(&self, data: &mut FragmentData) -> Result<Key> {
         let uid = uuid::Uuid::new_v4();
         let random_fragment_path = Self::temp_dir_path(&self.vault_dir_path).join(uid.to_string());
         let mut fragment_file = File::create(&random_fragment_path).await?;
         let mut hasher = blake3::Hasher::new();
+        let mut fragment_size = 0;
 
         while let Some(bytes) = data.next().await {
             let bytes = bytes?;
             hasher.update(&bytes);
             fragment_file.write(&bytes).await?;
+            fragment_size += bytes.len();
         }
 
         let key_bytes = hasher.finalize().as_bytes().to_vec();
@@ -204,7 +222,11 @@ impl Vault {
         tokio::fs::rename(random_fragment_path, &valid_fragment_path).await?;
 
         let fragment_key = Key::try_from(key_bytes)?;
-        let fragment_info = FragmentInfo::new(fragment_key.clone(), &valid_fragment_path, 0);
+        let fragment_info = FragmentInfo::new(
+            fragment_key.clone(),
+            &valid_fragment_path,
+            fragment_size as u64,
+        );
         self.store_fragment_info(fragment_info).await?;
 
         Ok(fragment_key)
@@ -272,6 +294,18 @@ impl Message<StoreFragment> for Vault {
     }
 }
 
+impl Message<LoadFragment> for Vault {
+    type Reply = Result<Option<FragmentData>>;
+
+    async fn handle(
+        &mut self,
+        msg: LoadFragment,
+        _: Context<'_, Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.load_fragment(msg.0).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use kameo::request::MessageSend;
@@ -282,7 +316,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn store_test() {
+    async fn load_store_test() {
         let tmp_dir = TempDir::new("liberum_tests").unwrap();
         let vault = Vault::new(&tmp_dir.path()).await.unwrap();
         let vault = kameo::spawn(vault);
@@ -291,11 +325,27 @@ mod tests {
         let mut src_file = File::create(&src_file_path).await.unwrap();
         src_file.write(&[0; 9000]).await.unwrap();
 
+        let mut last_key_stored: Option<Key> = None;
         let fragments = Vault::fragment(&src_file_path).await.unwrap();
         for fragment in fragments {
             let key_stored = vault.ask(StoreFragment(fragment)).send().await.unwrap();
             println!("Stored {}", key_stored.as_base64());
+            last_key_stored = Some(key_stored);
         }
+
+        let last_key_stored = last_key_stored.unwrap();
+        let mut fragment_stream = vault
+            .ask(LoadFragment(last_key_stored))
+            .send()
+            .await
+            .unwrap()
+            .unwrap();
+
+        let is_ok = fragment_stream
+            .all(|x| x.unwrap().iter().all(|b| *b == 0))
+            .await;
+
+        assert!(is_ok);
     }
 
     #[tokio::test]
