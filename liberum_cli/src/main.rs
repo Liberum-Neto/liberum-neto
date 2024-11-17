@@ -4,7 +4,6 @@ use liberum_core::node_config::NodeConfig;
 use liberum_core::types::NodeInfo;
 use liberum_core::{node_config::BootstrapNode, DaemonError, DaemonRequest, DaemonResponse};
 use libp2p::Multiaddr;
-use std::any;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;

@@ -1,7 +1,6 @@
 pub mod behaviour;
 pub mod messages;
 
-use crate::node::store;
 use crate::node::{self, Node};
 use anyhow::anyhow;
 use anyhow::Result;
@@ -157,7 +156,9 @@ async fn run_swarm_main(
         })
         .ok();
 
-    // Main swarm loop for handling all events and messages
+    // #########################################################################
+    // ##  Main swarm loop for handling all events and messages
+    // #########################################################################
     loop {
         tokio::select! {
             Some(message) = receiver.recv() => {
