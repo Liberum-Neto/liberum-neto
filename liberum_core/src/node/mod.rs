@@ -179,6 +179,12 @@ impl Node {
         }
 
         for peer in &providers {
+            debug!(
+                node = self.name,
+                peer = peer.to_base58(),
+                id = id_str,
+                "Trying to download from peer"
+            );
             let (file_sender, file_receiver) = oneshot::channel();
             let result = sender.send(SwarmRunnerMessage::DownloadFileRequestResponse {
                 id: id.clone(),
