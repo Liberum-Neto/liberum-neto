@@ -160,8 +160,8 @@ impl SwarmContext {
             kad::Event::InboundRequest {
                 request:
                     kad::InboundRequest::PutRecord {
-                        source,
-                        connection,
+                        source: _,
+                        connection: _,
                         record,
                     },
             } => {
