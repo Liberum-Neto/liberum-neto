@@ -13,7 +13,7 @@ echo "Provide and download file test:"
 
 # run daemon
 killall liberum_core &> /dev/null
-nohup cargo run -p liberum_core  &> /dev/null &
+cargo run -p liberum_core -- --daemon  &> /dev/null &
 sleep 0.5; # the socket file is created asynchronously and may not be ready yet :))))
 
 # create ndoes

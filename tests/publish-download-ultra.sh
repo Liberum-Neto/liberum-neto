@@ -3,28 +3,28 @@
 N1="test_n1"
 N1_SEED=1
 N1_ADDR="/ip6/::1/udp/52137/quic-v1"
-FILE1_NAME="test-file1.txt"
+FILE1_NAME="$PWD/test-file1.txt"
 FILE1_CONTENT="11111 Hello, World! 11111"
 FILE1_HASH="FhFBdCe9PqTjgptawEAxybYUTMwGDdamafRjCJ2P8Gsx"
 
 N2="test_n2"
 N2_SEED=2
 N2_ADDR="/ip6/::1/udp/52138/quic-v1"
-FILE2_NAME="test-file2.txt"
+FILE2_NAME="$PWD/test-file2.txt"
 FILE2_CONTENT="22222 Hello, World! 22222"
 FILE2_HASH="4Xryc3R1pQjfjLrM7yG4rkvjoDrrW9rbe9qCK24kj4Pc"
 
 N3="test_n3"
 N3_SEED=3
 N3_ADDR="/ip6/::1/udp/52139/quic-v1"
-FILE3_NAME="test-file3.txt"
+FILE3_NAME="$PWD/test-file3.txt"
 FILE3_CONTENT="33333 Hello, World! 33333"
 FILE3_HASH="6KxBVAEgRzM9fNFo3243wefmJTqgdoTdJ4hLmkNFaxrf"
 
 N4="test_n4"
 N4_SEED=4
 N4_ADDR="/ip6/::1/udp/52140/quic-v1"
-FILE4_NAME="test-file4.txt"
+FILE4_NAME="$PWD/test-file4.txt"
 FILE4_CONTENT="44444 Hello, World! 44444"
 FILE4_HASH="EdfX8prcsmXYs7FxwSjp5hqCuB3kwinWvM6KwNdFFzNj"
 
@@ -32,7 +32,7 @@ echo "Provide and download file test:"
 
 # run daemon
 killall liberum_core &> /dev/null
-nohup cargo run -p liberum_core  &> /dev/null &
+nohup cargo run -p liberum_core -- --daemon  &> /dev/null &
 sleep 0.5; # the socket file is created asynchronously and may not be ready yet :))))
 
 # create ndoes

@@ -38,7 +38,7 @@ cargo run -p liberum_cli -- -d publish-file $N1 "$FILE_NAME" &> /dev/null
 
 # download file
 PROVIDERS_RESULT=$(cargo run -p liberum_cli -- -d get-providers $N2 "${BLAKE3_HASH}" 2> /dev/null)
-RESULT=$(cargo run -p liberum_cli -- -d download-file $N2 "${BLAKE3_HASH}" 2> /dev/null)
+RESULT1=$(cargo run -p liberum_cli -- -d download-file $N2 "${BLAKE3_HASH}" 2> /dev/null)
 
 # cleanup
 cargo run -p liberum_cli -- -d stop-node $N1 2> /dev/null
@@ -46,13 +46,23 @@ cargo run -p liberum_cli -- -d stop-node $N2 2> /dev/null
 # killall liberum_core &> /dev/null
 rm "$FILE_NAME"
 
+
+RESULT=1
 # check result
-if [[ "${RESULT}" =~ "${FILE_CONTENT}" ]]; then
-    echo "\"${RESULT}\" does not contain \"${FILE_CONTENT}\""
+if [[ ! "${RESULT1}" =~ "${FILE_CONTENT}" ]]; then
+    echo "\"${RESULT1}\" does not contain \"${FILE_CONTENT}\""
     RESULT=0
 fi
 
 if [[ -z "${PROVIDERS_RESULT}" ]]; then
     echo "\"${PROVIDERS_RESULT}\" is empty\""
     RESULT=0
+fi
+
+if [[ "${RESULT}" == "1" ]]; then
+    echo "Success"
+    exit 0
+else
+    echo "Failure"
+    exit 1
 fi
