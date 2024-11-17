@@ -305,7 +305,7 @@ impl SwarmContext {
 
     pub(crate) fn put_record_into_vault(&mut self, record: kad::Record) {
         let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.node.name.clone());
-        std::fs::create_dir(&dir).ok();
+        std::fs::create_dir_all(&dir).ok();
         let path = dir.join(liberum_core::file_id_to_str(record.key.clone()));
         if let Err(e) = std::fs::write(path.clone(), record.value) {
             error!(

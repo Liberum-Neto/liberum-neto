@@ -1,3 +1,4 @@
+use bincode::de;
 use libp2p::{kad, request_response};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -77,7 +78,7 @@ impl SwarmContext {
                         .send(response.data);
                 }
             },
-            _ => {}
+            e => debug!("Request_response event! {e:?}"),
         }
     }
 }

@@ -82,6 +82,7 @@ impl SwarmContext {
                         .behaviour_mut()
                         .kademlia
                         .add_address(&peer_id, peer_addr.clone());
+
                     match self.swarm.dial(peer_addr) {
                         Ok(()) => {
                             entry.insert(response_sender);
@@ -148,15 +149,38 @@ impl SwarmContext {
                 peer,
                 response_sender,
             } => {
-                let qid = self
-                    .swarm
-                    .behaviour_mut()
-                    .file_share
-                    .send_request(&peer, file_share::FileRequest { id: id.to_vec() });
+                println!(
+                    "Sending a file_share request for id {} to peer {}",
+                    bs58::encode(id.clone()).into_string(),
+                    peer.to_base58()
+                );
 
-                self.behaviour
-                    .pending_download_file
-                    .insert(qid, response_sender);
+                // If the local peer
+                if &peer == self.swarm.local_peer_id() {
+                    // Should be implemented using a VAULT
+                    let file = self.behaviour.providing.get(&id);
+                    if let Some(file) = file {
+                        match file {
+                            file_share::SharedResource::File(file_share::FileResource { path }) => {
+                                if let Ok(data) = tokio::fs::read(path).await {
+                                    let _ = response_sender.send(data);
+                                    return Ok(false);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Send a request to the peer
+                    let qid = self
+                        .swarm
+                        .behaviour_mut()
+                        .file_share
+                        .send_request(&peer, file_share::FileRequest { id: id.to_vec() });
+
+                    self.behaviour
+                        .pending_download_file
+                        .insert(qid, response_sender);
+                }
                 Ok(false)
             }
 
