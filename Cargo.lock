@@ -1526,6 +1526,8 @@ dependencies = [
  "base64",
  "blake3",
  "bs58",
+ "futures",
+ "futures-util",
  "kameo",
  "rand 0.8.5",
  "rusqlite",

@@ -8,6 +8,8 @@ anyhow = "1.0.89"
 base64 = "0.22.1"
 blake3 = "1.5.4"
 bs58 = "0.5.1"
+futures = "0.3.31"
+futures-util = "0.3.31"
 kameo = "0.12.2"
 rand = "0.8.5"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
