@@ -1,27 +1,25 @@
-use core::hash;
 use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::anyhow;
 use anyhow::Result;
+use futures::stream::BoxStream;
+use futures::StreamExt;
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::message::{Context, Message};
 use kameo::Actor;
-use rand::random;
 use rusqlite::OptionalExtension;
 use tokio::fs::File;
-use tokio::io::AsyncRead;
+use tokio::io;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncSeekExt;
 use tokio::io::AsyncWriteExt;
-use tokio::io::Take;
+use tokio::io::BufReader;
 use tokio_rusqlite::Connection;
-use tokio_stream::StreamExt;
+use tokio_util::bytes::Bytes;
 use tokio_util::io::ReaderStream;
-use tokio_util::io::StreamReader;
 use tracing::debug;
 
-use crate::fragment;
 use crate::fragment::key::Key;
 use crate::fragment::FragmentInfo;
 
@@ -30,7 +28,7 @@ pub struct Vault {
     vault_dir_path: PathBuf,
 }
 
-type FragmentData = Box<ReaderStream<Take<File>>>;
+type FragmentData = BoxStream<'static, Result<Bytes, io::Error>>;
 
 pub struct StoreFragment(FragmentData);
 pub struct LoadFragment(Key);
@@ -53,18 +51,19 @@ impl Vault {
     }
 
     // TODO: Add logarithmic fragment sizes
-    pub async fn fragment(path: &Path) -> Result<Vec<Box<ReaderStream<Take<File>>>>> {
+    pub async fn fragment(path: &Path) -> Result<Vec<FragmentData>> {
         let file_size = tokio::fs::metadata(path).await?.len();
         let mut current_pos = 0;
-        let mut result = Vec::new();
+        let mut result: Vec<FragmentData> = Vec::new();
 
         while current_pos < file_size {
             let mut f = File::open(path).await?;
             f.seek(std::io::SeekFrom::Start(current_pos)).await?;
 
-            let reader_stream = ReaderStream::new(f.take(4096));
+            let buf_reader = BufReader::new(f);
+            let reader_stream = ReaderStream::new(buf_reader.take(4096));
 
-            result.push(Box::new(reader_stream));
+            result.push(reader_stream.boxed());
             current_pos += 4096;
         }
 
@@ -196,9 +195,9 @@ impl Vault {
         let fragment_file = File::open(&fragment_path).await?;
 
         // TODO: Fix, is there any way to not use this take here?
-        Ok(Some(Box::new(ReaderStream::new(
-            fragment_file.take(fragment_info.size),
-        ))))
+        Ok(Some(
+            ReaderStream::new(fragment_file.take(fragment_info.size)).boxed(),
+        ))
     }
 
     async fn store_fragment(&self, data: &mut FragmentData) -> Result<Key> {
@@ -297,12 +296,12 @@ impl Message<StoreFragment> for Vault {
 impl Message<LoadFragment> for Vault {
     type Reply = Result<Option<FragmentData>>;
 
-    async fn handle(
+    fn handle(
         &mut self,
         msg: LoadFragment,
         _: Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.load_fragment(msg.0).await
+    ) -> impl std::future::Future<Output = Self::Reply> + Send {
+        async move { self.load_fragment(msg.0).await }
     }
 }
 
