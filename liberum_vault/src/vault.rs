@@ -307,45 +307,13 @@ impl Message<LoadFragment> for Vault {
 
 #[cfg(test)]
 mod tests {
+    use futures::StreamExt as FuturesStreamExt;
     use kameo::request::MessageSend;
+    use rand::Rng;
     use tempdir::TempDir;
     use tokio::io::AsyncWriteExt;
-    use tokio_stream::StreamExt;
 
     use super::*;
-
-    #[tokio::test]
-    async fn load_store_test() {
-        let tmp_dir = TempDir::new("liberum_tests").unwrap();
-        let vault = Vault::new(&tmp_dir.path()).await.unwrap();
-        let vault = kameo::spawn(vault);
-
-        let src_file_path = tmp_dir.path().join("src_file");
-        let mut src_file = File::create(&src_file_path).await.unwrap();
-        src_file.write(&[0; 9000]).await.unwrap();
-
-        let mut last_key_stored: Option<Key> = None;
-        let fragments = Vault::fragment(&src_file_path).await.unwrap();
-        for fragment in fragments {
-            let key_stored = vault.ask(StoreFragment(fragment)).send().await.unwrap();
-            println!("Stored {}", key_stored.as_base64());
-            last_key_stored = Some(key_stored);
-        }
-
-        let last_key_stored = last_key_stored.unwrap();
-        let mut fragment_stream = vault
-            .ask(LoadFragment(last_key_stored))
-            .send()
-            .await
-            .unwrap()
-            .unwrap();
-
-        let is_ok = fragment_stream
-            .all(|x| x.unwrap().iter().all(|b| *b == 0))
-            .await;
-
-        assert!(is_ok);
-    }
 
     #[tokio::test]
     async fn fragment_test() {
@@ -382,9 +350,14 @@ mod tests {
 
         let file_path = tmp_dir.path().join("to_fragment.txt");
         let mut file = File::create(&file_path).await.unwrap();
-        file.write_all(&[65; 4096]).await.unwrap();
+        let random_bytes = (0..10000)
+            .map(|_| rand::thread_rng().gen_range(65..91))
+            .collect::<Vec<u8>>();
+        file.write_all(&random_bytes).await.unwrap();
 
         let fragments = Vault::fragment(&file_path).await.unwrap();
+        assert_eq!(fragments.len(), 3);
+
         let vault = Vault::new(vault_dir_path).await.unwrap();
         let vault = kameo::spawn(vault);
         let mut stored_keys = Vec::new();
@@ -394,17 +367,22 @@ mod tests {
             stored_keys.push(stored_key);
         }
 
-        for stored_key in stored_keys {
-            let mut frag = vault
-                .ask(LoadFragment(stored_key))
+        let mut bytes_recollected = Vec::new();
+
+        for key in stored_keys {
+            let mut fragment_bytes = vault
+                .ask(LoadFragment(key))
                 .send()
                 .await
                 .unwrap()
-                .unwrap();
+                .unwrap()
+                .flat_map(|bt| tokio_stream::iter(bt.unwrap()))
+                .collect::<Vec<u8>>()
+                .await;
 
-            let is_all_65 = frag.all(|bts| bts.unwrap().iter().all(|b| *b == 65)).await;
-
-            assert!(is_all_65);
+            bytes_recollected.append(&mut fragment_bytes);
         }
+
+        assert_eq!(random_bytes, bytes_recollected);
     }
 }
