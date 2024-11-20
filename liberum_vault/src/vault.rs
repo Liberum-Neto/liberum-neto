@@ -374,4 +374,37 @@ mod tests {
 
         assert!(stream_contents.iter().all(|b| *b == 66));
     }
+
+    #[tokio::test]
+    async fn store_load_test() {
+        let tmp_dir = TempDir::new("liberum_tests").unwrap();
+        let vault_dir_path = tmp_dir.path();
+
+        let file_path = tmp_dir.path().join("to_fragment.txt");
+        let mut file = File::create(&file_path).await.unwrap();
+        file.write_all(&[65; 4096]).await.unwrap();
+
+        let fragments = Vault::fragment(&file_path).await.unwrap();
+        let vault = Vault::new(vault_dir_path).await.unwrap();
+        let vault = kameo::spawn(vault);
+        let mut stored_keys = Vec::new();
+
+        for frag in fragments {
+            let stored_key = vault.ask(StoreFragment(frag)).send().await.unwrap();
+            stored_keys.push(stored_key);
+        }
+
+        for stored_key in stored_keys {
+            let mut frag = vault
+                .ask(LoadFragment(stored_key))
+                .send()
+                .await
+                .unwrap()
+                .unwrap();
+
+            let is_all_65 = frag.all(|bts| bts.unwrap().iter().all(|b| *b == 65)).await;
+
+            assert!(is_all_65);
+        }
+    }
 }
