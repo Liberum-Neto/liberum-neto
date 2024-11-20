@@ -1,3 +1,5 @@
+use std::iter::once;
+use std::iter::successors;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -55,19 +57,46 @@ impl Vault {
         let file_size = tokio::fs::metadata(path).await?.len();
         let mut current_pos = 0;
         let mut result: Vec<FragmentData> = Vec::new();
+        let mut current_size = Self::power_2_upto(file_size);
 
         while current_pos < file_size {
             let mut f = File::open(path).await?;
             f.seek(std::io::SeekFrom::Start(current_pos)).await?;
 
             let buf_reader = BufReader::new(f);
-            let reader_stream = ReaderStream::new(buf_reader.take(4096));
+            let reader_stream = ReaderStream::new(buf_reader.take(current_size));
 
             result.push(reader_stream.boxed());
-            current_pos += 4096;
+            current_pos += current_size;
+            current_size = Self::power_2_desc_from_power_2(current_size, file_size - current_pos);
         }
 
         Ok(result)
+    }
+
+    fn power_2_upto(limit: u64) -> u64 {
+        let powers_from_1 = successors(Some(1u64), |&n| Some(n * 2))
+            .take_while(|x| x <= &limit)
+            .last();
+
+        once(0u64).chain(powers_from_1).last().unwrap()
+    }
+
+    fn power_2_desc_from_power_2(start: u64, limit: u64) -> u64 {
+        assert!(Self::is_power_of_2(start));
+
+        if limit == 0 {
+            return 0;
+        }
+
+        successors(Some(start), |&n| Some(n / 2))
+            .take_while(|x| x > &(limit / 2) || x == &limit)
+            .last()
+            .unwrap()
+    }
+
+    fn is_power_of_2(number: u64) -> bool {
+        number > 0 && (((number) & (number - 1)) == 0)
     }
 
     async fn prepare_db(&self) -> Result<()> {
@@ -322,7 +351,7 @@ mod tests {
         let mut file = File::create(&file_path).await.unwrap();
 
         file.write_all(&[65; 4096]).await.unwrap();
-        file.write_all(&[66; 4096]).await.unwrap();
+        file.write_all(&[66; 2048]).await.unwrap();
 
         let mut fragments = Vault::fragment(&file_path).await.unwrap();
 
@@ -333,6 +362,7 @@ mod tests {
             stream_contents.extend_from_slice(&chunk.unwrap());
         }
 
+        assert_eq!(stream_contents.len(), 4096);
         assert!(stream_contents.iter().all(|b| *b == 65));
 
         stream_contents = Vec::new();
@@ -340,6 +370,7 @@ mod tests {
             stream_contents.extend_from_slice(&chunk.unwrap());
         }
 
+        assert_eq!(stream_contents.len(), 2048);
         assert!(stream_contents.iter().all(|b| *b == 66));
     }
 
@@ -356,7 +387,8 @@ mod tests {
         file.write_all(&random_bytes).await.unwrap();
 
         let fragments = Vault::fragment(&file_path).await.unwrap();
-        assert_eq!(fragments.len(), 3);
+        // 8192, 1024, 512, 256, 16
+        assert_eq!(fragments.len(), 5);
 
         let vault = Vault::new(vault_dir_path).await.unwrap();
         let vault = kameo::spawn(vault);
