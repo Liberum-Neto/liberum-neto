@@ -32,13 +32,9 @@ pub enum SwarmRunnerMessage {
         path: PathBuf,
         response_sender: oneshot::Sender<Result<()>>,
     },
-    DownloadFileRequestResponse {
+    DownloadFile {
         id: kad::RecordKey,
         peer: PeerId,
-        response_sender: oneshot::Sender<Vec<u8>>,
-    },
-    DownloadFileDHT {
-        id: kad::RecordKey,
         response_sender: oneshot::Sender<Vec<u8>>,
     },
     PublishFile {
@@ -142,7 +138,7 @@ impl SwarmContext {
                 Ok(false)
             }
 
-            SwarmRunnerMessage::DownloadFileRequestResponse {
+            SwarmRunnerMessage::DownloadFile {
                 id,
                 peer,
                 response_sender,
@@ -179,18 +175,6 @@ impl SwarmContext {
                         .pending_download_file
                         .insert(qid, response_sender);
                 }
-                Ok(false)
-            }
-
-            SwarmRunnerMessage::DownloadFileDHT {
-                id,
-                response_sender,
-            } => {
-                debug!("Downloading file from DHT {:?}", id);
-                let qid = self.swarm.behaviour_mut().kademlia.get_record(id);
-                self.behaviour
-                    .pending_download_file_dht
-                    .insert(qid, response_sender);
                 Ok(false)
             }
 

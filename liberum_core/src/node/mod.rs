@@ -131,31 +131,8 @@ impl Node {
         Ok(id_str)
     }
 
-    /// Message called on the node from the daemon to download a file of a given ID.
     #[message]
-    pub async fn download_file_dht(&mut self, id: String) -> Result<Vec<u8>> {
-        let id_str = id;
-        let id = liberum_core::str_to_file_id(&id_str)?;
-        if let None = self.swarm_sender {
-            error!(node = self.name, "Swarm is None!");
-            return Err(anyhow!("Swarm is None!"));
-        }
-        let sender = self.swarm_sender.as_mut().unwrap(); // won't panic due to the if let above
-
-        let (resp_send, resp_recv) = oneshot::channel();
-        sender
-            .send(SwarmRunnerMessage::DownloadFileDHT {
-                id: id.clone(),
-                response_sender: resp_send,
-            })
-            .await?;
-
-        let file = resp_recv.await?;
-
-        Ok(file)
-    }
-    #[message]
-    pub async fn download_file_request_response(&mut self, id: String) -> Result<Vec<u8>> {
+    pub async fn download_file(&mut self, id: String) -> Result<Vec<u8>> {
         let id_str = id;
         let id = liberum_core::str_to_file_id(&id_str)?;
         if let None = self.swarm_sender {
@@ -186,7 +163,7 @@ impl Node {
                 "Trying to download from peer"
             );
             let (file_sender, file_receiver) = oneshot::channel();
-            let result = sender.send(SwarmRunnerMessage::DownloadFileRequestResponse {
+            let result = sender.send(SwarmRunnerMessage::DownloadFile {
                 id: id.clone(),
                 peer: peer.clone(),
                 response_sender: file_sender,

@@ -45,11 +45,7 @@ pub enum DaemonRequest {
         node_name: String,
         path: PathBuf,
     },
-    DownloadFileDHT {
-        node_name: String,
-        id: String,
-    },
-    DownloadFileRequestResponse {
+    DownloadFile {
         node_name: String,
         id: String,
     },
