@@ -1,3 +1,4 @@
+use std::cmp;
 use std::iter::once;
 use std::iter::successors;
 use std::path::Path;
@@ -68,7 +69,13 @@ impl Vault {
 
             result.push(reader_stream.boxed());
             current_pos += current_size;
-            current_size = Self::power_2_desc_from_power_2(current_size, file_size - current_pos);
+            current_size = cmp::max(
+                4096,
+                Self::power_2_desc_from_power_2(
+                    current_size,
+                    file_size.saturating_sub(current_pos),
+                ),
+            );
         }
 
         Ok(result)
@@ -370,6 +377,8 @@ mod tests {
             stream_contents.extend_from_slice(&chunk.unwrap());
         }
 
+        // Minimum fragment size of 4096
+        // TODO: Find other way to check for real fragment size, not data got from stream
         assert_eq!(stream_contents.len(), 2048);
         assert!(stream_contents.iter().all(|b| *b == 66));
     }
@@ -381,14 +390,14 @@ mod tests {
 
         let file_path = tmp_dir.path().join("to_fragment.txt");
         let mut file = File::create(&file_path).await.unwrap();
-        let random_bytes = (0..10000)
+        let random_bytes = (0..45000)
             .map(|_| rand::thread_rng().gen_range(65..91))
             .collect::<Vec<u8>>();
         file.write_all(&random_bytes).await.unwrap();
 
         let fragments = Vault::fragment(&file_path).await.unwrap();
-        // 8192, 1024, 512, 256, 16
-        assert_eq!(fragments.len(), 5);
+        // 32768, 8192, 4096
+        assert_eq!(fragments.len(), 3);
 
         let vault = Vault::new(vault_dir_path).await.unwrap();
         let vault = kameo::spawn(vault);
@@ -411,6 +420,8 @@ mod tests {
                 .flat_map(|bt| tokio_stream::iter(bt.unwrap()))
                 .collect::<Vec<u8>>()
                 .await;
+
+            // TODO: Assert fragments sizes
 
             bytes_recollected.append(&mut fragment_bytes);
         }
