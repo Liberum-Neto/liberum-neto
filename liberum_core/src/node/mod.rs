@@ -16,7 +16,7 @@ use std::str::FromStr;
 use std::{fmt, path::Path};
 use swarm_runner::messages::SwarmRunnerMessage;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 pub struct Node {
     pub name: String,
@@ -177,16 +177,25 @@ impl Node {
                 continue;
             }
             if let Ok(file) = file_receiver.await {
-                let hash = bs58::encode(blake3::hash(&file).as_bytes()).into_string();
-                if hash != id_str {
-                    debug!(
+                if let Ok(file) = file {
+                    let hash = bs58::encode(blake3::hash(&file).as_bytes()).into_string();
+                    if hash != id_str {
+                        debug!(
+                            node = self.name,
+                            from = format!("{peer}"),
+                            "Received wrong file! {hash} != {id_str}"
+                        );
+                        continue;
+                    }
+                    return Ok(file);
+                } else {
+                    warn!(
                         node = self.name,
                         from = format!("{peer}"),
-                        "Received wrong file! {hash} != {id_str}"
+                        "Failed to download file"
                     );
                     continue;
                 }
-                return Ok(file);
             }
         }
         Err(anyhow!("Could not download file"))

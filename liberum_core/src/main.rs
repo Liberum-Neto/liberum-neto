@@ -10,7 +10,7 @@ use tracing::{debug, error};
 
 /// The main function of the core daemon
 #[tokio::main]
-pub async fn run(path: &Path) -> Result<()> {
+async fn run(path: &Path) -> Result<()> {
     let socket = path.join("liberum-core-socket");
     let listener = UnixListener::bind(&socket)
         .inspect_err(|e| error!(err = e.to_string(), "Failed to bind the socket"))?;
