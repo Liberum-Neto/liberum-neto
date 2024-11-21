@@ -1,10 +1,9 @@
-use bincode::de;
 use libp2p::{
     kad,
-    request_response::{self, InboundRequestId, Message, OutboundRequestId, ResponseChannel},
+    request_response::{self, InboundRequestId, OutboundRequestId, ResponseChannel},
 };
 use serde::{Deserialize, Serialize};
-use std::{fs::File, path::PathBuf};
+use std::path::PathBuf;
 use tracing::debug;
 
 use super::super::SwarmContext;
@@ -40,7 +39,7 @@ impl SwarmContext {
                     channel,
                     ..
                 } => {
-                    self.handle_file_share_requst(request_id, request, channel)
+                    self.handle_file_share_request(request_id, request, channel)
                         .await
                 }
 
@@ -57,7 +56,7 @@ impl SwarmContext {
 /// Methods on SwarmContext for handling file sharing
 impl SwarmContext {
     /// Handle a file share request depending on the type of the data which ID is requested
-    async fn handle_file_share_requst(
+    async fn handle_file_share_request(
         &mut self,
         _request_id: InboundRequestId,
         request: FileRequest,

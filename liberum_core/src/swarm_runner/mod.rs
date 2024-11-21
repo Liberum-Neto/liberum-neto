@@ -156,9 +156,6 @@ async fn run_swarm_main(
         })
         .ok();
 
-    // #########################################################################
-    // ##  Main swarm loop for handling all events and messages
-    // #########################################################################
     loop {
         tokio::select! {
             Some(message) = receiver.recv() => {
@@ -231,7 +228,10 @@ impl SwarmContext {
 
         Ok(())
     }
+}
 
+/// Utility not related to behaviours
+impl SwarmContext {
     fn print_neighbours(&mut self) {
         debug!(node = self.node.name, "Neighbours:");
         self.swarm

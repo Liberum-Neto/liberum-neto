@@ -386,7 +386,7 @@ async fn handle_download_file(
     req: RequestSender,
     mut res: ReseponseReceiver,
 ) -> Result<()> {
-    req.send(DaemonRequest::DownloadFile {
+    req.send(DaemonRequest::DownloadFileDHT {
         node_name: cmd.node_name,
         id: cmd.id,
     })

@@ -8,7 +8,7 @@ use crate::node::store::ListNodes;
 use crate::node::store::LoadNode;
 use crate::node::store::NodeStore;
 use crate::node::DialPeer;
-use crate::node::DownloadFile;
+use crate::node::DownloadFileDht;
 use crate::node::DownloadFileRequestResponse;
 use crate::node::GetProviders;
 use crate::node::Node;
@@ -111,7 +111,7 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         DaemonRequest::ProvideFile { node_name, path } => {
             handle_provide_file(&node_name, path, context).await
         }
-        DaemonRequest::DownloadFile { node_name, id } => {
+        DaemonRequest::DownloadFileDHT { node_name, id } => {
             handle_download_file(node_name, id, context).await
         }
         DaemonRequest::DownloadFileRequestResponse { node_name, id } => {
@@ -380,7 +380,7 @@ async fn handle_download_file(node_name: String, id: String, context: &AppContex
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
     let file = node
-        .ask(DownloadFile { id })
+        .ask(DownloadFileDht { id })
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
