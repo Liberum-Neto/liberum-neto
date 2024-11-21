@@ -35,7 +35,7 @@ echo "${FILE_CONTENT}" > "$FILE_NAME"
 cargo run -p liberum_cli -- -d provide-file $N1 "$FILE_NAME" &> /dev/null
 
 # download file
-RESULT=$(cargo run -p liberum_cli -- -d download-file-rr $N2 "${BLAKE3_HASH}" 2> /dev/null)
+RESULT=$(cargo run -p liberum_cli -- -d download-file $N2 "${BLAKE3_HASH}" 2> /dev/null)
 
 # cleanup
 cargo run -p liberum_cli -- -d stop-node $N1 2> /dev/null

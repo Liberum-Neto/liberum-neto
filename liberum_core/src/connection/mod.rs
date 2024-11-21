@@ -8,8 +8,7 @@ use crate::node::store::ListNodes;
 use crate::node::store::LoadNode;
 use crate::node::store::NodeStore;
 use crate::node::DialPeer;
-use crate::node::DownloadFileDht;
-use crate::node::DownloadFileRequestResponse;
+use crate::node::DownloadFile;
 use crate::node::GetProviders;
 use crate::node::Node;
 use crate::node::ProvideFile;
@@ -111,11 +110,8 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         DaemonRequest::ProvideFile { node_name, path } => {
             handle_provide_file(&node_name, path, context).await
         }
-        DaemonRequest::DownloadFileDHT { node_name, id } => {
+        DaemonRequest::DownloadFile { node_name, id } => {
             handle_download_file(node_name, id, context).await
-        }
-        DaemonRequest::DownloadFileRequestResponse { node_name, id } => {
-            handle_download_file_request_response(node_name, id, context).await
         }
         DaemonRequest::GetProviders { node_name, id } => {
             handle_get_providers(node_name, id, context).await
@@ -343,31 +339,6 @@ async fn handle_get_providers(node_name: String, id: String, context: &AppContex
 }
 
 // TODO! Downloading a file is blocking now, it should be done in background in some way
-async fn handle_download_file_request_response(
-    node_name: String,
-    id: String,
-    context: &AppContext,
-) -> DaemonResult {
-    let node = context
-        .node_manager
-        .ask(GetNode {
-            name: node_name.to_string(),
-        })
-        .send()
-        .await
-        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
-        .map_err(|e| DaemonError::Other(e.to_string()))?;
-
-    let file = node
-        .ask(DownloadFileRequestResponse { id })
-        .send()
-        .await
-        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
-        .map_err(|e| DaemonError::Other(e.to_string()))?;
-
-    Ok(DaemonResponse::FileDownloaded { data: file })
-}
-
 async fn handle_download_file(node_name: String, id: String, context: &AppContext) -> DaemonResult {
     let node = context
         .node_manager
@@ -380,7 +351,7 @@ async fn handle_download_file(node_name: String, id: String, context: &AppContex
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
     let file = node
-        .ask(DownloadFileDht { id })
+        .ask(DownloadFile { id })
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))

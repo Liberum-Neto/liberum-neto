@@ -1,13 +1,11 @@
-use std::{
-    collections::{BTreeMap, HashSet},
-    path::PathBuf,
-};
+use std::{collections::HashSet, path::PathBuf};
 
 use anyhow::anyhow;
 use libp2p::{
     kad::{
-        self, store::RecordStore, AddProviderError, AddProviderOk, KBucketDistance, PeerRecord,
-        ProgressStep, ProviderRecord, PutRecordError, PutRecordOk, QueryId, QueryStats, RecordKey,
+        store::RecordStore, AddProviderError, AddProviderOk, Event, GetProvidersOk, InboundRequest,
+        ProgressStep, ProviderRecord, PutRecordError, PutRecordOk, QueryId, QueryResult,
+        QueryStats, Record, RecordKey,
     },
     swarm::ConnectionId,
     PeerId,
@@ -21,32 +19,29 @@ use crate::swarm_runner::{file_share, SwarmContext};
 /// On QueryProgressed events generally it is required to remember the query ID
 /// from when the query was started to react to the event
 impl SwarmContext {
-    pub(crate) fn handle_kademlia(&mut self, event: kad::Event) {
+    pub(crate) fn handle_kademlia(&mut self, event: Event) {
         match event {
             // Triggered when a node starts providing an ID
-            kad::Event::OutboundQueryProgressed {
+            Event::OutboundQueryProgressed {
                 id,
-                result: kad::QueryResult::StartProviding(result),
+                result: QueryResult::StartProviding(result),
                 stats,
                 step,
             } => self.handle_outbound_query_progressed_start_providing(id, result, stats, step),
 
             // Triggered when a record is put in the DHT
-            kad::Event::OutboundQueryProgressed {
+            Event::OutboundQueryProgressed {
                 id,
-                result: kad::QueryResult::PutRecord(result),
+                result: QueryResult::PutRecord(result),
                 stats,
                 step,
             } => self.handle_outbound_query_progressed_put_record(id, result, stats, step),
 
             // Triggered when some providers are found for a file ID
-            kad::Event::OutboundQueryProgressed {
+            Event::OutboundQueryProgressed {
                 id,
                 result:
-                    kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders {
-                        key,
-                        providers,
-                    })),
+                    QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders { key, providers })),
                 stats,
                 step,
             } => self.handle_outbound_query_progressed_get_providers_found(
@@ -54,12 +49,12 @@ impl SwarmContext {
             ),
 
             // Triggered when no providers are found for a file ID
-            kad::Event::OutboundQueryProgressed {
+            Event::OutboundQueryProgressed {
                 id,
                 result:
-                    kad::QueryResult::GetProviders(Ok(
-                        kad::GetProvidersOk::FinishedWithNoAdditionalRecord { closest_peers },
-                    )),
+                    QueryResult::GetProviders(Ok(GetProvidersOk::FinishedWithNoAdditionalRecord {
+                        closest_peers,
+                    })),
                 stats,
                 step,
             } => self.handle_outbound_query_progressed_get_providers_no_additional_record(
@@ -70,47 +65,23 @@ impl SwarmContext {
             ),
 
             // Triggered when the node is asked to put a record into it's store as a part of the DHT
-            kad::Event::InboundRequest {
+            Event::InboundRequest {
                 request:
-                    kad::InboundRequest::PutRecord {
+                    InboundRequest::PutRecord {
                         source,
                         connection,
                         record,
                     },
             } => self.handle_inbound_request_put_record(source, connection, record),
 
-            // Triggered when a record of ID is found in the DHT. The query must be finished manually
-            kad::Event::OutboundQueryProgressed {
-                id,
-                result: kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(record))),
-                stats,
-                step,
-            } => self.handle_outbound_query_progressed_get_record_found(id, record, stats, step),
-
-            // Triggered when no record was found
-            kad::Event::OutboundQueryProgressed {
-                id,
-                result:
-                    kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FinishedWithNoAdditionalRecord {
-                        cache_candidates,
-                    })),
-                stats,
-                step,
-            } => self.handle_outbound_query_progressed_get_record_no_additional_record(
-                id,
-                cache_candidates,
-                stats,
-                step,
-            ),
-
             //Debug Prints only from this point
-            kad::Event::InboundRequest {
-                request: kad::InboundRequest::AddProvider { record },
+            Event::InboundRequest {
+                request: InboundRequest::AddProvider { record },
             } => self.handle_inbound_request_add_provider(record),
 
-            kad::Event::InboundRequest {
+            Event::InboundRequest {
                 request:
-                    kad::InboundRequest::GetProvider {
+                    InboundRequest::GetProvider {
                         num_closer_peers,
                         num_provider_peers,
                     },
@@ -124,10 +95,10 @@ impl SwarmContext {
 impl SwarmContext {
     fn handle_outbound_query_progressed_start_providing(
         &mut self,
-        id: kad::QueryId,
+        id: QueryId,
         result: Result<AddProviderOk, AddProviderError>,
-        _stats: kad::QueryStats,
-        _step: kad::ProgressStep,
+        _stats: QueryStats,
+        _step: ProgressStep,
     ) {
         // result is matched two times to trace the result no matter
         // if the response is sent via the oneshot channel or not
@@ -172,10 +143,10 @@ impl SwarmContext {
 
     fn handle_outbound_query_progressed_put_record(
         &mut self,
-        id: kad::QueryId,
+        id: QueryId,
         result: Result<PutRecordOk, PutRecordError>,
-        _stats: kad::QueryStats,
-        _step: kad::ProgressStep,
+        _stats: QueryStats,
+        _step: ProgressStep,
     ) {
         if result.is_ok() {
             info!(node = self.node.name, id = format!("{id:?}"), "Put file");
@@ -211,11 +182,11 @@ impl SwarmContext {
 
     fn handle_outbound_query_progressed_get_providers_found(
         &mut self,
-        id: kad::QueryId,
+        id: QueryId,
         _key: RecordKey,
         providers: HashSet<PeerId>,
-        _stats: kad::QueryStats,
-        _step: kad::ProgressStep,
+        _stats: QueryStats,
+        _step: ProgressStep,
     ) {
         if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
             let _ = sender.send(providers).inspect_err(|e| {
@@ -238,10 +209,10 @@ impl SwarmContext {
 
     fn handle_outbound_query_progressed_get_providers_no_additional_record(
         &mut self,
-        id: kad::QueryId,
+        id: QueryId,
         _closest_peers: Vec<PeerId>,
-        _stats: kad::QueryStats,
-        _step: kad::ProgressStep,
+        _stats: QueryStats,
+        _step: ProgressStep,
     ) {
         debug!(
             node = self.node.name,
@@ -257,39 +228,6 @@ impl SwarmContext {
             });
         }
     }
-
-    fn handle_outbound_query_progressed_get_record_found(
-        &mut self,
-        id: QueryId,
-        record: PeerRecord,
-        _stats: QueryStats,
-        _step: ProgressStep,
-    ) {
-        debug!("Found record in DHT {:?}", id);
-        if let Some(sender) = self.behaviour.pending_download_file_dht.remove(&id) {
-            let _ = sender.send(record.record.value);
-            self.swarm
-                .behaviour_mut()
-                .kademlia
-                .query_mut(&id)
-                .unwrap()
-                .finish();
-        }
-    }
-
-    fn handle_outbound_query_progressed_get_record_no_additional_record(
-        &mut self,
-        id: QueryId,
-        _cache_candidates: BTreeMap<KBucketDistance, PeerId>,
-        _stats: QueryStats,
-        _step: ProgressStep,
-    ) {
-        debug!("Didn't find record in DHT {:?}", id);
-        // inform the caller that the file was not found
-        if let Some(sender) = self.behaviour.pending_download_file_dht.remove(&id) {
-            let _ = sender.send(Vec::new());
-        }
-    }
 }
 
 /// Implement event handlers for Kademlia InboundRequest events
@@ -298,7 +236,7 @@ impl SwarmContext {
         &mut self,
         _source: PeerId,
         _connection: ConnectionId,
-        record: Option<kad::Record>,
+        record: Option<Record>,
     ) {
         debug!(node = self.node.name, "Kad Received PutRecord");
         if record.is_none() {
@@ -306,22 +244,6 @@ impl SwarmContext {
             return;
         }
         let record = record.unwrap();
-
-        let r = self
-            .swarm
-            .behaviour_mut()
-            .kademlia
-            .store_mut()
-            .put(record.clone());
-        if r.is_err() {
-            debug!(
-                node = self.node.name,
-                err = format!("{r:?}"),
-                "Kad Failed to put record"
-            );
-            return;
-        }
-
         let id = record.key.clone();
 
         // save record to filem should use a VAULT here instead
@@ -384,7 +306,7 @@ impl SwarmContext {
 
 /// Utility related to Kademlia behaviour
 impl SwarmContext {
-    pub(crate) fn put_record_into_vault(&mut self, record: kad::Record) {
+    pub(crate) fn put_record_into_vault(&mut self, record: Record) {
         let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.node.name.clone());
         std::fs::create_dir_all(&dir).ok();
         let path = dir.join(liberum_core::file_id_to_str(record.key.clone()));

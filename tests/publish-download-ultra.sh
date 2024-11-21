@@ -82,10 +82,12 @@ cargo run -p liberum_cli -- -d start-node $N4 2> /dev/null
 cargo run -p liberum_cli -- -d publish-file $N1 "$FILE1_NAME" 2> /dev/null
 cargo run -p liberum_cli -- -d publish-file $N2 "$FILE2_NAME" 2> /dev/null
 cargo run -p liberum_cli -- -d publish-file $N3 "$FILE3_NAME" 2> /dev/null
-cargo run -p liberum_cli -- -d publish-file $N4 "$FILE4_NAME" 2> /dev/null
 
 # dial
 cargo run -p liberum_cli -- -d dial $N4 $N3_ID $N3_ADDR 2> /dev/null
+
+# publish the last file after dialing
+cargo run -p liberum_cli -- -d publish-file $N4 "$FILE4_NAME" 2> /dev/null
 
 # download files
 RESULT11=$(cargo run -p liberum_cli download-file $N1 "${FILE1_HASH}" 2> /dev/null)
