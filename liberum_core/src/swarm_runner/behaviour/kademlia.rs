@@ -15,6 +15,9 @@ use tracing::{debug, error, info, warn};
 
 use crate::swarm_runner::{file_share, SwarmContext};
 
+///! The module contains methods to handle Kademlia events
+///! Kademlia is used mostly for finding other nodes in the network.
+
 /// Methods on SwarmContext for handling Kademlia
 /// On QueryProgressed events generally it is required to remember the query ID
 /// from when the query was started to react to the event
@@ -91,7 +94,7 @@ impl SwarmContext {
     }
 }
 
-/// Implement event handlers for Kademlia OutboundQueryProgressed events
+/// Methods to handle Kademlia OutboundQueryProgressed events
 impl SwarmContext {
     fn handle_outbound_query_progressed_start_providing(
         &mut self,
@@ -230,7 +233,7 @@ impl SwarmContext {
     }
 }
 
-/// Implement event handlers for Kademlia InboundRequest events
+/// Methods to handle Kademlia InboundRequest events
 impl SwarmContext {
     fn handle_inbound_request_put_record(
         &mut self,
@@ -304,7 +307,7 @@ impl SwarmContext {
     }
 }
 
-/// Utility related to Kademlia behaviour
+/// Utility related to the Kademlia behaviour
 impl SwarmContext {
     pub(crate) fn put_record_into_vault(&mut self, record: Record) {
         let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.node.name.clone());

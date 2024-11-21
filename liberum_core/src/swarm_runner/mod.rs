@@ -22,6 +22,15 @@ const FILE_SHARE_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/file
 const DEFAULT_MULTIADDR_STR_IP6: &str = "/ip6/::/udp/0/quic-v1";
 const DEFAULT_MULTIADDR_STR_IP4: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 
+///! Swarm Runner
+///! This module is responsible for running the libp2p swarm and providing an interface
+///! to the inner workings of the network to the Node actor.
+///!
+///! One swarm is run per Node actor. The actor communicates with the swarm using
+///! an actor model of sending a message with a oneshot return channel via a mpsc channel.
+
+/// The context of the swarm which holds all the data required to handle swarm events
+/// and messages to the swarm runner
 struct SwarmContext {
     swarm: Swarm<LiberumNetoBehavior>,
     node: Node,

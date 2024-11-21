@@ -11,32 +11,53 @@ use tokio::sync::oneshot;
 use tracing::{debug, info};
 pub enum SwarmRunnerError {}
 
-/// Messages that can be send from a Node to the SwarmRunner
+///! The module contains messages that can be sent to the SwarmRunner
+///! And the methods to handle them
+
+/// Messages that can be send from a Node actor to the SwarmRunner
 pub enum SwarmRunnerMessage {
+    /// Echo message, just sends the message back, testing purposes
     Echo {
         message: String,
         response_sender: oneshot::Sender<Result<String, SwarmRunnerError>>,
     },
+    /// Dial a peer and remember it as a contact, useful for connecting to other
+    /// nodes in the network
     Dial {
         peer_id: PeerId,
         peer_addr: Multiaddr,
         response_sender: oneshot::Sender<Result<()>>,
     },
+    /// Stops the swarm. The node will be informed that the swarm has stopped
     Kill,
+    /// Get up to `k` providers for the given key. May return an empty set if
+    /// no provider was found.
     GetProviders {
         id: kad::RecordKey,
         response_sender: oneshot::Sender<HashSet<PeerId>>,
     },
+    /// Start providing a file in the network. Only the node that sent this message
+    /// will be a provider for the file. The fact of providing the file will be
+    /// announced to up to `k` network members close to the provided ID.
     ProvideFile {
         id: kad::RecordKey,
         path: PathBuf,
         response_sender: oneshot::Sender<Result<()>>,
     },
+    /// Download a file from the given node. This requires first finding a provider
+    /// using ``GetProviders`` and then sending a request to the provider.
+    /// Ok if the file was downloaded successfully, Err otherwise.
     DownloadFile {
         id: kad::RecordKey,
         peer: PeerId,
-        response_sender: oneshot::Sender<Vec<u8>>,
+        response_sender: oneshot::Sender<Result<Vec<u8>>>,
     },
+    /// Publish a file in the network. This will ask up to `k` nodes near the
+    /// published ID to store the file. The nodes will announce to be providers
+    /// of the file in the network, just like in `ProvideFile`.
+    /// Ok if the Quorum of One provider was reached, Err otherwise.
+    ///
+    /// The current node will not be a provider of the file as a result. (TODO: Do we want this?)
     PublishFile {
         record: kad::Record,
         response_sender: oneshot::Sender<Result<()>>,
@@ -52,6 +73,8 @@ pub enum SwarmRunnerMessage {
 /// because the response will come in a different event
 /// and the query ID is the only way to match the response to the query event that will come
 impl SwarmContext {
+    /// Handles a SwarmRunner message received from the Node actor
+    /// Returns true if the swarm should be stopped as a result of the message
     pub(crate) async fn handle_swarm_runner_message(
         &mut self,
         message: SwarmRunnerMessage,
@@ -138,6 +161,7 @@ impl SwarmContext {
                 Ok(false)
             }
 
+            // Download a file from a given peer
             SwarmRunnerMessage::DownloadFile {
                 id,
                 peer,
@@ -157,7 +181,7 @@ impl SwarmContext {
                         match file {
                             file_share::SharedResource::File { path } => {
                                 if let Ok(data) = tokio::fs::read(path).await {
-                                    let _ = response_sender.send(data);
+                                    let _ = response_sender.send(Ok(data));
                                     return Ok(false);
                                 }
                             }

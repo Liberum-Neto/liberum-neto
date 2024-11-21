@@ -8,7 +8,11 @@ use tracing::debug;
 
 use super::super::SwarmContext;
 
+///! The module contains the structures and hanlders for the request_response
+///! behaviour used to share files
+
 /// An enum that represents anything that can be provided in the network.
+/// Should be replaced with an implementation of the OBJECTS
 pub enum SharedResource {
     File { path: PathBuf },
 }
@@ -20,7 +24,7 @@ pub struct FileRequest {
 }
 
 /// A response from the file_share protocol. Should be replaced with a stream
-/// in the future.
+/// in the future, probably using the VAULT and OBJECTS
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq)]
 pub struct FileResponse {
     pub data: Vec<u8>,
@@ -104,6 +108,6 @@ impl SwarmContext {
             .pending_download_file
             .remove(&request_id)
             .expect("Request to still be pending.")
-            .send(response.data);
+            .send(Ok(response.data));
     }
 }
