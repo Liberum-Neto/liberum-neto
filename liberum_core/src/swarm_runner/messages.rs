@@ -116,9 +116,7 @@ impl SwarmContext {
                 // Add the file to the providing list
                 self.behaviour.providing.insert(
                     id.clone(),
-                    file_share::SharedResource::File(file_share::FileResource {
-                        path: path.clone(),
-                    }),
+                    file_share::SharedResource::File { path: path.clone() },
                 );
                 // Strat a query to be providing the file ID in kademlia
                 let qid = self
@@ -161,7 +159,7 @@ impl SwarmContext {
                     let file = self.behaviour.providing.get(&id);
                     if let Some(file) = file {
                         match file {
-                            file_share::SharedResource::File(file_share::FileResource { path }) => {
+                            file_share::SharedResource::File { path } => {
                                 if let Ok(data) = tokio::fs::read(path).await {
                                     let _ = response_sender.send(data);
                                     return Ok(false);
