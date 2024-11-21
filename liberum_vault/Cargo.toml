@@ -11,6 +11,7 @@ bs58 = "0.5.1"
 futures = "0.3.31"
 futures-util = "0.3.31"
 kameo = "0.12.2"
+pretty_assertions = "1.4.1"
 rand = "0.8.5"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 tempdir = "0.3.7"

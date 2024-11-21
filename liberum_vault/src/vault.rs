@@ -345,6 +345,7 @@ impl Message<LoadFragment> for Vault {
 mod tests {
     use futures::StreamExt as FuturesStreamExt;
     use kameo::request::MessageSend;
+    use pretty_assertions::assert_eq;
     use rand::Rng;
     use tempdir::TempDir;
     use tokio::io::AsyncWriteExt;
