@@ -382,6 +382,7 @@ impl SwarmContext {
     }
 }
 
+/// Utility related to Kademlia behaviour
 impl SwarmContext {
     pub(crate) fn put_record_into_vault(&mut self, record: kad::Record) {
         let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.node.name.clone());

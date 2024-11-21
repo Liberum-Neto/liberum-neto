@@ -133,7 +133,7 @@ impl Node {
 
     /// Message called on the node from the daemon to download a file of a given ID.
     #[message]
-    pub async fn download_file(&mut self, id: String) -> Result<Vec<u8>> {
+    pub async fn download_file_dht(&mut self, id: String) -> Result<Vec<u8>> {
         let id_str = id;
         let id = liberum_core::str_to_file_id(&id_str)?;
         if let None = self.swarm_sender {
