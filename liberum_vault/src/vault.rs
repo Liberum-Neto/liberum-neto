@@ -356,7 +356,7 @@ mod tests {
     use futures::StreamExt as FuturesStreamExt;
     use kameo::request::MessageSend;
     use pretty_assertions::assert_eq;
-    use rand::Rng;
+    use rand::{rngs::StdRng, Rng, SeedableRng};
     use tempdir::TempDir;
     use tokio::io::AsyncWriteExt;
 
@@ -401,8 +401,9 @@ mod tests {
 
         let file_path = tmp_dir.path().join("to_fragment.txt");
         let mut file = File::create(&file_path).await.unwrap();
+        let mut rng = StdRng::seed_from_u64(1234);
         let random_bytes = (0..45000)
-            .map(|_| rand::thread_rng().gen_range(65..91))
+            .map(|_| rng.gen_range(65..91))
             .collect::<Vec<u8>>();
         file.write_all(&random_bytes).await.unwrap();
 
