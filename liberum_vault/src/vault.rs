@@ -406,9 +406,10 @@ mod tests {
             .map(|_| rng.gen_range(65..91))
             .collect::<Vec<u8>>();
         file.write_all(&random_bytes).await.unwrap();
+        file.flush().await.unwrap();
 
         let fragments = Vault::fragment(&file_path).await.unwrap();
-        // 32768, 8192, 4096
+        // vec![524288, 262144, 131072, 32768, 4096, 4096]
         assert_eq!(fragments.len(), 6);
 
         let vault = Vault::new(vault_dir_path).await.unwrap();
