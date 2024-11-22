@@ -76,16 +76,17 @@ impl Vault {
 
     fn fragment_sizes(target: u64) -> Vec<u64> {
         let mut fragment_sizes = Vec::new();
-        let mut size = Self::power_2_upto(target);
-        let mut current_target = target - size;
-
-        fragment_sizes.push(size);
+        let mut current_size = cmp::max(4096, Self::power_2_upto(target));
+        let mut current_target = target;
 
         while current_target != 0 {
-            size = cmp::max(4096, Self::power_2_desc_from_power_2(size, current_target));
+            current_size = cmp::max(
+                4096,
+                Self::power_2_desc_from_power_2(current_size, current_target),
+            );
 
-            fragment_sizes.push(size);
-            current_target = current_target.saturating_sub(size);
+            fragment_sizes.push(current_size);
+            current_target = current_target.saturating_sub(current_size);
         }
 
         fragment_sizes
@@ -456,5 +457,15 @@ mod tests {
             fragment_sizes,
             vec![524288, 262144, 131072, 32768, 4096, 4096]
         );
+
+        let some_file_size = 4096;
+        let fragment_sizes = Vault::fragment_sizes(some_file_size);
+
+        assert_eq!(fragment_sizes, vec![4096]);
+
+        let some_file_size = 5;
+        let fragment_sizes = Vault::fragment_sizes(some_file_size);
+
+        assert_eq!(fragment_sizes, vec![4096]);
     }
 }
