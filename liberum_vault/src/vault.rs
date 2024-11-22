@@ -56,29 +56,39 @@ impl Vault {
     // TODO: Add logarithmic fragment sizes
     pub async fn fragment(path: &Path) -> Result<Vec<FragmentData>> {
         let file_size = tokio::fs::metadata(path).await?.len();
+        let fragment_sizes = Self::fragment_sizes(file_size);
         let mut current_pos = 0;
         let mut result: Vec<FragmentData> = Vec::new();
-        let mut current_size = Self::power_2_upto(file_size);
 
-        while current_pos < file_size {
+        for fragment_size in fragment_sizes {
             let mut f = File::open(path).await?;
             f.seek(std::io::SeekFrom::Start(current_pos)).await?;
 
             let buf_reader = BufReader::new(f);
-            let reader_stream = ReaderStream::new(buf_reader.take(current_size));
+            let reader_stream = ReaderStream::new(buf_reader.take(fragment_size));
 
             result.push(reader_stream.boxed());
-            current_pos += current_size;
-            current_size = cmp::max(
-                4096,
-                Self::power_2_desc_from_power_2(
-                    current_size,
-                    file_size.saturating_sub(current_pos),
-                ),
-            );
+            current_pos += fragment_size;
         }
 
         Ok(result)
+    }
+
+    fn fragment_sizes(target: u64) -> Vec<u64> {
+        let mut fragment_sizes = Vec::new();
+        let mut size = Self::power_2_upto(target);
+        let mut current_target = target - size;
+
+        fragment_sizes.push(size);
+
+        while current_target != 0 {
+            size = cmp::max(4096, Self::power_2_desc_from_power_2(size, current_target));
+
+            fragment_sizes.push(size);
+            current_target = current_target.saturating_sub(size);
+        }
+
+        fragment_sizes
     }
 
     fn power_2_upto(limit: u64) -> u64 {
@@ -428,5 +438,21 @@ mod tests {
         }
 
         assert_eq!(random_bytes, bytes_recollected);
+    }
+
+    #[test]
+    fn fragment_sizes_test() {
+        let some_file_size = 45000;
+        let fragment_sizes = Vault::fragment_sizes(some_file_size);
+
+        assert_eq!(fragment_sizes, vec![32768, 8192, 4096]);
+
+        let some_file_size = 954521;
+        let fragment_sizes = Vault::fragment_sizes(some_file_size);
+
+        assert_eq!(
+            fragment_sizes,
+            vec![524288, 262144, 131072, 32768, 4096, 4096]
+        );
     }
 }
