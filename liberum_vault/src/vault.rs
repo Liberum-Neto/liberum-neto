@@ -402,14 +402,14 @@ mod tests {
         let file_path = tmp_dir.path().join("to_fragment.txt");
         let mut file = File::create(&file_path).await.unwrap();
         let mut rng = StdRng::seed_from_u64(1234);
-        let random_bytes = (0..45000)
+        let random_bytes = (0..954521)
             .map(|_| rng.gen_range(65..91))
             .collect::<Vec<u8>>();
         file.write_all(&random_bytes).await.unwrap();
 
         let fragments = Vault::fragment(&file_path).await.unwrap();
         // 32768, 8192, 4096
-        assert_eq!(fragments.len(), 3);
+        assert_eq!(fragments.len(), 6);
 
         let vault = Vault::new(vault_dir_path).await.unwrap();
         let vault = kameo::spawn(vault);
