@@ -5,6 +5,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::anyhow;
+use anyhow::bail;
 use anyhow::Result;
 use futures::stream::BoxStream;
 use futures::StreamExt;
@@ -33,7 +34,7 @@ pub struct Vault {
 
 type FragmentData = BoxStream<'static, Result<Bytes, io::Error>>;
 
-pub struct StoreFragment(FragmentData);
+pub struct StoreFragment(Option<Key>, FragmentData);
 pub struct LoadFragment(Key);
 
 impl Vault {
@@ -248,7 +249,7 @@ impl Vault {
         ))
     }
 
-    async fn store_fragment(&self, data: &mut FragmentData) -> Result<Key> {
+    async fn store_fragment(&self, key: Option<Key>, data: &mut FragmentData) -> Result<Key> {
         let uid = uuid::Uuid::new_v4();
         let random_fragment_path = Self::temp_dir_path(&self.vault_dir_path).join(uid.to_string());
         let mut fragment_file = File::create(&random_fragment_path).await?;
@@ -263,12 +264,21 @@ impl Vault {
         }
 
         let key_bytes = hasher.finalize().as_bytes().to_vec();
-        let key_string = bs58::encode(&key_bytes).into_string();
+        let fragment_key = Key::try_from(key_bytes.clone())?;
 
+        // Verify integrity if key was provided
+        if let Some(key) = key {
+            if key != fragment_key {
+                bail!(
+                    "Fragment integrity check failed, expected key to be {key}, was {fragment_key}"
+                );
+            }
+        }
+
+        let key_string = bs58::encode(&key_bytes).into_string();
         let valid_fragment_path = Self::fragment_dir_path(&self.vault_dir_path).join(key_string);
         tokio::fs::rename(random_fragment_path, &valid_fragment_path).await?;
 
-        let fragment_key = Key::try_from(key_bytes)?;
         let fragment_info = FragmentInfo::new(
             fragment_key.clone(),
             &valid_fragment_path,
@@ -337,7 +347,7 @@ impl Message<StoreFragment> for Vault {
         mut msg: StoreFragment,
         _: Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        Ok(self.store_fragment(&mut msg.0).await?)
+        Ok(self.store_fragment(msg.0, &mut msg.1).await?)
     }
 }
 
@@ -419,7 +429,7 @@ mod tests {
         let mut stored_keys = Vec::new();
 
         for frag in fragments {
-            let stored_key = vault.ask(StoreFragment(frag)).send().await.unwrap();
+            let stored_key = vault.ask(StoreFragment(None, frag)).send().await.unwrap();
             stored_keys.push(stored_key);
         }
 
