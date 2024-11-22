@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use anyhow::anyhow;
 use anyhow::{Error, Result};
 use base64::prelude::*;
@@ -39,6 +41,19 @@ impl Key {
 
     pub fn as_base64(&self) -> String {
         BASE64_STANDARD.encode(&self.value_bytes)
+    }
+}
+
+impl Display for Key {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let key_b58 = bs58::encode(self.value_bytes).into_string();
+        write!(f, "{key_b58}")
+    }
+}
+
+impl PartialEq for Key {
+    fn eq(&self, other: &Self) -> bool {
+        self.value_bytes == other.value_bytes
     }
 }
 
