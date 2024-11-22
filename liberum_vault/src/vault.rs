@@ -55,7 +55,6 @@ impl Vault {
         })
     }
 
-    // TODO: Add logarithmic fragment sizes
     pub async fn fragment(path: &Path) -> Result<Vec<FragmentData>> {
         let file_size = tokio::fs::metadata(path).await?.len();
         let fragment_sizes = Self::fragment_sizes(file_size);
