@@ -40,6 +40,7 @@ impl Vault {
     const DEFAULT_VAULT_DATABASE_NAME: &'static str = "vault.db3";
     const FRAGMENT_DIR_NAME: &'static str = "fragments";
     const TEMP_DIR_NAME: &'static str = "temp";
+    const MIN_FRAGMENT_SIZE: u64 = 4096;
 
     pub async fn new(vault_dir_path: &Path) -> Result<Vault> {
         Self::ensure_dirs(vault_dir_path).await?;
@@ -76,12 +77,12 @@ impl Vault {
 
     fn fragment_sizes(target: u64) -> Vec<u64> {
         let mut fragment_sizes = Vec::new();
-        let mut current_size = cmp::max(4096, Self::power_2_upto(target));
+        let mut current_size = cmp::max(Self::MIN_FRAGMENT_SIZE, Self::power_2_upto(target));
         let mut current_target = target;
 
         while current_target != 0 {
             current_size = cmp::max(
-                4096,
+                Self::MIN_FRAGMENT_SIZE,
                 Self::power_2_desc_from_power_2(current_size, current_target),
             );
 
