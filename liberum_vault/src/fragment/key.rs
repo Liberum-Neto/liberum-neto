@@ -2,7 +2,6 @@ use std::fmt::Display;
 
 use anyhow::anyhow;
 use anyhow::{Error, Result};
-use base64::prelude::*;
 use rand::Rng;
 
 #[derive(Debug, Clone, Copy)]
@@ -39,8 +38,8 @@ impl Key {
         self.value_bytes
     }
 
-    pub fn as_base64(&self) -> String {
-        BASE64_STANDARD.encode(&self.value_bytes)
+    pub fn as_base58(&self) -> String {
+        bs58::encode(&self.value_bytes).into_string()
     }
 }
 
@@ -112,14 +111,14 @@ impl TryFrom<Vec<u64>> for Key {
 impl TryFrom<String> for Key {
     type Error = Error;
 
-    fn try_from(base64_string: String) -> Result<Key> {
-        let value_bytes: Vec<u8> = BASE64_STANDARD.decode(base64_string)?;
+    fn try_from(base58_string: String) -> Result<Key> {
+        let vaule_bytes = bs58::decode(base58_string).into_vec()?;
 
-        if !value_bytes.len().cmp(&32).is_eq() {
-            return Result::Err(anyhow!("number of base64 bytes is less than 32"));
+        if !vaule_bytes.len().cmp(&32).is_eq() {
+            return Result::Err(anyhow!("number of base58 bytes is less than 32"));
         }
 
-        Result::Ok(value_bytes.try_into()?)
+        Result::Ok(vaule_bytes.try_into()?)
     }
 }
 
