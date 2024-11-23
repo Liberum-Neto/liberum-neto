@@ -2,9 +2,9 @@ use std::{collections::HashSet, path::PathBuf};
 
 use libp2p::{
     kad::{
-        store::RecordStore, AddProviderError, AddProviderOk, Event, GetProvidersOk, InboundRequest,
-        ProgressStep, ProviderRecord, PutRecordError, PutRecordOk, QueryId, QueryResult,
-        QueryStats, Record, RecordKey,
+        store::RecordStore, AddProviderError, AddProviderOk, Event, GetProvidersError,
+        GetProvidersOk, InboundRequest, ProgressStep, ProviderRecord, PutRecordError, PutRecordOk,
+        QueryId, QueryResult, QueryStats, Record, RecordKey,
     },
     swarm::ConnectionId,
     PeerId,
@@ -23,70 +23,63 @@ use crate::swarm_runner::{file_share, SwarmContext};
 impl SwarmContext {
     pub(crate) fn handle_kademlia(&mut self, event: Event) {
         match event {
+            Event::OutboundQueryProgressed {
+                id,
+                result,
+                stats,
+                step,
+            } => {
+                self.handle_outbound_query_progressed(id, result, stats, step);
+            }
+            Event::InboundRequest { request } => {
+                self.handle_inound_request(request);
+            }
+            _ => {}
+        }
+    }
+}
+
+impl SwarmContext {
+    fn handle_outbound_query_progressed(
+        &mut self,
+        id: QueryId,
+        result: QueryResult,
+        stats: QueryStats,
+        step: ProgressStep,
+    ) {
+        match result {
             // Triggered when a node starts providing an ID
-            Event::OutboundQueryProgressed {
-                id,
-                result: QueryResult::StartProviding(result),
-                stats,
-                step,
-            } => self.handle_outbound_query_progressed_start_providing(id, result, stats, step),
-
+            QueryResult::StartProviding(result) => {
+                self.handle_outbound_query_progressed_start_providing(id, result, stats, step);
+            }
             // Triggered when a record is put in the DHT
-            Event::OutboundQueryProgressed {
-                id,
-                result: QueryResult::PutRecord(result),
-                stats,
-                step,
-            } => self.handle_outbound_query_progressed_put_record(id, result, stats, step),
+            QueryResult::PutRecord(result) => {
+                self.handle_outbound_query_progressed_put_record(id, result, stats, step);
+            }
+            // Triggered when more providers found or there is no more providers to find
+            QueryResult::GetProviders(result) => {
+                self.handle_outbound_query_progressed_get_providers(id, result, stats, step);
+            }
+            _ => {}
+        }
+    }
 
-            // Triggered when some providers are found for a file ID
-            Event::OutboundQueryProgressed {
-                id,
-                result:
-                    QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders { key, providers })),
-                stats,
-                step,
-            } => self.handle_outbound_query_progressed_get_providers_found(
-                id, key, providers, stats, step,
-            ),
-
-            // Triggered when no providers are found for a file ID
-            Event::OutboundQueryProgressed {
-                id,
-                result:
-                    QueryResult::GetProviders(Ok(GetProvidersOk::FinishedWithNoAdditionalRecord {
-                        closest_peers,
-                    })),
-                stats,
-                step,
-            } => self.handle_outbound_query_progressed_get_providers_no_additional_record(
-                id,
-                closest_peers,
-                stats,
-                step,
-            ),
-
+    fn handle_inound_request(&mut self, request: InboundRequest) {
+        match request {
             // Triggered when the node is asked to put a record into it's store as a part of the DHT
-            Event::InboundRequest {
-                request:
-                    InboundRequest::PutRecord {
-                        source,
-                        connection,
-                        record,
-                    },
+            InboundRequest::PutRecord {
+                source,
+                connection,
+                record,
             } => self.handle_inbound_request_put_record(source, connection, record),
-
-            //Debug Prints only from this point
-            Event::InboundRequest {
-                request: InboundRequest::AddProvider { record },
-            } => self.handle_inbound_request_add_provider(record),
-
-            Event::InboundRequest {
-                request:
-                    InboundRequest::GetProvider {
-                        num_closer_peers,
-                        num_provider_peers,
-                    },
+            // Triggered when the node is asked to add a provider for a record
+            InboundRequest::AddProvider { record } => {
+                self.handle_inbound_request_add_provider(record)
+            }
+            // Triggered when the node is asked to get providers for a record
+            InboundRequest::GetProvider {
+                num_closer_peers,
+                num_provider_peers,
             } => self.handle_inbound_request_get_provider(num_closer_peers, num_provider_peers),
             _ => {}
         }
@@ -182,52 +175,57 @@ impl SwarmContext {
         }
     }
 
-    fn handle_outbound_query_progressed_get_providers_found(
+    fn handle_outbound_query_progressed_get_providers(
         &mut self,
         id: QueryId,
-        _key: RecordKey,
-        providers: HashSet<PeerId>,
+        result: Result<GetProvidersOk, GetProvidersError>,
         _stats: QueryStats,
         _step: ProgressStep,
     ) {
-        if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
-            let _ = sender.send(providers).inspect_err(|e| {
+        match result {
+            Ok(GetProvidersOk::FoundProviders { key, providers }) => {
+                if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
+                    let _ = sender.send(providers).inspect_err(|e| {
+                        debug!(
+                            node = self.node.name,
+                            qid = format!("{id}"),
+                            err = format!("{e:?}"),
+                            "Channel closed"
+                        )
+                    });
+                    // Stop the query after we got *some* providers. TODO: Leave the decission when to stop to someone requesting the query
+                    // like the node actor. This works for now.
+                    self.swarm
+                        .behaviour_mut()
+                        .kademlia
+                        .query_mut(&id)
+                        .unwrap()
+                        .finish();
+                }
+            }
+            Ok(GetProvidersOk::FinishedWithNoAdditionalRecord { closest_peers }) => {
                 debug!(
                     node = self.node.name,
-                    qid = format!("{id}"),
+                    "Get providers didn't find any new records"
+                );
+                if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
+                    let _ = sender.send(HashSet::new()).inspect_err(|e| {
+                        debug!(
+                            qid = format!("{id}"),
+                            err = format!("{e:?}"),
+                            "Channel closed"
+                        )
+                    });
+                }
+            }
+            Err(e) => {
+                error!(
+                    node = self.node.name,
+                    id = format!("{id:?}"),
                     err = format!("{e:?}"),
-                    "Channel closed"
-                )
-            });
-            // Finish the query to prevent from triggering FinishedWithNoAdditionalRecord
-            self.swarm
-                .behaviour_mut()
-                .kademlia
-                .query_mut(&id)
-                .unwrap()
-                .finish();
-        }
-    }
-
-    fn handle_outbound_query_progressed_get_providers_no_additional_record(
-        &mut self,
-        id: QueryId,
-        _closest_peers: Vec<PeerId>,
-        _stats: QueryStats,
-        _step: ProgressStep,
-    ) {
-        debug!(
-            node = self.node.name,
-            "Get providers didn't find any new records"
-        );
-        if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
-            let _ = sender.send(HashSet::new()).inspect_err(|e| {
-                debug!(
-                    qid = format!("{id}"),
-                    err = format!("{e:?}"),
-                    "Channel closed"
-                )
-            });
+                    "Failed to get providers"
+                );
+            }
         }
     }
 }
