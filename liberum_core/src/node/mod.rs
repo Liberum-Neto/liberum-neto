@@ -176,8 +176,27 @@ impl Node {
                 );
                 continue;
             }
-            if let Ok(file) = file_receiver.await {
-                if let Ok(file) = file {
+            match file_receiver.await {
+                Err(e) => {
+                    debug!(
+                        node = self.name,
+                        from = format!("{peer}"),
+                        err = e.to_string(),
+                        "Failed to download file"
+                    );
+                    continue;
+                }
+                Ok(Err(e)) => {
+                    debug!(
+                        node = self.name,
+                        from = format!("{peer}"),
+                        err = e.to_string(),
+                        "Failed to download file"
+                    );
+                    continue;
+                }
+
+                Ok(Ok(file)) => {
                     let hash = bs58::encode(blake3::hash(&file).as_bytes()).into_string();
                     if hash != id_str {
                         debug!(
@@ -188,13 +207,6 @@ impl Node {
                         continue;
                     }
                     return Ok(file);
-                } else {
-                    warn!(
-                        node = self.name,
-                        from = format!("{peer}"),
-                        "Failed to download file"
-                    );
-                    continue;
                 }
             }
         }

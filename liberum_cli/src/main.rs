@@ -386,11 +386,14 @@ async fn handle_download_file(
     let response = res
         .recv()
         .await
-        .ok_or(anyhow!("Daemon returned no response"))??;
+        .ok_or(anyhow!("Daemon returned no response"))?;
 
     match response {
-        DaemonResponse::FileDownloaded { data } => {
+        Ok(DaemonResponse::FileDownloaded { data }) => {
             println!("{}", String::from_utf8(data)?);
+        }
+        Err(DaemonError::Other(_)) => {
+            println!("Failed to download file");
         }
         _ => {
             bail!("Daemon returned wrong response");

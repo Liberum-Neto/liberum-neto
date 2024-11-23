@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use libp2p::{
     kad,
     request_response::{self, InboundRequestId, OutboundRequestId, ResponseChannel},
@@ -27,7 +28,7 @@ pub struct FileRequest {
 /// in the future, probably using the VAULT and OBJECTS
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq)]
 pub struct FileResponse {
-    pub data: Vec<u8>,
+    pub data: Option<Vec<u8>>,
 }
 
 impl SwarmContext {
@@ -69,37 +70,50 @@ impl SwarmContext {
         request: FileRequest,
         response_channel: ResponseChannel<FileResponse>,
     ) {
-        debug!(node = self.node.name, "Received Request_response request!");
         // Get the file from the providing hashmap
         let id = kad::RecordKey::from(request.id.clone());
         let file = self.behaviour.providing.get(&id);
         // Send the file back to the peer if found
+        let mut response: FileResponse = FileResponse { data: None };
+
+        // If the file is found, read it and send it back, otherwise None will be sent
         if let Some(file) = file {
             match file {
                 SharedResource::File { path } => {
                     if let Ok(data) = tokio::fs::read(path).await {
-                        let r = self
-                            .swarm
-                            .behaviour_mut()
-                            .file_share
-                            .send_response(response_channel, FileResponse { data })
-                            .inspect_err(|e| {
-                                debug!(
-                                    node = self.node.name,
-                                    "Request_response request response_channel closed: {:?}", e
-                                );
-                            });
-                        if let Err(e) = r {
-                            debug!(
-                                requested = liberum_core::file_id_to_str(id),
-                                node = self.node.name,
-                                "Failed to send request_response response: {:?}",
-                                e
-                            );
-                        }
+                        response = FileResponse { data: Some(data) };
                     }
                 }
             }
+        }
+
+        if response.data.is_none() {
+            debug!(
+                requested = liberum_core::file_id_to_str(id.clone()),
+                node = self.node.name,
+                "Requested file not found"
+            );
+        }
+
+        // Send the response
+        let r = self
+            .swarm
+            .behaviour_mut()
+            .file_share
+            .send_response(response_channel, response)
+            .inspect_err(|e| {
+                debug!(
+                    node = self.node.name,
+                    "Request_response request response_channel closed: {:?}", e
+                );
+            });
+        if let Err(e) = r {
+            debug!(
+                requested = liberum_core::file_id_to_str(id),
+                node = self.node.name,
+                "Failed to send request_response response: {:?}",
+                e
+            );
         }
     }
 
@@ -111,11 +125,19 @@ impl SwarmContext {
     ) {
         debug!(node = self.node.name, "received request_response response!");
         // Get the response data and send it to the pending download
+        let result: Result<Vec<u8>>;
+        if let Some(data) = response.data {
+            result = Ok(data);
+        } else {
+            debug!(node = self.node.name, "requested File not found");
+            result = Err(anyhow!("File not found"));
+        }
+
         let _ = self
             .behaviour
             .pending_download_file
             .remove(&request_id)
             .expect("Request to still be pending.")
-            .send(Ok(response.data));
+            .send(result);
     }
 }
