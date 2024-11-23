@@ -228,22 +228,20 @@ impl Node {
     #[message]
     pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
         if let Some(sender) = &mut self.swarm_sender {
-            let id = liberum_core::get_file_id(&path).await.map_err(|e| {
+            let id = liberum_core::get_file_id(&path).await.inspect_err(|e| {
                 error!(
                     err = e.to_string(),
                     path = format!("{path:?}"),
                     "Failed to hash file"
                 );
-                e
             })?;
             let (send, recv) = oneshot::channel();
 
             // The file has to be read to the memory to be published. There is no other way without
             // a new behaviour kademlia could talk to, which would provide streams of data.
             // (Maybe could be implemented on the existing request_response if it would be generalised more?)
-            let data = tokio::fs::read(&path).await.map_err(|e| {
+            let data = tokio::fs::read(&path).await.inspect_err(|e| {
                 error!(node = self.name, err = e.to_string(), "Failed to read file");
-                e
             })?;
 
             let record = libp2p::kad::Record {
