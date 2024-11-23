@@ -53,7 +53,6 @@ pub async fn listen(listener: UnixListener) -> Result<()> {
     let app_context = AppContext::new(kameo::spawn(NodeStore::with_default_nodes_dir().await?));
     loop {
         let (daemon_socket, _) = listener.accept().await?;
-        //info!(conn_id = id, "Handling a new connection");
         let daemon_socket_framed: SocketFramed =
             AsymmetricMessageCodec::new().framed(daemon_socket);
         tokio::spawn(handle_connection(
@@ -83,7 +82,6 @@ async fn handle_connection(
                 };
             },
             else => {
-                //debug!(conn_id=id, "Connection closed");
                 break;
             }
         }
