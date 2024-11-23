@@ -13,6 +13,7 @@ use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::message::{Context, Message};
 use kameo::Actor;
 use rusqlite::OptionalExtension;
+use tokio::fs::remove_file;
 use tokio::fs::File;
 use tokio::io;
 use tokio::io::AsyncReadExt;
@@ -265,6 +266,7 @@ impl Vault {
         // Verify integrity if key was provided
         if let Some(key) = key {
             if key != fragment_key {
+                remove_file(random_fragment_path).await?;
                 bail!(
                     "Fragment integrity check failed, expected key to be {key}, was {fragment_key}"
                 );
