@@ -1,6 +1,5 @@
 use std::{collections::HashSet, path::PathBuf};
 
-use anyhow::anyhow;
 use libp2p::{
     kad::{
         store::RecordStore, AddProviderError, AddProviderOk, Event, GetProvidersOk, InboundRequest,
@@ -136,7 +135,7 @@ impl SwarmContext {
                     let _ = sender.send(Ok(()));
                 }
                 Err(e) => {
-                    let _ = sender.send(Err(anyhow!(e)));
+                    let _ = sender.send(Err(e.into()));
                 }
             }
         } else {
@@ -171,7 +170,7 @@ impl SwarmContext {
                     let _ = sender.send(Ok(()));
                 }
                 Err(e) => {
-                    let _ = sender.send(Err(anyhow!(e)));
+                    let _ = sender.send(Err(e.into()));
                 }
             }
         } else {
@@ -253,15 +252,11 @@ impl SwarmContext {
         self.put_record_into_vault(record);
 
         // Start a query to be providing the file ID in kademlia
-        let qid = self
-            .swarm
-            .behaviour_mut()
-            .kademlia
-            .start_providing(id.clone());
-        if qid.is_err() {
+        let qid = self.swarm.behaviour_mut().kademlia.start_providing(id);
+        if let Err(e) = qid {
             debug!(
                 node = self.node.name,
-                err = format!("{qid:?}"),
+                err = format!("{e:?}"),
                 "Failed to start providing file"
             );
             return;
