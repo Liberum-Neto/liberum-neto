@@ -1,12 +1,12 @@
-pub mod event_handler;
+pub mod daemon_com;
 pub mod system_observer;
 pub mod views;
 
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Result};
+use daemon_com::DaemonCom;
 use egui::Visuals;
-use event_handler::EventHandler;
 use system_observer::{SystemObserver, SystemState};
 use views::{AppView, NodesListView, ViewAction, ViewContext};
 
@@ -17,16 +17,16 @@ struct MyApp {
     current_view: Box<dyn AppView>,
     system_state: Arc<Mutex<Option<SystemState>>>,
     system_observer: Rc<RefCell<SystemObserver>>,
-    event_handler: EventHandler,
+    daemon_com: DaemonCom,
 }
 
 impl MyApp {
-    fn new(system_observer: Rc<RefCell<SystemObserver>>, event_handler: EventHandler) -> Self {
+    fn new(system_observer: Rc<RefCell<SystemObserver>>, daemon_com: DaemonCom) -> Self {
         Self {
             current_view: Box::new(NodesListView::default()),
             system_state: system_observer.borrow().system_state.clone(),
             system_observer: system_observer.clone(),
-            event_handler,
+            daemon_com,
         }
     }
 }
@@ -39,7 +39,7 @@ impl eframe::App for MyApp {
 
         let mut view_ctx = ViewContext {
             system_state: self.system_state.clone(),
-            event_handler: &mut self.event_handler,
+            daemon_com: &mut self.daemon_com,
             system_observer: self.system_observer.clone(),
             egui_ctx: ctx,
             _egui_frame: frame,
@@ -64,8 +64,8 @@ fn main() -> Result<()> {
         .init();
 
     let system_observer = Rc::new(RefCell::new(SystemObserver::new()?));
-    let event_handler = EventHandler::new()?;
-    let my_app = MyApp::new(system_observer.clone(), event_handler);
+    let daemon_com = DaemonCom::new()?;
+    let my_app = MyApp::new(system_observer.clone(), daemon_com);
 
     debug!("Running observer loop");
     let update_loop_handle = system_observer.borrow_mut().run_update_loop();
