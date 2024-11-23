@@ -2,7 +2,7 @@ pub mod manager;
 pub mod store;
 
 use crate::swarm_runner;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
 use kameo::{actor::ActorRef, message::Message, Actor};
@@ -10,10 +10,11 @@ use liberum_core::node_config::{BootstrapNode, NodeConfig};
 use liberum_core::str_to_file_id;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
+use std::borrow::Borrow;
 use std::collections::HashSet;
+use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::{fmt, path::Path};
 use swarm_runner::messages::SwarmRunnerMessage;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error};
@@ -290,63 +291,63 @@ impl Node {
         NodeBuilder::default()
     }
 
-    async fn load(node_dir_path: &Path) -> Result<Node> {
-        if !node_dir_path.is_dir() {
-            error!(
-                dir_path = node_dir_path.display().to_string(),
-                "node dir path not a directory"
-            );
-            bail!("node_dir_path is not a directory");
-        }
+    //async fn load(node_dir_path: &Path) -> Result<Node> {
+    //    if !node_dir_path.is_dir() {
+    //        error!(
+    //            dir_path = node_dir_path.display().to_string(),
+    //            "node dir path not a directory"
+    //        );
+    //        bail!("node_dir_path is not a directory");
+    //    }
 
-        let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
-        let config = NodeConfig::load(&config_path).await?;
-        let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
-        let key_bytes = tokio::fs::read(key_path)
-            .await
-            .inspect_err(|e| error!(err = e.to_string(), "could not read node keypair bytes"))?;
-        let keypair = Keypair::from_protobuf_encoding(&key_bytes)?;
-        let node_name = node_dir_path
-            .file_name()
-            .ok_or(anyhow!(
-                "incorrect node dir path, it should not end with .."
-            ))?
-            .to_str()
-            .ok_or(anyhow!("node dir path is not valid utf-8 string"))
-            .inspect_err(|e| error!(err = e.to_string(), "could not resolve node name"))?
-            .to_string();
-        let node = Node::builder()
-            .name(node_name)
-            .config(config)
-            .keypair(keypair)
-            .build()
-            .inspect_err(|e| error!(err = e.to_string(), "error while building node"))?;
+    //    let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
+    //    let config = NodeConfig::load(&config_path).await?;
+    //    let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
+    //    let key_bytes = tokio::fs::read(key_path)
+    //        .await
+    //        .inspect_err(|e| error!(err = e.to_string(), "could not read node keypair bytes"))?;
+    //    let keypair = Keypair::from_protobuf_encoding(&key_bytes)?;
+    //    let node_name = node_dir_path
+    //        .file_name()
+    //        .ok_or(anyhow!(
+    //            "incorrect node dir path, it should not end with .."
+    //        ))?
+    //        .to_str()
+    //        .ok_or(anyhow!("node dir path is not valid utf-8 string"))
+    //        .inspect_err(|e| error!(err = e.to_string(), "could not resolve node name"))?
+    //        .to_string();
+    //    let node = Node::builder()
+    //        .name(node_name)
+    //        .config(config)
+    //        .keypair(keypair)
+    //        .build()
+    //        .inspect_err(|e| error!(err = e.to_string(), "error while building node"))?;
 
-        Ok(node)
-    }
+    //    Ok(node)
+    //}
 
-    async fn save(&self, node_dir_path: &Path) -> Result<()> {
-        if !node_dir_path.is_dir() {
-            error!("node dir path is not a directory");
-            bail!("node_dir_path is not a directory");
-        }
+    //async fn save(&self, node_dir_path: &Path) -> Result<()> {
+    //    if !node_dir_path.is_dir() {
+    //        error!("node dir path is not a directory");
+    //        bail!("node_dir_path is not a directory");
+    //    }
 
-        let config: NodeConfig = self.into();
-        let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
-        let key_bytes = self
-            .keypair
-            .to_protobuf_encoding()
-            .inspect_err(|e| error!(err = e.to_string(), "could not convert keypair to bytes"))?;
-        let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
+    //    let config: NodeConfig = self.into();
+    //    let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
+    //    let key_bytes = self
+    //        .keypair
+    //        .to_protobuf_encoding()
+    //        .inspect_err(|e| error!(err = e.to_string(), "could not convert keypair to bytes"))?;
+    //    let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
 
-        tokio::fs::write(key_path, key_bytes)
-            .await
-            .inspect_err(|e| error!(err = e.to_string(), "could not write node keypair"))?;
+    //    tokio::fs::write(key_path, key_bytes)
+    //        .await
+    //        .inspect_err(|e| error!(err = e.to_string(), "could not write node keypair"))?;
 
-        config.save(&config_path).await?;
+    //    config.save(&config_path).await?;
 
-        Ok(())
-    }
+    //    Ok(())
+    //}
 
     async fn start_swarm(&mut self) -> Result<()> {
         let node_ref = self
@@ -378,31 +379,31 @@ impl Into<NodeConfig> for &Node {
     }
 }
 
-impl Clone for Node {
-    fn clone(&self) -> Self {
-        Self {
-            name: self.name.clone(),
-            keypair: self.keypair.clone(),
-            bootstrap_nodes: self.bootstrap_nodes.clone(),
-            manager_ref: None,
-            external_addresses: self.external_addresses.clone(),
-            self_actor_ref: None,
-            swarm_sender: None,
-        }
-    }
-}
+//impl Clone for Node {
+//    fn clone(&self) -> Self {
+//        Self {
+//            name: self.name.clone(),
+//            keypair: self.keypair.clone(),
+//            bootstrap_nodes: self.bootstrap_nodes.clone(),
+//            manager_ref: None,
+//            external_addresses: self.external_addresses.clone(),
+//            self_actor_ref: None,
+//            swarm_sender: None,
+//        }
+//    }
+//}
 
 pub struct GetSnapshot;
 
 impl Message<GetSnapshot> for Node {
-    type Reply = Result<Node, kameo::error::Infallible>;
+    type Reply = Result<NodeSnapshot, kameo::error::Infallible>;
 
     async fn handle(
         &mut self,
         _: GetSnapshot,
         _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> Self::Reply {
-        Ok(self.clone())
+        Ok(NodeSnapshot::from(self.borrow()))
     }
 }
 
@@ -443,5 +444,23 @@ impl NodeBuilder {
             swarm_sender: None,
         };
         Ok(node)
+    }
+}
+
+pub struct NodeSnapshot {
+    pub name: String,
+    pub keypair: Keypair,
+    pub bootstrap_nodes: Vec<BootstrapNode>,
+    pub external_addresses: Vec<Multiaddr>,
+}
+
+impl From<&Node> for NodeSnapshot {
+    fn from(value: &Node) -> Self {
+        Self {
+            name: value.name.clone(),
+            keypair: value.keypair.clone(),
+            bootstrap_nodes: value.bootstrap_nodes.clone(),
+            external_addresses: value.external_addresses.clone(),
+        }
     }
 }
