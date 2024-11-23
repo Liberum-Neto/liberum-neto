@@ -16,7 +16,7 @@ use std::str::FromStr;
 use std::{fmt, path::Path};
 use swarm_runner::messages::SwarmRunnerMessage;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
 pub struct Node {
     pub name: String,

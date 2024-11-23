@@ -183,7 +183,7 @@ impl SwarmContext {
         _step: ProgressStep,
     ) {
         match result {
-            Ok(GetProvidersOk::FoundProviders { key, providers }) => {
+            Ok(GetProvidersOk::FoundProviders { key: _, providers }) => {
                 if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
                     let _ = sender.send(providers).inspect_err(|e| {
                         debug!(
@@ -203,7 +203,7 @@ impl SwarmContext {
                         .finish();
                 }
             }
-            Ok(GetProvidersOk::FinishedWithNoAdditionalRecord { closest_peers }) => {
+            Ok(GetProvidersOk::FinishedWithNoAdditionalRecord { closest_peers: _ }) => {
                 debug!(
                     node = self.node.name,
                     "Get providers didn't find any new records"
