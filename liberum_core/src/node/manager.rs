@@ -1,6 +1,6 @@
 use super::{
     store::{ListNodes, NodeStore, NodeStoreError, StoreNode},
-    GetSnapshot, Node,
+    GetSnapshot, Node, NodeSnapshot,
 };
 use crate::node::store::LoadNode;
 use anyhow::anyhow;
@@ -58,9 +58,12 @@ impl NodeManager {
     }
 
     #[message]
-    pub async fn create_node(&mut self, node: Node) -> Result<(), NodeManagerError> {
+    pub async fn create_node(
+        &mut self,
+        node_snapshot: NodeSnapshot,
+    ) -> Result<(), NodeManagerError> {
         self.store
-            .ask(StoreNode { node })
+            .ask(StoreNode { node_snapshot })
             .send()
             .await
             .map_err(|e| NodeManagerError::OtherError(e.into()))?;
@@ -205,7 +208,9 @@ impl NodeManager {
             .map_err(|e| NodeManagerError::OtherError(e.into()))?;
 
         self.store
-            .ask(StoreNode { node: snapshot })
+            .ask(StoreNode {
+                node_snapshot: snapshot,
+            })
             .send()
             .await
             .map_err(|e| NodeManagerError::OtherError(e.into()))?;

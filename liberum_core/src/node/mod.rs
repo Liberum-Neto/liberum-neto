@@ -291,64 +291,6 @@ impl Node {
         NodeBuilder::default()
     }
 
-    //async fn load(node_dir_path: &Path) -> Result<Node> {
-    //    if !node_dir_path.is_dir() {
-    //        error!(
-    //            dir_path = node_dir_path.display().to_string(),
-    //            "node dir path not a directory"
-    //        );
-    //        bail!("node_dir_path is not a directory");
-    //    }
-
-    //    let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
-    //    let config = NodeConfig::load(&config_path).await?;
-    //    let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
-    //    let key_bytes = tokio::fs::read(key_path)
-    //        .await
-    //        .inspect_err(|e| error!(err = e.to_string(), "could not read node keypair bytes"))?;
-    //    let keypair = Keypair::from_protobuf_encoding(&key_bytes)?;
-    //    let node_name = node_dir_path
-    //        .file_name()
-    //        .ok_or(anyhow!(
-    //            "incorrect node dir path, it should not end with .."
-    //        ))?
-    //        .to_str()
-    //        .ok_or(anyhow!("node dir path is not valid utf-8 string"))
-    //        .inspect_err(|e| error!(err = e.to_string(), "could not resolve node name"))?
-    //        .to_string();
-    //    let node = Node::builder()
-    //        .name(node_name)
-    //        .config(config)
-    //        .keypair(keypair)
-    //        .build()
-    //        .inspect_err(|e| error!(err = e.to_string(), "error while building node"))?;
-
-    //    Ok(node)
-    //}
-
-    //async fn save(&self, node_dir_path: &Path) -> Result<()> {
-    //    if !node_dir_path.is_dir() {
-    //        error!("node dir path is not a directory");
-    //        bail!("node_dir_path is not a directory");
-    //    }
-
-    //    let config: NodeConfig = self.into();
-    //    let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
-    //    let key_bytes = self
-    //        .keypair
-    //        .to_protobuf_encoding()
-    //        .inspect_err(|e| error!(err = e.to_string(), "could not convert keypair to bytes"))?;
-    //    let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
-
-    //    tokio::fs::write(key_path, key_bytes)
-    //        .await
-    //        .inspect_err(|e| error!(err = e.to_string(), "could not write node keypair"))?;
-
-    //    config.save(&config_path).await?;
-
-    //    Ok(())
-    //}
-
     async fn start_swarm(&mut self) -> Result<()> {
         let node_ref = self
             .self_actor_ref
@@ -369,29 +311,6 @@ impl fmt::Debug for Node {
             .finish()
     }
 }
-
-impl Into<NodeConfig> for &Node {
-    fn into(self) -> NodeConfig {
-        NodeConfig::new(
-            self.bootstrap_nodes.clone(),
-            self.external_addresses.clone(),
-        )
-    }
-}
-
-//impl Clone for Node {
-//    fn clone(&self) -> Self {
-//        Self {
-//            name: self.name.clone(),
-//            keypair: self.keypair.clone(),
-//            bootstrap_nodes: self.bootstrap_nodes.clone(),
-//            manager_ref: None,
-//            external_addresses: self.external_addresses.clone(),
-//            self_actor_ref: None,
-//            swarm_sender: None,
-//        }
-//    }
-//}
 
 pub struct GetSnapshot;
 
@@ -462,5 +381,14 @@ impl From<&Node> for NodeSnapshot {
             bootstrap_nodes: value.bootstrap_nodes.clone(),
             external_addresses: value.external_addresses.clone(),
         }
+    }
+}
+
+impl Into<NodeConfig> for &NodeSnapshot {
+    fn into(self) -> NodeConfig {
+        NodeConfig::new(
+            self.bootstrap_nodes.clone(),
+            self.external_addresses.clone(),
+        )
     }
 }

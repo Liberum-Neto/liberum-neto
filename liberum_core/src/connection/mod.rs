@@ -10,7 +10,7 @@ use crate::node::store::NodeStore;
 use crate::node::DialPeer;
 use crate::node::DownloadFile;
 use crate::node::GetProviders;
-use crate::node::Node;
+use crate::node::NodeSnapshot;
 use crate::node::ProvideFile;
 use crate::node::PublishFile;
 use anyhow::Result;
@@ -156,15 +156,16 @@ async fn handle_new_node(
         Some(seed) => liberum_core::node_keypair_from_seed(&seed),
         None => Keypair::generate_ed25519(),
     };
-    let node = Node::builder()
-        .name(name)
-        .keypair(keypair)
-        .build()
-        .map_err(|e| DaemonError::Other(e.to_string()))?;
+    let node_snapshot = NodeSnapshot {
+        name,
+        keypair,
+        bootstrap_nodes: vec![],
+        external_addresses: vec![],
+    };
 
     let resp = context
         .node_manager
-        .ask(node::manager::CreateNode { node })
+        .ask(node::manager::CreateNode { node_snapshot })
         .send()
         .await;
     match resp {

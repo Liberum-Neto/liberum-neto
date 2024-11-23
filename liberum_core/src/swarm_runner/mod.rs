@@ -1,6 +1,7 @@
 pub mod behaviour;
 pub mod messages;
 
+use crate::node::NodeSnapshot;
 use crate::node::{self, Node};
 use anyhow::anyhow;
 use anyhow::Result;
@@ -33,7 +34,7 @@ const DEFAULT_MULTIADDR_STR_IP4: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 /// and messages to the swarm runner
 struct SwarmContext {
     swarm: Swarm<LiberumNetoBehavior>,
-    node: Node,
+    node_snapshot: NodeSnapshot,
     behaviour: BehaviourContext,
 }
 
@@ -61,14 +62,14 @@ async fn run_swarm_main(
     // If it fails then it's a bug
 
     // Get the node data
-    let node_data = node_ref
+    let node_snapshot = node_ref
         .ask(node::GetSnapshot {})
         .send()
         .await
         .inspect_err(|e| error!(err = e.to_string(), "Swarm can't get node snapshot!"))?;
 
     // Create a new swarm using the node data
-    let keypair = node_data.keypair.clone();
+    let keypair = node_snapshot.keypair.clone();
     let id = identity::PeerId::from_public_key(&keypair.public());
     let swarm = SwarmBuilder::with_existing_identity(keypair.clone())
         .with_tokio()
@@ -99,7 +100,7 @@ async fn run_swarm_main(
         .build();
 
     let mut context = SwarmContext {
-        node: node_data,
+        node_snapshot,
         swarm: swarm,
         behaviour: BehaviourContext::new(),
     };
@@ -124,13 +125,13 @@ async fn run_swarm_main(
     let default_addr = vec![swarm_default_addr_ip6, swarm_default_addr_ip4];
 
     // Add the external addresses to the swarm
-    if context.node.external_addresses.is_empty() {
+    if context.node_snapshot.external_addresses.is_empty() {
         for addr in default_addr {
             context.swarm.add_external_address(addr.clone());
             context.swarm.listen_on(addr.clone())?;
         }
     } else {
-        for addr in &context.node.external_addresses {
+        for addr in &context.node_snapshot.external_addresses {
             context.swarm.add_external_address(addr.clone());
             context.swarm.listen_on(addr.clone())?;
         }
@@ -144,10 +145,10 @@ async fn run_swarm_main(
         .kademlia
         .set_mode(Some(kad::Mode::Server));
 
-    debug!(node_name = context.node.name, "Starting a swarm!");
+    debug!(node_name = context.node_snapshot.name, "Starting a swarm!");
 
     // Bootstrap using the bootstrap nodes from the node data
-    for node in &context.node.bootstrap_nodes {
+    for node in &context.node_snapshot.bootstrap_nodes {
         context
             .swarm
             .behaviour_mut()
@@ -226,10 +227,10 @@ impl SwarmContext {
                     addr: address.clone(),
                 };
                 let node = serde_json::to_string(&node)?;
-                info!(node = self.node.name, "Listening! <{node}>");
+                info!(node = self.node_snapshot.name, "Listening! <{node}>");
             }
             _ => debug!(
-                node = self.node.name,
+                node = self.node_snapshot.name,
                 event = format!("{event:?}"),
                 "Received Swarm Event!"
             ),
@@ -242,7 +243,7 @@ impl SwarmContext {
 /// Utility not related to behaviours
 impl SwarmContext {
     fn print_neighbours(&mut self) {
-        debug!(node = self.node.name, "Neighbours:");
+        debug!(node = self.node_snapshot.name, "Neighbours:");
         self.swarm
             .behaviour_mut()
             .kademlia

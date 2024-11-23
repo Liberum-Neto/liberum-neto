@@ -54,7 +54,7 @@ impl SwarmContext {
                 } => self.handle_file_share_response(request_id, response),
             },
             e => debug!(
-                node = self.node.name,
+                node = self.node_snapshot.name,
                 "Received request_response event! {e:?}"
             ),
         }
@@ -90,7 +90,7 @@ impl SwarmContext {
         if response.data.is_none() {
             debug!(
                 requested = liberum_core::file_id_to_str(id.clone()),
-                node = self.node.name,
+                node = self.node_snapshot.name,
                 "Requested file not found"
             );
         }
@@ -103,14 +103,14 @@ impl SwarmContext {
             .send_response(response_channel, response)
             .inspect_err(|e| {
                 debug!(
-                    node = self.node.name,
+                    node = self.node_snapshot.name,
                     "Request_response request response_channel closed: {:?}", e
                 );
             });
         if let Err(e) = r {
             debug!(
                 requested = liberum_core::file_id_to_str(id),
-                node = self.node.name,
+                node = self.node_snapshot.name,
                 "Failed to send request_response response: {:?}",
                 e
             );
@@ -123,13 +123,13 @@ impl SwarmContext {
         request_id: OutboundRequestId,
         response: FileResponse,
     ) {
-        debug!(node = self.node.name, "received request_response response!");
+        debug!(node = self.node_snapshot.name, "received request_response response!");
         // Get the response data and send it to the pending download
         let result: Result<Vec<u8>>;
         if let Some(data) = response.data {
             result = Ok(data);
         } else {
-            debug!(node = self.node.name, "requested File not found");
+            debug!(node = self.node_snapshot.name, "requested File not found");
             result = Err(anyhow!("File not found"));
         }
 
