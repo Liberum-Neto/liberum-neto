@@ -242,10 +242,7 @@ impl Vault {
         let fragment_path = fragment_info.path;
         let fragment_file = File::open(&fragment_path).await?;
 
-        // TODO: Fix, is there any way to not use this take here?
-        Ok(Some(
-            ReaderStream::new(fragment_file.take(fragment_info.size)).boxed(),
-        ))
+        Ok(Some(ReaderStream::new(fragment_file).boxed()))
     }
 
     async fn store_fragment(&self, key: Option<Key>, data: &mut FragmentData) -> Result<Key> {
