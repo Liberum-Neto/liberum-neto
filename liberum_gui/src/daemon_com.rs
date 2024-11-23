@@ -5,13 +5,13 @@ use liberum_core::{DaemonRequest, DaemonResponse, DaemonResult};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, error, info};
 
-pub struct EventHandler {
+pub struct DaemonCom {
     pub rt: tokio::runtime::Runtime,
     pub to_daemon_sender: Sender<DaemonRequest>,
     pub from_daemon_receiver: Receiver<DaemonResult>,
 }
 
-impl EventHandler {
+impl DaemonCom {
     pub fn new() -> Result<Self> {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()

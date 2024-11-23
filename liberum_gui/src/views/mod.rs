@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::system_observer::SystemObserver;
-use crate::{event_handler::EventHandler, system_observer::SystemState};
+use crate::{daemon_com::DaemonCom, system_observer::SystemState};
 
 pub trait AppView {
     fn setup(&mut self, _: &mut ViewContext) {}
@@ -27,7 +27,7 @@ pub enum ViewAction {
 pub struct ViewContext<'a> {
     pub system_state: Arc<Mutex<Option<SystemState>>>,
     pub system_observer: Rc<RefCell<SystemObserver>>,
-    pub event_handler: &'a mut EventHandler,
+    pub daemon_com: &'a mut DaemonCom,
     pub egui_ctx: &'a egui::Context,
     pub _egui_frame: &'a mut eframe::Frame,
 }

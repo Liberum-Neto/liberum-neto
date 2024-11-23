@@ -32,7 +32,7 @@ impl AppView for NodesListView {
                         ui.text_edit_singleline(&mut self.create_node_name);
 
                         if ui.button("Create").clicked() {
-                            ctx.event_handler
+                            ctx.daemon_com
                                 .create_node(&mut self.create_node_name)
                                 .unwrap();
 
@@ -56,11 +56,11 @@ impl AppView for NodesListView {
 
                                 ui.horizontal(|ui| {
                                     if ui.button("Run").clicked() {
-                                        let _ = ctx.event_handler.run_node(&n.name);
+                                        let _ = ctx.daemon_com.run_node(&n.name);
                                     }
 
                                     if ui.button("Stop").clicked() {
-                                        let _ = ctx.event_handler.stop_node(&n.name);
+                                        let _ = ctx.daemon_com.stop_node(&n.name);
                                     }
 
                                     if ui.button("Show").clicked() {

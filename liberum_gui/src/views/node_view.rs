@@ -102,11 +102,11 @@ impl NodeView {
 
                 ui.horizontal(|ui| {
                     if ui.button("Run").clicked() {
-                        let _ = ctx.event_handler.run_node(&node_info.name);
+                        let _ = ctx.daemon_com.run_node(&node_info.name);
                     }
 
                     if ui.button("Stop").clicked() {
-                        let _ = ctx.event_handler.stop_node(&node_info.name);
+                        let _ = ctx.daemon_com.stop_node(&node_info.name);
                     }
 
                     if ui.button("Config").clicked() {
@@ -148,7 +148,7 @@ impl NodeView {
                     if ui.button("Publish file").clicked() {
                         match &self.file_to_send_path {
                             Some(path) => {
-                                let result = ctx.event_handler.publish_file(&self.node_name, &path);
+                                let result = ctx.daemon_com.publish_file(&self.node_name, &path);
                                 match result {
                                     Ok(id) => self.status_line = format!("File published; id={id}"),
                                     Err(e) => self.status_line = e.to_string(),
@@ -170,7 +170,7 @@ impl NodeView {
 
                 if ui.button("Download").clicked() {
                     match ctx
-                        .event_handler
+                        .daemon_com
                         .download_file(&self.node_name, &self.file_to_download_id)
                     {
                         Ok(data) => {
@@ -200,7 +200,7 @@ impl NodeView {
                     ui.add_space(10.0);
 
                     if ui.button("Dial").clicked() {
-                        match ctx.event_handler.dial(
+                        match ctx.daemon_com.dial(
                             &self.node_name,
                             &self.dial_peer_id,
                             &self.dial_addr,
