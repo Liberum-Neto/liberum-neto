@@ -123,7 +123,10 @@ impl SwarmContext {
         request_id: OutboundRequestId,
         response: FileResponse,
     ) {
-        debug!(node = self.node_snapshot.name, "received request_response response!");
+        debug!(
+            node = self.node_snapshot.name,
+            "received request_response response!"
+        );
         // Get the response data and send it to the pending download
         let result: Result<Vec<u8>>;
         if let Some(data) = response.data {
