@@ -52,7 +52,10 @@ impl SwarmContext {
                     response,
                 } => self.handle_file_share_response(request_id, response),
             },
-            e => debug!("Request_response event! {e:?}"),
+            e => debug!(
+                node = self.node.name,
+                "Received request_response event! {e:?}"
+            ),
         }
     }
 }
@@ -66,7 +69,7 @@ impl SwarmContext {
         request: FileRequest,
         response_channel: ResponseChannel<FileResponse>,
     ) {
-        debug!("Request_response request!");
+        debug!(node = self.node.name, "Received Request_response request!");
         // Get the file from the providing hashmap
         let id = kad::RecordKey::from(request.id.clone());
         let file = self.behaviour.providing.get(&id);
@@ -81,12 +84,17 @@ impl SwarmContext {
                             .file_share
                             .send_response(response_channel, FileResponse { data })
                             .inspect_err(|e| {
-                                debug!("Connection closed: {:?}", e);
+                                debug!(
+                                    node = self.node.name,
+                                    "Request_response request response_channel closed: {:?}", e
+                                );
                             });
                         if let Err(e) = r {
                             debug!(
                                 requested = liberum_core::file_id_to_str(id),
-                                "Failed to send response: {:?}", e
+                                node = self.node.name,
+                                "Failed to send request_response response: {:?}",
+                                e
                             );
                         }
                     }
@@ -101,7 +109,7 @@ impl SwarmContext {
         request_id: OutboundRequestId,
         response: FileResponse,
     ) {
-        debug!("Request_response response!");
+        debug!(node = self.node.name, "received request_response response!");
         // Get the response data and send it to the pending download
         let _ = self
             .behaviour
