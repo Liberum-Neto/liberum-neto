@@ -11,6 +11,7 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::message::{Context, Message};
+use kameo::messages;
 use kameo::Actor;
 use rusqlite::OptionalExtension;
 use tokio::fs::remove_file;
@@ -35,8 +36,77 @@ pub struct Vault {
 
 type FragmentData = BoxStream<'static, Result<Bytes, io::Error>>;
 
-pub struct StoreFragment(Option<Key>, FragmentData);
 pub struct LoadFragment(Key);
+
+impl Actor for Vault {
+    type Mailbox = BoundedMailbox<Self>;
+
+    async fn on_start(
+        &mut self,
+        _: kameo::actor::ActorRef<Self>,
+    ) -> std::result::Result<(), kameo::error::BoxError> {
+        self.prepare_db().await?;
+
+        Ok(())
+    }
+}
+
+#[messages]
+impl Vault {
+    #[message]
+    async fn store_fragment(&self, key: Option<Key>, mut data: FragmentData) -> Result<Key> {
+        let uid = uuid::Uuid::new_v4();
+        let random_fragment_path = Self::temp_dir_path(&self.vault_dir_path).join(uid.to_string());
+        let mut fragment_file = File::create(&random_fragment_path).await?;
+        let mut hasher = blake3::Hasher::new();
+        let mut fragment_size = 0;
+
+        while let Some(bytes) = data.next().await {
+            let bytes = bytes?;
+            hasher.update(&bytes);
+            fragment_file.write(&bytes).await?;
+            fragment_size += bytes.len();
+        }
+
+        let key_bytes = hasher.finalize().as_bytes().to_vec();
+        let fragment_key = Key::try_from(key_bytes.clone())?;
+
+        // Verify integrity if key was provided
+        if let Some(key) = key {
+            if key != fragment_key {
+                remove_file(random_fragment_path).await?;
+                bail!(
+                    "Fragment integrity check failed, expected key to be {key}, was {fragment_key}"
+                );
+            }
+        }
+
+        let key_string = bs58::encode(&key_bytes).into_string();
+        let valid_fragment_path = Self::fragment_dir_path(&self.vault_dir_path).join(key_string);
+        tokio::fs::rename(random_fragment_path, &valid_fragment_path).await?;
+
+        let fragment_info = FragmentInfo::new(
+            fragment_key.clone(),
+            &valid_fragment_path,
+            fragment_size as u64,
+        );
+        self.store_fragment_info(fragment_info).await?;
+
+        Ok(fragment_key)
+    }
+}
+
+impl Message<LoadFragment> for Vault {
+    type Reply = Result<Option<FragmentData>>;
+
+    fn handle(
+        &mut self,
+        msg: LoadFragment,
+        _: Context<'_, Self, Self::Reply>,
+    ) -> impl std::future::Future<Output = Self::Reply> + Send {
+        async move { self.load_fragment(msg.0).await }
+    }
+}
 
 impl Vault {
     const DEFAULT_VAULT_DATABASE_NAME: &'static str = "vault.db3";
@@ -246,47 +316,6 @@ impl Vault {
         Ok(Some(ReaderStream::new(fragment_file).boxed()))
     }
 
-    async fn store_fragment(&self, key: Option<Key>, data: &mut FragmentData) -> Result<Key> {
-        let uid = uuid::Uuid::new_v4();
-        let random_fragment_path = Self::temp_dir_path(&self.vault_dir_path).join(uid.to_string());
-        let mut fragment_file = File::create(&random_fragment_path).await?;
-        let mut hasher = blake3::Hasher::new();
-        let mut fragment_size = 0;
-
-        while let Some(bytes) = data.next().await {
-            let bytes = bytes?;
-            hasher.update(&bytes);
-            fragment_file.write(&bytes).await?;
-            fragment_size += bytes.len();
-        }
-
-        let key_bytes = hasher.finalize().as_bytes().to_vec();
-        let fragment_key = Key::try_from(key_bytes.clone())?;
-
-        // Verify integrity if key was provided
-        if let Some(key) = key {
-            if key != fragment_key {
-                remove_file(random_fragment_path).await?;
-                bail!(
-                    "Fragment integrity check failed, expected key to be {key}, was {fragment_key}"
-                );
-            }
-        }
-
-        let key_string = bs58::encode(&key_bytes).into_string();
-        let valid_fragment_path = Self::fragment_dir_path(&self.vault_dir_path).join(key_string);
-        tokio::fs::rename(random_fragment_path, &valid_fragment_path).await?;
-
-        let fragment_info = FragmentInfo::new(
-            fragment_key.clone(),
-            &valid_fragment_path,
-            fragment_size as u64,
-        );
-        self.store_fragment_info(fragment_info).await?;
-
-        Ok(fragment_key)
-    }
-
     async fn ensure_dirs(vault_dir_path: &Path) -> Result<()> {
         debug!(
             path = vault_dir_path.display().to_string(),
@@ -321,43 +350,6 @@ impl Vault {
 
     fn default_db_path(base_path: &Path) -> PathBuf {
         base_path.join(Self::DEFAULT_VAULT_DATABASE_NAME)
-    }
-}
-
-impl Actor for Vault {
-    type Mailbox = BoundedMailbox<Self>;
-
-    async fn on_start(
-        &mut self,
-        _: kameo::actor::ActorRef<Self>,
-    ) -> std::result::Result<(), kameo::error::BoxError> {
-        self.prepare_db().await?;
-
-        Ok(())
-    }
-}
-
-impl Message<StoreFragment> for Vault {
-    type Reply = Result<Key>;
-
-    async fn handle(
-        &mut self,
-        mut msg: StoreFragment,
-        _: Context<'_, Self, Self::Reply>,
-    ) -> Self::Reply {
-        Ok(self.store_fragment(msg.0, &mut msg.1).await?)
-    }
-}
-
-impl Message<LoadFragment> for Vault {
-    type Reply = Result<Option<FragmentData>>;
-
-    fn handle(
-        &mut self,
-        msg: LoadFragment,
-        _: Context<'_, Self, Self::Reply>,
-    ) -> impl std::future::Future<Output = Self::Reply> + Send {
-        async move { self.load_fragment(msg.0).await }
     }
 }
 
@@ -427,7 +419,14 @@ mod tests {
         let mut stored_keys = Vec::new();
 
         for frag in fragments {
-            let stored_key = vault.ask(StoreFragment(None, frag)).send().await.unwrap();
+            let stored_key = vault
+                .ask(StoreFragment {
+                    key: None,
+                    data: frag,
+                })
+                .send()
+                .await
+                .unwrap();
             stored_keys.push(stored_key);
         }
 
