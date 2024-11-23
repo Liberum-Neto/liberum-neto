@@ -126,7 +126,7 @@ impl SwarmContext {
             } => {
                 if self.behaviour.providing.contains_key(&id) {
                     info!(
-                        node = self.node.name,
+                        node = self.node_snapshot.name,
                         id = format!("{id:?}"),
                         "File is already being provided"
                     );

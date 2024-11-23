@@ -1,10 +1,13 @@
 use crate::node::Node;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use kameo::{messages, Actor};
 use liberum_core::node_config::NodeConfig;
+use libp2p::identity::Keypair;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{debug, error};
+
+use super::NodeSnapshot;
 
 pub struct UpdateNodeConfig {
     pub name: String,
@@ -27,6 +30,11 @@ pub enum NodeStoreError {
     NodeDoesNotExist { name: String },
     #[error("other error, name: {name}, err: {err}")]
     OtherError { name: String, err: anyhow::Error },
+    #[error("any error, err: {err}")]
+    Any {
+        #[from]
+        err: anyhow::Error,
+    },
 }
 
 #[messages]
@@ -50,30 +58,85 @@ impl NodeStore {
             return Err(NodeStoreError::NodeDoesNotExist { name });
         }
 
-        let node = Node::load(&node_dir_path)
+        if !node_dir_path.is_dir() {
+            error!(
+                dir_path = node_dir_path.display().to_string(),
+                "node dir path not a directory"
+            );
+
+            return Err(NodeStoreError::OtherError {
+                name,
+                err: anyhow!("node_dir_path is not a directory"),
+            });
+        }
+
+        let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
+        let config = NodeConfig::load(&config_path).await?;
+        let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
+        let key_bytes = tokio::fs::read(key_path)
             .await
-            .map_err(|_| NodeStoreError::LoadError { name })?;
+            .inspect_err(|e| error!(err = e.to_string(), "could not read node keypair bytes"))
+            .context("could not read node keypair bytes")?;
+        let keypair = Keypair::from_protobuf_encoding(&key_bytes)
+            .context("could not read keypair from protobuf encoded bytes")?;
+        let node_name = node_dir_path
+            .file_name()
+            .ok_or(anyhow!(
+                "incorrect node dir path, it should not end with .."
+            ))?
+            .to_str()
+            .ok_or(anyhow!("node dir path is not valid utf-8 string"))
+            .inspect_err(|e| error!(err = e.to_string(), "could not resolve node name"))?
+            .to_string();
+        let node = Node::builder()
+            .name(node_name)
+            .config(config)
+            .keypair(keypair)
+            .build()
+            .inspect_err(|e| error!(err = e.to_string(), "error while building node"))?;
 
         Ok(node)
     }
 
     #[message]
-    pub async fn store_node(&self, node: Node) -> Result<(), NodeStoreError> {
-        let node_dir_path = self.ensure_node_dir_path(&node.name).await.map_err(|_| {
-            NodeStoreError::StoreError {
-                name: node.name.clone(),
-            }
-        })?;
+    pub async fn store_node(&self, node_snapshot: NodeSnapshot) -> Result<(), NodeStoreError> {
+        let node_dir_path = self
+            .ensure_node_dir_path(&node_snapshot.name)
+            .await
+            .map_err(|_| NodeStoreError::StoreError {
+                name: node_snapshot.name.clone(),
+            })?;
 
         debug!(
-            name = node.name,
+            name = node_snapshot.name,
             path = node_dir_path.display().to_string(),
             "saving node"
         );
 
-        Node::save(&node, &node_dir_path)
+        if !node_dir_path.is_dir() {
+            error!("node dir path is not a directory");
+            return Err(NodeStoreError::StoreError {
+                name: node_snapshot.name,
+            });
+        }
+
+        let config: NodeConfig = (&node_snapshot).into();
+        let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
+        let key_bytes = node_snapshot
+            .keypair
+            .to_protobuf_encoding()
+            .inspect_err(|e| error!(err = e.to_string(), "could not convert keypair to bytes"))
+            .context("could not convert keypair to bytes")?;
+        let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
+
+        tokio::fs::write(key_path, key_bytes)
             .await
-            .map_err(|_| NodeStoreError::StoreError { name: node.name })
+            .inspect_err(|e| error!(err = e.to_string(), "could not write node keypair"))
+            .context("could not write node keypair")?;
+
+        config.save(&config_path).await?;
+
+        Ok(())
     }
 
     #[message]
@@ -235,8 +298,9 @@ mod tests {
             .keypair(Keypair::generate_ed25519())
             .build()
             .unwrap();
+        let node_snapshot = NodeSnapshot::from(&new_node);
         node_store
-            .ask(StoreNode { node: new_node })
+            .ask(StoreNode { node_snapshot })
             .send()
             .await
             .unwrap();

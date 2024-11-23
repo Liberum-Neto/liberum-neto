@@ -100,7 +100,7 @@ impl SwarmContext {
         if result.is_ok() {
             let result = result.clone();
             info!(
-                node = self.node.name,
+                node = self.node_snapshot.name,
                 id = format!(
                     "{}",
                     liberum_core::file_id_to_str(result.unwrap().key.clone())
@@ -109,14 +109,14 @@ impl SwarmContext {
             );
         } else {
             debug!(
-                node = self.node.name,
+                node = self.node_snapshot.name,
                 id = format!("{id:?}"),
                 "Failed to start providing file"
             );
         }
 
         debug!(
-            node = self.node.name,
+            node = self.node_snapshot.name,
             "Start Providing, all known providers:",
         );
 
@@ -144,10 +144,14 @@ impl SwarmContext {
         _step: ProgressStep,
     ) {
         if result.is_ok() {
-            info!(node = self.node.name, id = format!("{id:?}"), "Put file");
+            info!(
+                node = self.node_snapshot.name,
+                id = format!("{id:?}"),
+                "Put file"
+            );
         } else {
             error!(
-                node = self.node.name,
+                node = self.node_snapshot.name,
                 id = format!("{id:?}"),
                 err = format!("{result:?}"),
                 "Failed to put file"
@@ -168,7 +172,7 @@ impl SwarmContext {
             }
         } else {
             debug!(
-                node = self.node.name,
+                node = self.node_snapshot.name,
                 qid = format!("{id}"),
                 "Put Record Progressed: Channel closed"
             );
@@ -187,7 +191,7 @@ impl SwarmContext {
                 if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
                     let _ = sender.send(providers).inspect_err(|e| {
                         debug!(
-                            node = self.node.name,
+                            node = self.node_snapshot.name,
                             qid = format!("{id}"),
                             err = format!("{e:?}"),
                             "Channel closed"
@@ -205,7 +209,7 @@ impl SwarmContext {
             }
             Ok(GetProvidersOk::FinishedWithNoAdditionalRecord { closest_peers: _ }) => {
                 debug!(
-                    node = self.node.name,
+                    node = self.node_snapshot.name,
                     "Get providers didn't find any new records"
                 );
                 if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
@@ -220,7 +224,7 @@ impl SwarmContext {
             }
             Err(e) => {
                 error!(
-                    node = self.node.name,
+                    node = self.node_snapshot.name,
                     id = format!("{id:?}"),
                     err = format!("{e:?}"),
                     "Failed to get providers"
@@ -238,7 +242,7 @@ impl SwarmContext {
         _connection: ConnectionId,
         record: Option<Record>,
     ) {
-        debug!(node = self.node.name, "Kad Received PutRecord");
+        debug!(node = self.node_snapshot.name, "Kad Received PutRecord");
         if record.is_none() {
             warn!("Received PutRecord with no record");
             return;
@@ -253,7 +257,7 @@ impl SwarmContext {
         let qid = self.swarm.behaviour_mut().kademlia.start_providing(id);
         if let Err(e) = qid {
             debug!(
-                node = self.node.name,
+                node = self.node_snapshot.name,
                 err = format!("{e:?}"),
                 "Failed to start providing file"
             );
@@ -278,7 +282,7 @@ impl SwarmContext {
                     .add_provider(record.clone())
                     .ok(); // TODO What if the providers amount is exceeded? How to ensure only the closest one are kept?
                 info!(
-                    node = self.node.name,
+                    node = self.node_snapshot.name,
                     provider = record.provider.to_base58(),
                     record = bs58::encode(&record.key).into_string(),
                     "Received AddProvider"
@@ -286,7 +290,10 @@ impl SwarmContext {
                 self.print_providers(&record.key);
             }
             None => {
-                warn!(node = self.node.name, "Received AddProvider with no record");
+                warn!(
+                    node = self.node_snapshot.name,
+                    "Received AddProvider with no record"
+                );
             }
         }
     }
@@ -296,19 +303,19 @@ impl SwarmContext {
         _num_closer_peers: usize,
         _num_provider_peers: usize,
     ) {
-        debug!(node = self.node.name, "Kad Received GetProvider")
+        debug!(node = self.node_snapshot.name, "Kad Received GetProvider")
     }
 }
 
 /// Utility related to the Kademlia behaviour
 impl SwarmContext {
     pub(crate) fn put_record_into_vault(&mut self, record: Record) {
-        let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.node.name.clone());
+        let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.node_snapshot.name.clone());
         std::fs::create_dir_all(&dir).ok();
         let path = dir.join(liberum_core::file_id_to_str(record.key.clone()));
         if let Err(e) = std::fs::write(path.clone(), record.value) {
             error!(
-                node = self.node.name,
+                node = self.node_snapshot.name,
                 path = format!("{path:?}"),
                 err = format!("{e:?}"),
                 "Failed to save file"
@@ -324,7 +331,7 @@ impl SwarmContext {
 
     pub(crate) fn print_providers(&mut self, key: &RecordKey) {
         debug!(
-            node = self.node.name,
+            node = self.node_snapshot.name,
             record = bs58::encode(key.to_vec()).into_string(),
             "Providers:"
         );
@@ -337,7 +344,7 @@ impl SwarmContext {
             .iter()
         {
             debug!(
-                node = self.node.name,
+                node = self.node_snapshot.name,
                 provider = p.provider.to_base58(),
                 "Provider"
             );
