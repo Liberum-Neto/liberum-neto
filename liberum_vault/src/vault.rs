@@ -121,10 +121,10 @@ impl Vault {
     async fn prepare_db(&self) -> Result<()> {
         const CREATE_FRAGMENT_TABLE_QUERY: &str = "
             CREATE TABLE IF NOT EXISTS fragment (
-                hash0 INTEGER,
-                hash1 INTEGER,
-                hash2 INTEGER,
-                hash3 INTEGER,
+                hash0 INTEGER NOT NULL,
+                hash1 INTEGER NOT NULL,
+                hash2 INTEGER NOT NULL,
+                hash3 INTEGER NOT NULL,
                 path VARCHAR(255),
                 size INTEGER,
                 PRIMARY KEY (hash0, hash1, hash2, hash3)
