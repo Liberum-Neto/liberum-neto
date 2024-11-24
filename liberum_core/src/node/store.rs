@@ -40,7 +40,7 @@ pub enum NodeStoreError {
 #[messages]
 impl NodeStore {
     #[message]
-    pub async fn load_node(&self, name: String) -> Result<Node, NodeStoreError> {
+    pub async fn load_node(&self, name: String) -> Result<NodeSnapshot, NodeStoreError> {
         let node_dir_path = self.resolve_node_dir_path(&name);
         debug!(
             name = name,
@@ -79,23 +79,14 @@ impl NodeStore {
             .context("could not read node keypair bytes")?;
         let keypair = Keypair::from_protobuf_encoding(&key_bytes)
             .context("could not read keypair from protobuf encoded bytes")?;
-        let node_name = node_dir_path
-            .file_name()
-            .ok_or(anyhow!(
-                "incorrect node dir path, it should not end with .."
-            ))?
-            .to_str()
-            .ok_or(anyhow!("node dir path is not valid utf-8 string"))
-            .inspect_err(|e| error!(err = e.to_string(), "could not resolve node name"))?
-            .to_string();
-        let node = Node::builder()
-            .name(node_name)
-            .config(config)
-            .keypair(keypair)
-            .build()
-            .inspect_err(|e| error!(err = e.to_string(), "error while building node"))?;
+        let node_snapshot = NodeSnapshot {
+            name,
+            keypair,
+            bootstrap_nodes: config.bootstrap_nodes,
+            external_addresses: config.external_addresses,
+        };
 
-        Ok(node)
+        Ok(node_snapshot)
     }
 
     #[message]

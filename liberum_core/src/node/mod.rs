@@ -16,6 +16,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
 use swarm_runner::messages::SwarmRunnerMessage;
+use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error};
 
@@ -23,8 +24,10 @@ pub struct Node {
     pub name: String,
     pub keypair: Keypair,
     pub bootstrap_nodes: Vec<BootstrapNode>,
-    pub manager_ref: Option<ActorRef<NodeManager>>,
+    pub manager_ref: ActorRef<NodeManager>,
     pub external_addresses: Vec<Multiaddr>,
+    // These fields are mandatory, but may be set only after spawning the node, so unwrapping them should be safe from
+    // all of the methods:
     pub self_actor_ref: Option<ActorRef<Self>>,
     swarm_sender: Option<mpsc::Sender<SwarmRunnerMessage>>,
 }
@@ -36,10 +39,8 @@ impl Actor for Node {
         &mut self,
         actor_ref: ActorRef<Self>,
     ) -> std::result::Result<(), kameo::error::BoxError> {
-        let _ = &self
-            .manager_ref
-            .as_ref()
-            .ok_or(anyhow!("no manager ref for node set"))?;
+        // This should always be first thing to set self ref, because some methods executed later will assume that
+        // this field is Some -- unwrapping this option
         self.self_actor_ref = Some(actor_ref.clone());
         self.start_swarm().await?;
 
@@ -51,11 +52,11 @@ impl Actor for Node {
         _: kameo::actor::WeakActorRef<Self>,
         _: kameo::error::ActorStopReason,
     ) -> std::result::Result<(), kameo::error::BoxError> {
-        if let Some(sender) = self.swarm_sender {
-            sender.send(SwarmRunnerMessage::Kill).await?;
-        }
-
-        Ok(())
+        Ok(self
+            .swarm_sender
+            .unwrap()
+            .send(SwarmRunnerMessage::Kill)
+            .await?)
     }
 }
 
@@ -88,19 +89,22 @@ impl Node {
     pub async fn get_providers(&mut self, id: String) -> Result<HashSet<PeerId>> {
         debug!(node = self.name, "Node got GetProviders");
         let id = str_to_file_id(&id)?;
-        if let Some(sender) = &mut self.swarm_sender {
-            let (send, recv) = oneshot::channel();
-            sender
-                .send(SwarmRunnerMessage::GetProviders {
-                    id,
-                    response_sender: send,
-                })
-                .await?;
-            if let Ok(received) = recv.await {
-                debug!(node = self.name, "Got providers: {received:?}");
-                return Ok(received);
-            }
+        let (send, recv) = oneshot::channel();
+
+        self.swarm_sender
+            .as_mut()
+            .unwrap()
+            .send(SwarmRunnerMessage::GetProviders {
+                id,
+                response_sender: send,
+            })
+            .await?;
+
+        if let Ok(received) = recv.await {
+            debug!(node = self.name, "Got providers: {received:?}");
+            return Ok(received);
         }
+
         Err(anyhow!("Could not get providers"))
     }
 
@@ -113,22 +117,22 @@ impl Node {
             .await
             .map_err(|e| error!(err = e.to_string(), "Failed to hash file"))
             .unwrap();
-        if let None = self.swarm_sender {
-            error!(node = self.name, "Swarm is None!");
-            return Err(anyhow!("Swarm is None!"));
-        }
 
-        let sender = self.swarm_sender.as_mut().unwrap(); // won't panic due to the if let above
         let (resp_send, resp_recv) = oneshot::channel();
-        sender
+
+        self.swarm_sender
+            .as_mut()
+            .unwrap()
             .send(SwarmRunnerMessage::ProvideFile {
                 id: id.clone(),
                 path,
                 response_sender: resp_send,
             })
             .await?;
+
         resp_recv.await??;
         let id_str = liberum_core::file_id_to_str(id);
+
         Ok(id_str)
     }
 
@@ -136,21 +140,20 @@ impl Node {
     pub async fn download_file(&mut self, id: String) -> Result<Vec<u8>> {
         let id_str = id;
         let id = liberum_core::str_to_file_id(&id_str)?;
-        if let None = self.swarm_sender {
-            error!(node = self.name, "Swarm is None!");
-            return Err(anyhow!("Swarm is None!"));
-        }
-        let sender = self.swarm_sender.as_mut().unwrap(); // won't panic due to the if let above
 
         // first get the providers of the file
         // Maybe getting the providers could be reused from GetProviders node message handler??
         let (resp_send, resp_recv) = oneshot::channel();
-        sender
+
+        self.swarm_sender
+            .as_mut()
+            .unwrap()
             .send(SwarmRunnerMessage::GetProviders {
                 id: id.clone(),
                 response_sender: resp_send,
             })
             .await?;
+
         let providers = resp_recv.await?;
         if providers.is_empty() {
             return Err(anyhow!("Could not find provider for file {id_str}.").into());
@@ -163,12 +166,18 @@ impl Node {
                 id = id_str,
                 "Trying to download from peer"
             );
+
             let (file_sender, file_receiver) = oneshot::channel();
-            let result = sender.send(SwarmRunnerMessage::DownloadFile {
-                id: id.clone(),
-                peer: peer.clone(),
-                response_sender: file_sender,
-            });
+            let result =
+                self.swarm_sender
+                    .as_mut()
+                    .unwrap()
+                    .send(SwarmRunnerMessage::DownloadFile {
+                        id: id.clone(),
+                        peer: peer.clone(),
+                        response_sender: file_sender,
+                    });
+
             if let Err(e) = result.await {
                 error!(
                     node = self.name,
@@ -177,6 +186,7 @@ impl Node {
                 );
                 continue;
             }
+
             match file_receiver.await {
                 Err(e) => {
                     debug!(
@@ -211,6 +221,7 @@ impl Node {
                 }
             }
         }
+
         Err(anyhow!("Could not download file"))
     }
 
@@ -221,65 +232,65 @@ impl Node {
 
     #[message]
     pub async fn dial_peer(&mut self, peer_id: String, peer_addr: String) -> Result<()> {
-        if let Some(sender) = &mut self.swarm_sender {
-            let (send, recv) = oneshot::channel();
-            let peer_id = PeerId::from_str(&peer_id)?;
-            let peer_addr = peer_addr.parse::<Multiaddr>()?;
-            sender
-                .send(SwarmRunnerMessage::Dial {
-                    peer_id,
-                    peer_addr,
-                    response_sender: send,
-                })
-                .await?;
+        let (send, recv) = oneshot::channel();
+        let peer_id = PeerId::from_str(&peer_id)?;
+        let peer_addr = peer_addr.parse::<Multiaddr>()?;
 
-            return recv.await?.map_err(|e| e.into());
-        }
-        Err(anyhow!("Swarm sender is None"))
+        self.swarm_sender
+            .as_mut()
+            .unwrap()
+            .send(SwarmRunnerMessage::Dial {
+                peer_id,
+                peer_addr,
+                response_sender: send,
+            })
+            .await?;
+
+        recv.await?.map_err(|e| e.into())
     }
 
     #[message]
     pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
-        if let Some(sender) = &mut self.swarm_sender {
-            let id = liberum_core::get_file_id(&path).await.inspect_err(|e| {
-                error!(
-                    err = e.to_string(),
-                    path = format!("{path:?}"),
-                    "Failed to hash file"
-                );
-            })?;
-            let (send, recv) = oneshot::channel();
+        let id = liberum_core::get_file_id(&path).await.inspect_err(|e| {
+            error!(
+                err = e.to_string(),
+                path = format!("{path:?}"),
+                "Failed to hash file"
+            );
+        })?;
 
-            // The file has to be read to the memory to be published. There is no other way without
-            // a new behaviour kademlia could talk to, which would provide streams of data.
-            // (Maybe could be implemented on the existing request_response if it would be generalised more?)
-            let data = tokio::fs::read(&path).await.inspect_err(|e| {
-                error!(node = self.name, err = e.to_string(), "Failed to read file");
-            })?;
+        let (send, recv) = oneshot::channel();
 
-            let record = libp2p::kad::Record {
-                key: id.clone(),
-                value: data,
-                publisher: Some(PeerId::from(self.keypair.public())),
-                expires: None,
-            };
+        // The file has to be read to the memory to be published. There is no other way without
+        // a new behaviour kademlia could talk to, which would provide streams of data.
+        // (Maybe could be implemented on the existing request_response if it would be generalised more?)
+        let data = tokio::fs::read(&path).await.inspect_err(|e| {
+            error!(node = self.name, err = e.to_string(), "Failed to read file");
+        })?;
 
-            sender
-                .send(SwarmRunnerMessage::PublishFile {
-                    record,
-                    response_sender: send,
-                })
-                .await?;
+        let record = libp2p::kad::Record {
+            key: id.clone(),
+            value: data,
+            publisher: Some(PeerId::from(self.keypair.public())),
+            expires: None,
+        };
 
-            let id_str = liberum_core::file_id_to_str(id);
+        self.swarm_sender
+            .as_mut()
+            .unwrap()
+            .send(SwarmRunnerMessage::PublishFile {
+                record,
+                response_sender: send,
+            })
+            .await?;
 
-            return match recv.await {
-                Ok(Ok(_)) => Ok(id_str),
-                Ok(Err(e)) => Err(e.into()),
-                Err(e) => Err(e.into()),
-            };
+        let id_str = liberum_core::file_id_to_str(id);
+
+        match recv.await {
+            Ok(Ok(_)) => Ok(id_str),
+            Ok(Err(e)) => Err(e.into()),
+            Err(e) => Err(e.into()),
         }
-        Err(anyhow!("Swarm sender is None"))
     }
 }
 
@@ -292,11 +303,8 @@ impl Node {
     }
 
     async fn start_swarm(&mut self) -> Result<()> {
-        let node_ref = self
-            .self_actor_ref
-            .as_ref()
-            .ok_or(anyhow!("no actor ref for node set"))?;
-        self.swarm_sender = Some(swarm_runner::run_swarm(node_ref.clone()).await);
+        self.swarm_sender =
+            Some(swarm_runner::run_swarm(self.self_actor_ref.as_mut().unwrap().clone()).await);
         debug!(name = self.name, "Node starts");
 
         Ok(())
@@ -326,12 +334,28 @@ impl Message<GetSnapshot> for Node {
     }
 }
 
-#[derive(Default)]
 pub struct NodeBuilder {
     name: Option<String>,
     keypair: Option<Keypair>,
     bootstrap_nodes: Vec<BootstrapNode>,
     external_addresses: Vec<Multiaddr>,
+    manager_ref: Option<ActorRef<NodeManager>>,
+    self_actor_ref: Option<ActorRef<Node>>,
+    swarm_sender: Option<Sender<SwarmRunnerMessage>>,
+}
+
+impl Default for NodeBuilder {
+    fn default() -> Self {
+        Self {
+            name: None,
+            keypair: None,
+            bootstrap_nodes: vec![],
+            external_addresses: vec![],
+            manager_ref: None,
+            self_actor_ref: None,
+            swarm_sender: None,
+        }
+    }
 }
 
 impl NodeBuilder {
@@ -351,16 +375,31 @@ impl NodeBuilder {
         self
     }
 
+    pub fn manager_ref(mut self, manager_ref: ActorRef<NodeManager>) -> Self {
+        self.manager_ref = Some(manager_ref);
+        self
+    }
+
+    pub fn from_snapshot(mut self, snapshot: &NodeSnapshot) -> Self {
+        self.name = Some(snapshot.name.clone());
+        self.keypair = Some(snapshot.keypair.clone());
+        self.bootstrap_nodes = snapshot.bootstrap_nodes.clone();
+        self.external_addresses = snapshot.external_addresses.clone();
+        self
+    }
+
     pub fn build(self) -> Result<Node> {
         let keypair = self.keypair.ok_or(anyhow!("keypair is required"))?;
         let node = Node {
             name: self.name.ok_or(anyhow!("node name is required"))?,
             keypair: keypair,
             bootstrap_nodes: self.bootstrap_nodes,
-            manager_ref: None,
+            manager_ref: self
+                .manager_ref
+                .ok_or(anyhow!("node manager ref is required"))?,
             external_addresses: self.external_addresses,
-            self_actor_ref: None,
-            swarm_sender: None,
+            self_actor_ref: self.self_actor_ref,
+            swarm_sender: self.swarm_sender,
         };
         Ok(node)
     }
