@@ -284,17 +284,19 @@ mod tests {
             .await
             .unwrap();
         let node_store = kameo::spawn(node_store);
-        let new_node = Node::builder()
-            .name("test_node".to_string())
-            .keypair(Keypair::generate_ed25519())
-            .build()
-            .unwrap();
-        let node_snapshot = NodeSnapshot::from(&new_node);
+        let node_snapshot = NodeSnapshot {
+            name: "test_node".to_string(),
+            keypair: Keypair::generate_ed25519(),
+            bootstrap_nodes: vec![],
+            external_addresses: vec![],
+        };
+
         node_store
             .ask(StoreNode { node_snapshot })
             .send()
             .await
             .unwrap();
+
         let got_node_name = node_store
             .ask(LoadNode {
                 name: "test_node".to_string(),
@@ -303,6 +305,7 @@ mod tests {
             .await
             .unwrap()
             .name;
+
         assert_eq!(got_node_name, "test_node");
     }
 
