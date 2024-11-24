@@ -79,13 +79,24 @@ impl NodeManager {
             });
         }
 
-        let mut node = self
+        let node_snapshot = self
             .store
             .ask(LoadNode { name: name.clone() })
             .send()
             .await?;
 
-        node.manager_ref = self.actor_ref.clone();
+        let self_ref = self
+            .actor_ref
+            .clone()
+            .ok_or("expected node manager self ref to be present")
+            .map_err(|e| NodeManagerError::OtherError(anyhow!(e)))?;
+
+        let node = Node::builder()
+            .from_snapshot(&node_snapshot)
+            .manager_ref(self_ref)
+            .build()
+            .map_err(|e| NodeManagerError::OtherError(e))?;
+
         let actor_ref = kameo::spawn(node);
         self.nodes.insert(name.clone(), actor_ref.clone());
 
