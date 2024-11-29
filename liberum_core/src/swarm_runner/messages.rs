@@ -28,6 +28,10 @@ pub enum SwarmRunnerMessage {
         peer_addr: Multiaddr,
         response_sender: oneshot::Sender<Result<()>>,
     },
+    CancelDial {
+        peer_id: PeerId,
+        response_sender: oneshot::Sender<Result<()>>,
+    },
     /// Stops the swarm. The node will be informed that the swarm has stopped
     Kill,
     /// Get up to `k` providers for the given key. May return an empty set if
@@ -97,12 +101,7 @@ impl SwarmContext {
                 response_sender,
             } => {
                 if let hash_map::Entry::Vacant(entry) = self.behaviour.pending_dial.entry(peer_id) {
-                    self.swarm
-                        .behaviour_mut()
-                        .kademlia
-                        .add_address(&peer_id, peer_addr.clone());
-
-                    match self.swarm.dial(peer_addr) {
+                    match self.swarm.dial(peer_addr.clone()) {
                         Ok(()) => {
                             entry.insert(response_sender);
                         }
@@ -115,6 +114,19 @@ impl SwarmContext {
                 }
                 Ok(false)
             }
+
+            // Cancel a dial request, for example after a timeout
+            SwarmRunnerMessage::CancelDial {
+                peer_id,
+                response_sender,
+            } => {
+                if let Some(sender) = self.behaviour.pending_dial.remove(&peer_id) {
+                    let _ = sender.send(Err(anyhow!("Dialing cancelled")));
+                }
+                let _ = response_sender.send(Ok(()));
+                Ok(false)
+            }
+
             // Stops the swarm and informs the node
             SwarmRunnerMessage::Kill => Ok(true),
 
