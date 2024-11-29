@@ -1,4 +1,6 @@
 #!/bin/bash
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "$SCRIPT_DIR"/lib/asserts.sh
 
 N1="test_n1"
 N1_SEED=1
@@ -8,8 +10,9 @@ N2_SEED=2
 FILE_NAME="test-file.txt"
 FILE_CONTENT="Hello, World!"
 BLAKE3_HASH="7cLWjV2o1VsqwkAnyDWK3UemS2psCBHjj865Dovpu4p1"
+NONEXISTING_HASH="000000001VsqwkAnyDWK3UemS2psCBHjj865Dovpu4p1"
 DOWNLOAD_FAILED_MSG="Failed to download file"
-echo "Provide and download file test:"
+echo "Download Deleted file test:"
 
 # run daemon
 killall liberum_core &> /dev/null
@@ -34,13 +37,23 @@ echo "${FILE_CONTENT}" > "$FILE_NAME"
 
 cargo run -p liberum_cli -- -d provide-file $N1 "$FILE_NAME" &> /dev/null
 
-# download file
-RESULT1=$(cargo run -p liberum_cli -- -d download-file $N2 "${BLAKE3_HASH}" 2> /dev/null)
 
+init_asserts
+# download existing file
+RESULT1=$(cargo run -p liberum_cli -- -d download-file $N2 "${BLAKE3_HASH}" 2> /dev/null)
+should_contain "$RESULT1" "${FILE_CONTENT}"
 rm "$FILE_NAME"
 
-# download file
+# download deleted file
 RESULT2=$(cargo run -p liberum_cli -- -d download-file $N2 "${BLAKE3_HASH}" 2> /dev/null)
+should_contain "$RESULT2" "${DOWNLOAD_FAILED_MSG}"
+
+# download nonexisting file
+RESULT3=$(cargo run -p liberum_cli -- -d download-file $N2 "nonexisting_hash" 2> /dev/null)
+should_contain "$RESULT3" "${DOWNLOAD_FAILED_MSG}"
+
+ALIVE=$(cargo run -p liberum_cli -- -d list-nodes 2> /dev/null | grep -c "true")
+should_be_equal "$ALIVE" "2"
 
 # cleanup
 cargo run -p liberum_cli -- -d stop-node $N1 2> /dev/null
@@ -48,18 +61,4 @@ cargo run -p liberum_cli -- -d stop-node $N2 2> /dev/null
 killall liberum_core &> /dev/null
 rm "$FILE_NAME"
 
-# check result
-if [[ "${RESULT1}" =~ "${FILE_CONTENT}" ]]; then
-    if [[ "${RESULT2}" =~ "${DOWNLOAD_FAILED_MSG}" ]]; then
-        echo "Success"
-        exit 0
-    else
-        echo "Failure"
-        echo "\"${RESULT2}\" does not contain \"${DOWNLOAD_FAILED_MSG}\""
-        exit 1
-    fi
-else
-    echo "Failure"
-    echo "\"${RESULT}\" does not contain \"${FILE_CONTENT}\""
-    exit 1
-fi
+exit $(check_asserts)

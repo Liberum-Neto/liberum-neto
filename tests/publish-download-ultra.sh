@@ -1,4 +1,6 @@
 #!/bin/bash
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "$SCRIPT_DIR"/lib/asserts.sh
 
 N1="test_n1"
 N1_SEED=1
@@ -28,7 +30,19 @@ FILE4_NAME="$PWD/test-file4.txt"
 FILE4_CONTENT="44444 Hello, World! 44444"
 FILE4_HASH="EdfX8prcsmXYs7FxwSjp5hqCuB3kwinWvM6KwNdFFzNj"
 
-echo "Provide and download file test:"
+cleanup () {
+    cargo run -p liberum_cli -- -d stop-node $N1 2> /dev/null
+    cargo run -p liberum_cli -- -d stop-node $N2 2> /dev/null
+    cargo run -p liberum_cli -- -d stop-node $N3 2> /dev/null
+    cargo run -p liberum_cli -- -d stop-node $N4 2> /dev/null
+    killall liberum_core &> /dev/null
+    rm "$FILE1_NAME"
+    rm "$FILE2_NAME"
+    rm "$FILE3_NAME"
+    rm "$FILE4_NAME"
+}
+
+echo "Provide and download file ULTRA test:"
 
 # run daemon
 killall liberum_core &> /dev/null
@@ -90,111 +104,44 @@ cargo run -p liberum_cli -- -d dial $N4 $N3_ID $N3_ADDR 2> /dev/null
 cargo run -p liberum_cli -- -d publish-file $N4 "$FILE4_NAME" 2> /dev/null
 
 # download files
+
+init_asserts
+
 RESULT11=$(cargo run -p liberum_cli download-file $N1 "${FILE1_HASH}" 2> /dev/null)
+should_contain "$RESULT11" "${FILE1_CONTENT}"
 RESULT12=$(cargo run -p liberum_cli download-file $N1 "${FILE2_HASH}" 2> /dev/null)
+should_contain "$RESULT12" "${FILE2_CONTENT}"
 RESULT13=$(cargo run -p liberum_cli download-file $N1 "${FILE3_HASH}" 2> /dev/null)
+should_contain "$RESULT13" "${FILE3_CONTENT}"
 RESULT14=$(cargo run -p liberum_cli download-file $N1 "${FILE4_HASH}" 2> /dev/null)
+should_contain "$RESULT14" "${FILE4_CONTENT}"
 
 RESULT21=$(cargo run -p liberum_cli download-file $N2 "${FILE1_HASH}" 2> /dev/null)
+should_contain "$RESULT21" "${FILE1_CONTENT}"
 RESULT22=$(cargo run -p liberum_cli download-file $N2 "${FILE2_HASH}" 2> /dev/null)
+should_contain "$RESULT22" "${FILE2_CONTENT}"
 RESULT23=$(cargo run -p liberum_cli download-file $N2 "${FILE3_HASH}" 2> /dev/null)
+should_contain "$RESULT23" "${FILE3_CONTENT}"
 RESULT24=$(cargo run -p liberum_cli download-file $N2 "${FILE4_HASH}" 2> /dev/null)
+should_contain "$RESULT24" "${FILE4_CONTENT}"
 
 RESULT31=$(cargo run -p liberum_cli download-file $N3 "${FILE1_HASH}" 2> /dev/null)
+should_contain "$RESULT31" "${FILE1_CONTENT}"
 RESULT32=$(cargo run -p liberum_cli download-file $N3 "${FILE2_HASH}" 2> /dev/null)
+should_contain "$RESULT32" "${FILE2_CONTENT}"
 RESULT33=$(cargo run -p liberum_cli download-file $N3 "${FILE3_HASH}" 2> /dev/null)
+should_contain "$RESULT33" "${FILE3_CONTENT}"
 RESULT34=$(cargo run -p liberum_cli download-file $N3 "${FILE4_HASH}" 2> /dev/null)
+should_contain "$RESULT34" "${FILE4_CONTENT}"
 
 RESULT41=$(cargo run -p liberum_cli download-file $N4 "${FILE1_HASH}" 2> /dev/null)
+should_contain "$RESULT41" "${FILE1_CONTENT}"
 RESULT42=$(cargo run -p liberum_cli download-file $N4 "${FILE2_HASH}" 2> /dev/null)
+should_contain "$RESULT42" "${FILE2_CONTENT}"
 RESULT43=$(cargo run -p liberum_cli download-file $N4 "${FILE3_HASH}" 2> /dev/null)
+should_contain "$RESULT43" "${FILE3_CONTENT}"
 RESULT44=$(cargo run -p liberum_cli download-file $N4 "${FILE4_HASH}" 2> /dev/null)
+should_contain "$RESULT44" "${FILE4_CONTENT}"
 
-RESULT=1
-if [[ ! "${RESULT11}" =~ "${FILE1_CONTENT}" ]]; then
-    RESULT=0
-    echo "1-1: \"${RESULT11}\" does not contain \"${FILE1_CONTENT}\""
-fi
-if [[ ! "${RESULT12}" =~ "${FILE2_CONTENT}" ]]; then
-    RESULT=0
-    echo "1-2: \"${RESULT12}\" does not contain \"${FILE2_CONTENT}\""
-fi
-if [[ ! "${RESULT13}" =~ "${FILE3_CONTENT}" ]]; then
-    RESULT=0
-    echo "1-3: \"${RESULT13}\" does not contain \"${FILE3_CONTENT}\""
-fi
-if [[ ! "${RESULT14}" =~ "${FILE4_CONTENT}" ]]; then
-    RESULT=0
-    echo "1-4: \"${RESULT14}\" does not contain \"${FILE4_CONTENT}\""
-fi
 
-if [[ ! "${RESULT21}" =~ "${FILE1_CONTENT}" ]]; then
-    RESULT=0
-    echo "2-1: \"${RESULT21}\" does not contain \"${FILE1_CONTENT}\""
-fi
-if [[ ! "${RESULT22}" =~ "${FILE2_CONTENT}" ]]; then
-    RESULT=0
-    echo "2-2: \"${RESULT22}\" does not contain \"${FILE2_CONTENT}\""
-fi
-if [[ ! "${RESULT23}" =~ "${FILE3_CONTENT}" ]]; then
-    RESULT=0
-    echo "2-3: \"${RESULT23}\" does not contain \"${FILE3_CONTENT}\""
-fi
-if [[ ! "${RESULT24}" =~ "${FILE4_CONTENT}" ]]; then
-    RESULT=0
-    echo "2-4: \"${RESULT24}\" does not contain \"${FILE4_CONTENT}\""
-fi
-
-if [[ ! "${RESULT31}" =~ "${FILE1_CONTENT}" ]]; then
-    RESULT=0
-    echo "3-1: \"${RESULT31}\" does not contain \"${FILE1_CONTENT}\""
-fi
-if [[ ! "${RESULT32}" =~ "${FILE2_CONTENT}" ]]; then
-    RESULT=0
-    echo "3-2: \"${RESULT32}\" does not contain \"${FILE2_CONTENT}\""
-fi
-if [[ ! "${RESULT33}" =~ "${FILE3_CONTENT}" ]]; then
-    RESULT=0
-    echo "3-3: \"${RESULT33}\" does not contain \"${FILE3_CONTENT}\""
-fi
-if [[ ! "${RESULT34}" =~ "${FILE4_CONTENT}" ]]; then
-    RESULT=0
-    echo "3-4: \"${RESULT34}\" does not contain \"${FILE4_CONTENT}\""
-fi
-
-if [[ ! "${RESULT41}" =~ "${FILE1_CONTENT}" ]]; then
-    RESULT=0
-    echo "4-1: \"${RESULT41}\" does not contain \"${FILE1_CONTENT}\""
-fi
-if [[ ! "${RESULT42}" =~ "${FILE2_CONTENT}" ]]; then
-    RESULT=0
-    echo "4-2: \"${RESULT42}\" does not contain \"${FILE2_CONTENT}\""
-fi
-if [[ ! "${RESULT43}" =~ "${FILE3_CONTENT}" ]]; then
-    RESULT=0
-    echo "4-3: \"${RESULT43}\" does not contain \"${FILE3_CONTENT}\""
-fi
-if [[ ! "${RESULT44}" =~ "${FILE4_CONTENT}" ]]; then
-    RESULT=0
-    echo "4-4: \"${RESULT44}\" does not contain \"${FILE4_CONTENT}\""
-fi
-
-# cleanup
-cargo run -p liberum_cli -- -d stop-node $N1 2> /dev/null
-cargo run -p liberum_cli -- -d stop-node $N2 2> /dev/null
-cargo run -p liberum_cli -- -d stop-node $N3 2> /dev/null
-cargo run -p liberum_cli -- -d stop-node $N4 2> /dev/null
-killall liberum_core &> /dev/null
-rm "$FILE1_NAME"
-rm "$FILE2_NAME"
-rm "$FILE3_NAME"
-rm "$FILE4_NAME"
-
-# check result
-if [[ "${RESULT}" == "1" ]]; then
-    echo "Success"
-    exit 0
-else
-    echo "Failure"
-    exit 1
-fi
+exit $(check_asserts)

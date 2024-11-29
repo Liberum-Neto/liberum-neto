@@ -1,4 +1,6 @@
 #!/bin/bash
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "$SCRIPT_DIR"/lib/asserts.sh
 
 N1="test_n1"
 N1_SEED=1
@@ -9,7 +11,7 @@ FILE_NAME="$PWD/test-file.txt"
 FILE_CONTENT="Hello, World!"
 BLAKE3_HASH="7cLWjV2o1VsqwkAnyDWK3UemS2psCBHjj865Dovpu4p1"
 
-echo "Provide and download file test:"
+echo "Publish and download file test:"
 
 # run daemon
 killall liberum_core &> /dev/null
@@ -34,8 +36,12 @@ echo "${FILE_CONTENT}" > "$FILE_NAME"
 
 cargo run -p liberum_cli -- -d publish-file $N1 "$FILE_NAME" &> /dev/null
 
+
+
+init_asserts
 # download file
 RESULT=$(cargo run -p liberum_cli -- -d download-file $N2 "${BLAKE3_HASH}" 2> /dev/null)
+should_contain "$RESULT" "${FILE_CONTENT}"
 
 # cleanup
 cargo run -p liberum_cli -- -d stop-node $N1 2> /dev/null
@@ -43,12 +49,4 @@ cargo run -p liberum_cli -- -d stop-node $N2 2> /dev/null
 killall liberum_core &> /dev/null
 rm "$FILE_NAME"
 
-# check result
-if [[ "${RESULT}" =~ "${FILE_CONTENT}" ]]; then
-    echo "Success"
-    exit 0
-else
-    echo "Failure"
-    echo "\"${RESULT}\" does not contain \"${FILE_CONTENT}\""
-    exit 1
-fi
+exit $(check_asserts)
