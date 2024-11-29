@@ -1,12 +1,11 @@
 #!/bin/bash
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "$SCRIPT_DIR"/tests/lib/colors.sh
+
 ARGS=$*;
 TESTS_DIR="tests"
 TESTS=()
 RESULTS=()
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
 
 if [[ -z $ARGS ]]; then
   TO_RUN=($( ls $TESTS_DIR/*.sh ));

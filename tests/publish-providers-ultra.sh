@@ -1,4 +1,6 @@
 #!/bin/bash
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "$SCRIPT_DIR"/lib/asserts.sh
 
 # 12D3KooWMuKGmUs6rXeNNGYKKiF53DKpeEQKr2GPNab7oUQujKj1
 N1="test_n1"
@@ -32,7 +34,7 @@ FILE4_NAME="$PWD/test-file4.txt"
 FILE4_CONTENT="44444 Hello, World! 44444"
 FILE4_HASH="EdfX8prcsmXYs7FxwSjp5hqCuB3kwinWvM6KwNdFFzNj"
 
-echo "Provide and download file test:"
+echo "Publish and get providers ULTRA test:"
 
 # run daemon
 killall liberum_core &> /dev/null
@@ -104,95 +106,44 @@ if [[ $? -ne 0 ]]; then
 fi
 
 
+init_asserts
 # download files
 RESULT11=$(cargo run -p liberum_cli get-providers $N1 "${FILE1_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT11" ""
 RESULT12=$(cargo run -p liberum_cli get-providers $N1 "${FILE2_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT12" ""
 RESULT13=$(cargo run -p liberum_cli get-providers $N1 "${FILE3_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT13" ""
 RESULT14=$(cargo run -p liberum_cli get-providers $N1 "${FILE4_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT14" ""
 
 RESULT21=$(cargo run -p liberum_cli get-providers $N2 "${FILE1_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT21" ""
 RESULT22=$(cargo run -p liberum_cli get-providers $N2 "${FILE2_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT22" ""
 RESULT23=$(cargo run -p liberum_cli get-providers $N2 "${FILE3_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT23" ""
 RESULT24=$(cargo run -p liberum_cli get-providers $N2 "${FILE4_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT24" ""
 
 RESULT31=$(cargo run -p liberum_cli get-providers $N3 "${FILE1_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT31" ""
 RESULT32=$(cargo run -p liberum_cli get-providers $N3 "${FILE2_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT32" ""
 RESULT33=$(cargo run -p liberum_cli get-providers $N3 "${FILE3_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT33" ""
 RESULT34=$(cargo run -p liberum_cli get-providers $N3 "${FILE4_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT34" ""
 
 RESULT41=$(cargo run -p liberum_cli get-providers $N4 "${FILE1_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT41" ""
 RESULT42=$(cargo run -p liberum_cli get-providers $N4 "${FILE2_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT42" ""
 RESULT43=$(cargo run -p liberum_cli get-providers $N4 "${FILE3_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT43" ""
 RESULT44=$(cargo run -p liberum_cli get-providers $N4 "${FILE4_HASH}" 2> /dev/null)
+should_not_be_equal "$RESULT44" ""
 
-RESULT=1
-if [[ -z "${RESULT11}" ]]; then
-    RESULT=0
-    echo "1-1: \"${RESULT11}\" is empty"
-fi
-if [[ -z "${RESULT12}" ]]; then
-    RESULT=0
-    echo "1-2: \"${RESULT12}\" is empty"
-fi
-if [[ -z "${RESULT13}" ]]; then
-    RESULT=0
-    echo "1-3: \"${RESULT13}\" is empty"
-fi
-if [[ -z "${RESULT14}" ]]; then
-    RESULT=0
-    echo "1-4: \"${RESULT14}\" is empty"
-fi
-
-if [[ -z "${RESULT21}" ]]; then
-    RESULT=0
-    echo "2-1: \"${RESULT21}\" is empty"
-fi
-if [[ -z "${RESULT22}" ]]; then
-    RESULT=0
-    echo "2-2: \"${RESULT22}\" is empty"
-fi
-if [[ -z "${RESULT23}" ]]; then
-    RESULT=0
-    echo "2-3: \"${RESULT23}\" is empty"
-fi
-if [[ -z "${RESULT24}" ]]; then
-    RESULT=0
-    echo "2-4: \"${RESULT24}\" is empty"
-fi
-
-if [[ -z "${RESULT31}" ]]; then
-    RESULT=0
-    echo "3-1: \"${RESULT31}\" is empty"
-fi
-if [[ -z "${RESULT32}" ]]; then
-    RESULT=0
-    echo "3-2: \"${RESULT32}\" is empty"
-fi
-if [[ -z "${RESULT33}" ]]; then
-    RESULT=0
-    echo "3-3: \"${RESULT33}\" is empty"
-fi
-if [[ -z "${RESULT34}" ]]; then
-    RESULT=0
-    echo "3-4: \"${RESULT34}\" is empty"
-fi
-
-if [[ -z "${RESULT41}" ]]; then
-    RESULT=0
-    echo "4-1: \"${RESULT41}\" is empty"
-fi
-if [[ -z "${RESULT42}" ]]; then
-    RESULT=0
-    echo "4-2: \"${RESULT42}\" is empty"
-fi
-if [[ -z "${RESULT43}" ]]; then
-    RESULT=0
-    echo "4-3: \"${RESULT43}\" is empty"
-fi
-if [[ -z "${RESULT44}" ]]; then
-    RESULT=0
-    echo "4-4: \"${RESULT44}\" is empty"
-fi
 
 
 # cleanup
@@ -206,11 +157,4 @@ rm "$FILE2_NAME"
 rm "$FILE3_NAME"
 rm "$FILE4_NAME"
 
-# check result
-if [[ "${RESULT}" == "1" ]]; then
-    echo "Success"
-    exit 0
-else
-    echo "Failure"
-    exit 1
-fi
+exit $(check_asserts)

@@ -1,4 +1,6 @@
 #!/bin/bash
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "$SCRIPT_DIR"/lib/asserts.sh
 
 N1="test_n1"
 N1_SEED=7
@@ -9,7 +11,7 @@ FILE_NAME="$PWD/test-file.txt"
 FILE_CONTENT="Hello, World!"
 BLAKE3_HASH="7cLWjV2o1VsqwkAnyDWK3UemS2psCBHjj865Dovpu4p1"
 
-echo "Provide and download file test:"
+echo "Publish and get providers file test:"
 
 run daemon
 killall liberum_core &> /dev/null
@@ -38,7 +40,9 @@ cargo run -p liberum_cli -- -d publish-file $N1 "$FILE_NAME" &> /dev/null
 
 # download file
 PROVIDERS_RESULT=$(cargo run -p liberum_cli -- -d get-providers $N2 "${BLAKE3_HASH}" 2> /dev/null)
+should_not_be_equal "$PROVIDERS_RESULT" ""
 RESULT1=$(cargo run -p liberum_cli -- -d download-file $N2 "${BLAKE3_HASH}" 2> /dev/null)
+should_contain "$RESULT1" "${FILE_CONTENT}"
 
 # cleanup
 cargo run -p liberum_cli -- -d stop-node $N1 2> /dev/null
@@ -46,23 +50,4 @@ cargo run -p liberum_cli -- -d stop-node $N2 2> /dev/null
 # killall liberum_core &> /dev/null
 rm "$FILE_NAME"
 
-
-RESULT=1
-# check result
-if [[ ! "${RESULT1}" =~ "${FILE_CONTENT}" ]]; then
-    echo "\"${RESULT1}\" does not contain \"${FILE_CONTENT}\""
-    RESULT=0
-fi
-
-if [[ -z "${PROVIDERS_RESULT}" ]]; then
-    echo "\"${PROVIDERS_RESULT}\" is empty\""
-    RESULT=0
-fi
-
-if [[ "${RESULT}" == "1" ]]; then
-    echo "Success"
-    exit 0
-else
-    echo "Failure"
-    exit 1
-fi
+exit $(check_asserts)
