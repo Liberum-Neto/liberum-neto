@@ -17,6 +17,7 @@ use messages::*;
 use std::str::FromStr;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tracing::warn;
 use tracing::{debug, error, info};
 const KAD_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/kad/1.0.0");
 const FILE_SHARE_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/file-share/1.0.0");
@@ -216,6 +217,23 @@ impl SwarmContext {
                     .kademlia
                     .add_address(&peer_id, addr);
                 self.print_neighbours();
+            }
+            SwarmEvent::OutgoingConnectionError {
+                connection_id: _connection_id,
+                peer_id,
+                error,
+            } => {
+                if let Some(peer_id) = peer_id {
+                    warn!(
+                        node = self.node.name,
+                        peer_id = format!("{peer_id:?}"),
+                        error = format!("{error}"),
+                        "Outgoing connection error"
+                    );
+                    if let Some(sender) = self.behaviour.pending_dial.remove(&peer_id) {
+                        let _ = sender.send(Err(anyhow!(error)));
+                    }
+                }
             }
             SwarmEvent::ConnectionClosed { .. } => {}
             SwarmEvent::NewListenAddr {

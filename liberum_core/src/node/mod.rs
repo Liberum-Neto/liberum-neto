@@ -15,9 +15,14 @@ use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
+<<<<<<< HEAD
+=======
+use std::{fmt, fmt::format, path::Path};
+>>>>>>> 415332d (liberum_core: Handle failed dials)
 use swarm_runner::messages::SwarmRunnerMessage;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, oneshot};
+use tokio::time::Duration;
 use tracing::{debug, error};
 
 pub struct Node {
@@ -246,7 +251,22 @@ impl Node {
             })
             .await?;
 
-        recv.await?.map_err(|e| e.into())
+        let DIAL_TIMEOUT = Duration::from_secs(3);
+        return match tokio::time::timeout(DIAL_TIMEOUT, recv).await {
+            Ok(o) => o?.map_err(|e| e.into()),
+            Err(_) => {
+                let (s, r) = oneshot::channel();
+                sender
+                    .send(SwarmRunnerMessage::CancelDial {
+                        peer_id,
+                        response_sender: s,
+                    })
+                    .await
+                    .ok();
+                r.await.ok();
+                Err(anyhow!("Dial failed: Timeout ({DIAL_TIMEOUT:?}))"))
+            }
+        };
     }
 
     #[message]
