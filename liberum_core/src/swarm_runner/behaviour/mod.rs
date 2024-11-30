@@ -7,7 +7,7 @@ use file_share::*;
 use libp2p::{
     kad,
     request_response::{self, OutboundRequestId},
-    swarm::NetworkBehaviour,
+    swarm::{ConnectionId, NetworkBehaviour},
     PeerId,
 };
 use tokio::sync::oneshot;
@@ -33,7 +33,7 @@ pub struct BehaviourContext {
     pub pending_publish_file: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
     pub pending_get_providers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
     pub pending_download_file: HashMap<OutboundRequestId, oneshot::Sender<Result<Vec<u8>>>>,
-    pub pending_dial: HashMap<PeerId, oneshot::Sender<Result<()>>>,
+    pub pending_dial: HashMap<ConnectionId, oneshot::Sender<Result<()>>>,
 }
 
 impl BehaviourContext {

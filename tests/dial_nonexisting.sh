@@ -31,14 +31,14 @@ cargo run -p liberum_cli -- -d start-node $N2 2> /dev/null
 init_asserts
 
 # dial nonexisting addresses
-RESULT1=$(cargo run -p liberum_cli -- -d dial $N2 "${N1_ID}" $N1_BAD_ADDR 2> /dev/null)
-should_contain "$RESULT1" "Timeout"
-RESULT2=$(cargo run -p liberum_cli -- -d dial $N2 "${N1_ID}" $N1_BAD_PORT 2> /dev/null)
-should_contain "$RESULT2" "Timeout"
+RESULT1=$(cargo run -p liberum_cli dial $N2 "${N1_ID}" $N1_BAD_ADDR 2> /dev/null)
+should_be_equal "$RESULT1" "Error dialing peer"
+RESULT2=$(cargo run -p liberum_cli dial $N2 "${N1_ID}" $N1_BAD_PORT 2> /dev/null)
+should_be_equal "$RESULT2" "Error dialing peer"
 
 # dial real address
-RESULT3=$(cargo run -p liberum_cli -- -d dial $N2 "${N1_ID}" $N1_ADDR 2> /dev/null)
-should_contain "$RESULT3" "Ok(Dialed)"
+RESULT3=$(cargo run -p liberum_cli dial $N2 "${N1_ID}" $N1_ADDR 2> /dev/null)
+should_be_equal "$RESULT3" "Dialing successful"
 
 # nodes should not die
 ALIVE=$(cargo run -p liberum_cli -- -d list-nodes 2> /dev/null | grep -c "true")

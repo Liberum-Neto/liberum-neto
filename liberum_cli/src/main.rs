@@ -467,13 +467,26 @@ async fn handle_get_peer_id(
 async fn handle_dial(cmd: Dial, req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
     req.send(DaemonRequest::Dial {
         node_name: cmd.node_name,
-        peer_id: cmd.peer_id,
-        addr: cmd.addr,
+        peer_id: cmd.peer_id.clone(),
+        addr: cmd.addr.clone(),
     })
     .await
     .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
-    handle_response(&mut res).await
+    match res.recv().await {
+        Some(Ok(r)) => {
+            info!(response = format!("{r:?}"), "Daemon responds");
+            println!("Dialing successful");
+        }
+        Some(Err(e)) => {
+            error!(err = e.to_string(), "Error dialing peer");
+            println!("Error dialing peer");
+        }
+        None => {
+            error!("Failed to receive response");
+        }
+    };
+    Ok(())
 }
 
 async fn handle_publish_file(
