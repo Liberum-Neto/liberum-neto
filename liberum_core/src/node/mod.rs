@@ -377,6 +377,16 @@ impl NodeBuilder {
         self
     }
 
+    pub fn bootstrap_nodes(mut self, bootstrap_nodes: Vec<BootstrapNode>) -> Self {
+        self.bootstrap_nodes = bootstrap_nodes;
+        self
+    }
+
+    pub fn external_addresses(mut self, external_addresses: Vec<Multiaddr>) -> Self {
+        self.external_addresses = external_addresses;
+        self
+    }
+
     pub fn from_snapshot(mut self, snapshot: &NodeSnapshot) -> Self {
         self.name = Some(snapshot.name.clone());
         self.keypair = Some(snapshot.keypair.clone());
@@ -386,10 +396,9 @@ impl NodeBuilder {
     }
 
     pub fn build(self) -> Result<Node> {
-        let keypair = self.keypair.ok_or(anyhow!("keypair is required"))?;
         let node = Node {
             name: self.name.ok_or(anyhow!("node name is required"))?,
-            keypair: keypair,
+            keypair: self.keypair.ok_or(anyhow!("keypair is required"))?,
             bootstrap_nodes: self.bootstrap_nodes,
             manager_ref: self
                 .manager_ref
@@ -398,7 +407,19 @@ impl NodeBuilder {
             self_actor_ref: self.self_actor_ref,
             swarm_sender: self.swarm_sender,
         };
+
         Ok(node)
+    }
+
+    pub fn build_snapshot(self) -> Result<NodeSnapshot> {
+        let snapshot = NodeSnapshot {
+            name: self.name.ok_or(anyhow!("node name is required"))?,
+            keypair: self.keypair.ok_or(anyhow!("keypair is required"))?,
+            bootstrap_nodes: self.bootstrap_nodes,
+            external_addresses: self.external_addresses,
+        };
+
+        Ok(snapshot)
     }
 }
 
@@ -407,6 +428,12 @@ pub struct NodeSnapshot {
     pub keypair: Keypair,
     pub bootstrap_nodes: Vec<BootstrapNode>,
     pub external_addresses: Vec<Multiaddr>,
+}
+
+impl NodeSnapshot {
+    pub fn builder() -> NodeBuilder {
+        NodeBuilder::default()
+    }
 }
 
 impl From<&Node> for NodeSnapshot {
