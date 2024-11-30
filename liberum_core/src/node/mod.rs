@@ -295,9 +295,6 @@ impl Node {
 }
 
 impl Node {
-    const CONFIG_FILE_NAME: &'static str = "config.json";
-    const KEY_FILE_NAME: &'static str = "keypair";
-
     pub fn builder() -> NodeBuilder {
         NodeBuilder::default()
     }

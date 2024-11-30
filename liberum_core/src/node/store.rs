@@ -1,4 +1,3 @@
-use crate::node::Node;
 use anyhow::{anyhow, Context, Result};
 use kameo::{messages, Actor};
 use liberum_core::node_config::NodeConfig;
@@ -61,11 +60,11 @@ impl NodeStore {
             return Err(anyhow!("node_dir_path is not a directory").into());
         }
 
-        let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
+        let config_path = node_dir_path.join(Self::NODE_CONFIG_FILE_NAME);
         let config = NodeConfig::load(&config_path)
             .await
             .context("failed to load node config")?;
-        let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
+        let key_path = node_dir_path.join(Self::NODE_KEY_FILE_NAME);
         let key_bytes = tokio::fs::read(key_path)
             .await
             .inspect_err(|e| error!(err = e.to_string(), "could not read node keypair bytes"))
@@ -101,13 +100,13 @@ impl NodeStore {
         }
 
         let config: NodeConfig = (&node_snapshot).into();
-        let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
+        let config_path = node_dir_path.join(Self::NODE_CONFIG_FILE_NAME);
         let key_bytes = node_snapshot
             .keypair
             .to_protobuf_encoding()
             .inspect_err(|e| error!(err = e.to_string(), "could not convert keypair to bytes"))
             .context("could not convert keypair to bytes")?;
-        let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
+        let key_path = node_dir_path.join(Self::NODE_KEY_FILE_NAME);
 
         tokio::fs::write(key_path, key_bytes)
             .await
@@ -176,6 +175,8 @@ impl NodeStore {
 
 impl NodeStore {
     const DEFAULT_NODES_DIRECTORY_NAME: &'static str = ".liberum-neto";
+    const NODE_CONFIG_FILE_NAME: &'static str = "config.json";
+    const NODE_KEY_FILE_NAME: &'static str = "keypair";
 
     pub async fn new(store_dir_path: &Path) -> Result<Self> {
         NodeStore::ensure_store_dir_path(store_dir_path)
@@ -241,7 +242,7 @@ impl NodeStore {
     fn resolve_node_config_path(&self, name: &str) -> PathBuf {
         let node_dir_path = self.resolve_node_dir_path(name);
 
-        node_dir_path.join(Node::CONFIG_FILE_NAME)
+        node_dir_path.join(Self::NODE_CONFIG_FILE_NAME)
     }
 
     async fn ensure_store_dir_path(path: &Path) -> Result<()> {
