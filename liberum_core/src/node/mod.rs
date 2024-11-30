@@ -248,7 +248,6 @@ impl Node {
                 response_sender: send,
             })
             .await?;
-
         return match tokio::time::timeout(DIAL_TIMEOUT, recv).await {
             Ok(o) => o?.map_err(|e| e.into()),
             Err(_) => Err(anyhow!("Dial failed: Timeout ({DIAL_TIMEOUT:?}))")),
