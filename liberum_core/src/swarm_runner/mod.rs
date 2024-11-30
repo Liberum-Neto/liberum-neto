@@ -227,7 +227,7 @@ impl SwarmContext {
                 error,
             } => {
                 warn!(
-                    node = self.node.name,
+                    node = self.node_snapshot.name,
                     peer_id = format!("{peer_id:?}"),
                     error = format!("{error}"),
                     "Outgoing connection error"

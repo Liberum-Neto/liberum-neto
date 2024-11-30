@@ -15,10 +15,6 @@ use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
-<<<<<<< HEAD
-=======
-use std::{fmt, fmt::format, path::Path};
->>>>>>> 415332d (liberum_core: Handle failed dials)
 use swarm_runner::messages::SwarmRunnerMessage;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, oneshot};
@@ -36,6 +32,8 @@ pub struct Node {
     pub self_actor_ref: Option<ActorRef<Self>>,
     swarm_sender: Option<mpsc::Sender<SwarmRunnerMessage>>,
 }
+
+const DIAL_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl Actor for Node {
     type Mailbox = BoundedMailbox<Self>;
@@ -251,7 +249,6 @@ impl Node {
             })
             .await?;
 
-        let DIAL_TIMEOUT = Duration::from_secs(10);
         return match tokio::time::timeout(DIAL_TIMEOUT, recv).await {
             Ok(o) => o?.map_err(|e| e.into()),
             Err(_) => Err(anyhow!("Dial failed: Timeout ({DIAL_TIMEOUT:?}))")),
