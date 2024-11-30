@@ -22,16 +22,10 @@ pub struct NodeStore {
 
 #[derive(Error, Debug)]
 pub enum NodeStoreError {
-    #[error("failed to load node, name: {name}")]
-    LoadError { name: String },
-    #[error("failed to store node, name: {name}")]
-    StoreError { name: String },
-    #[error("node does not exist, name: {name}")]
-    NodeDoesNotExist { name: String },
-    #[error("other error, name: {name}, err: {err}")]
-    OtherError { name: String, err: anyhow::Error },
-    #[error("any error, err: {err}")]
-    Any {
+    #[error("node does not exist")]
+    NodeDoesNotExist,
+    #[error("other error: {err}")]
+    OtherError {
         #[from]
         err: anyhow::Error,
     },
@@ -55,7 +49,7 @@ impl NodeStore {
                 "node does not exist"
             );
 
-            return Err(NodeStoreError::NodeDoesNotExist { name });
+            return Err(NodeStoreError::NodeDoesNotExist);
         }
 
         if !node_dir_path.is_dir() {
@@ -64,14 +58,13 @@ impl NodeStore {
                 "node dir path not a directory"
             );
 
-            return Err(NodeStoreError::OtherError {
-                name,
-                err: anyhow!("node_dir_path is not a directory"),
-            });
+            return Err(anyhow!("node_dir_path is not a directory").into());
         }
 
         let config_path = node_dir_path.join(Node::CONFIG_FILE_NAME);
-        let config = NodeConfig::load(&config_path).await?;
+        let config = NodeConfig::load(&config_path)
+            .await
+            .context("failed to load node config")?;
         let key_path = node_dir_path.join(Node::KEY_FILE_NAME);
         let key_bytes = tokio::fs::read(key_path)
             .await
@@ -94,9 +87,7 @@ impl NodeStore {
         let node_dir_path = self
             .ensure_node_dir_path(&node_snapshot.name)
             .await
-            .map_err(|_| NodeStoreError::StoreError {
-                name: node_snapshot.name.clone(),
-            })?;
+            .context("could not ensure node dir path")?;
 
         debug!(
             name = node_snapshot.name,
@@ -106,9 +97,7 @@ impl NodeStore {
 
         if !node_dir_path.is_dir() {
             error!("node dir path is not a directory");
-            return Err(NodeStoreError::StoreError {
-                name: node_snapshot.name,
-            });
+            return Err(anyhow!("node dir path is not a directory").into());
         }
 
         let config: NodeConfig = (&node_snapshot).into();
@@ -133,7 +122,7 @@ impl NodeStore {
     #[message]
     pub async fn get_node_config(&self, name: String) -> Result<NodeConfig, NodeStoreError> {
         if !self.node_exists(&name) {
-            return Err(NodeStoreError::NodeDoesNotExist { name: name.clone() });
+            return Err(NodeStoreError::NodeDoesNotExist);
         }
 
         let node_conf_path = self.resolve_node_config_path(&name);
@@ -144,7 +133,7 @@ impl NodeStore {
 
         let config = NodeConfig::load(&node_conf_path)
             .await
-            .map_err(|err| NodeStoreError::OtherError { name, err })?;
+            .map_err(|err| NodeStoreError::OtherError { err })?;
 
         Ok(config)
     }
@@ -156,7 +145,7 @@ impl NodeStore {
         new_cfg: NodeConfig,
     ) -> Result<(), NodeStoreError> {
         if !self.node_exists(&name) {
-            return Err(NodeStoreError::NodeDoesNotExist { name: name.clone() });
+            return Err(NodeStoreError::NodeDoesNotExist);
         }
 
         let node_conf_path = self.resolve_node_config_path(&name);
@@ -164,7 +153,7 @@ impl NodeStore {
         new_cfg
             .save(&node_conf_path)
             .await
-            .map_err(|err| NodeStoreError::OtherError { name: name, err })?;
+            .map_err(|err| NodeStoreError::OtherError { err })?;
 
         Ok(())
     }
