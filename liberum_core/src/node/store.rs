@@ -71,12 +71,14 @@ impl NodeStore {
             .context("could not read node keypair bytes")?;
         let keypair = Keypair::from_protobuf_encoding(&key_bytes)
             .context("could not read keypair from protobuf encoded bytes")?;
-        let node_snapshot = NodeSnapshot {
-            name,
-            keypair,
-            bootstrap_nodes: config.bootstrap_nodes,
-            external_addresses: config.external_addresses,
-        };
+        let node_snapshot = NodeSnapshot::builder()
+            .name(name)
+            .keypair(keypair)
+            .bootstrap_nodes(config.bootstrap_nodes)
+            .external_addresses(config.external_addresses)
+            .build_snapshot()
+            // This can't fail
+            .unwrap();
 
         Ok(node_snapshot)
     }
@@ -274,12 +276,11 @@ mod tests {
             .await
             .unwrap();
         let node_store = kameo::spawn(node_store);
-        let node_snapshot = NodeSnapshot {
-            name: "test_node".to_string(),
-            keypair: Keypair::generate_ed25519(),
-            bootstrap_nodes: vec![],
-            external_addresses: vec![],
-        };
+        let node_snapshot = NodeSnapshot::builder()
+            .name("test_node".to_string())
+            .keypair(Keypair::generate_ed25519())
+            .build_snapshot()
+            .unwrap();
 
         node_store
             .ask(StoreNode { node_snapshot })

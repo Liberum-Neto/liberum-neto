@@ -156,12 +156,12 @@ async fn handle_new_node(
         Some(seed) => liberum_core::node_keypair_from_seed(&seed),
         None => Keypair::generate_ed25519(),
     };
-    let node_snapshot = NodeSnapshot {
-        name,
-        keypair,
-        bootstrap_nodes: vec![],
-        external_addresses: vec![],
-    };
+    let node_snapshot = NodeSnapshot::builder()
+        .name(name)
+        .keypair(keypair)
+        .build_snapshot()
+        // This can't fail
+        .unwrap();
 
     let resp = context
         .node_manager
