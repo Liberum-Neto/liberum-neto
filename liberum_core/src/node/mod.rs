@@ -251,21 +251,10 @@ impl Node {
             })
             .await?;
 
-        let DIAL_TIMEOUT = Duration::from_secs(3);
+        let DIAL_TIMEOUT = Duration::from_secs(10);
         return match tokio::time::timeout(DIAL_TIMEOUT, recv).await {
             Ok(o) => o?.map_err(|e| e.into()),
-            Err(_) => {
-                let (s, r) = oneshot::channel();
-                sender
-                    .send(SwarmRunnerMessage::CancelDial {
-                        peer_id,
-                        response_sender: s,
-                    })
-                    .await
-                    .ok();
-                r.await.ok();
-                Err(anyhow!("Dial failed: Timeout ({DIAL_TIMEOUT:?}))"))
-            }
+            Err(_) => Err(anyhow!("Dial failed: Timeout ({DIAL_TIMEOUT:?}))")),
         };
     }
 

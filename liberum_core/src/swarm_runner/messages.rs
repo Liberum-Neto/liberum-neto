@@ -2,6 +2,7 @@ use super::behaviour::file_share;
 use super::SwarmContext;
 use anyhow::anyhow;
 use anyhow::Result;
+use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::PeerId;
 use libp2p::{kad, Multiaddr};
 use std::collections::hash_map;
@@ -26,10 +27,6 @@ pub enum SwarmRunnerMessage {
     Dial {
         peer_id: PeerId,
         peer_addr: Multiaddr,
-        response_sender: oneshot::Sender<Result<()>>,
-    },
-    CancelDial {
-        peer_id: PeerId,
         response_sender: oneshot::Sender<Result<()>>,
     },
     /// Stops the swarm. The node will be informed that the swarm has stopped
@@ -100,8 +97,12 @@ impl SwarmContext {
                 peer_addr,
                 response_sender,
             } => {
-                if let hash_map::Entry::Vacant(entry) = self.behaviour.pending_dial.entry(peer_id) {
-                    match self.swarm.dial(peer_addr.clone()) {
+                let dial_opts = DialOpts::from(peer_addr.clone());
+
+                if let hash_map::Entry::Vacant(entry) =
+                    self.behaviour.pending_dial.entry(dial_opts.connection_id())
+                {
+                    match self.swarm.dial(dial_opts) {
                         Ok(()) => {
                             entry.insert(response_sender);
                         }
@@ -112,18 +113,6 @@ impl SwarmContext {
                 } else {
                     debug!("Already dialing {peer_id}")
                 }
-                Ok(false)
-            }
-
-            // Cancel a dial request, for example after a timeout
-            SwarmRunnerMessage::CancelDial {
-                peer_id,
-                response_sender,
-            } => {
-                if let Some(sender) = self.behaviour.pending_dial.remove(&peer_id) {
-                    let _ = sender.send(Err(anyhow!("Dialing cancelled")));
-                }
-                let _ = response_sender.send(Ok(()));
                 Ok(false)
             }
 

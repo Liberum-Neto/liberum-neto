@@ -197,11 +197,14 @@ impl SwarmContext {
                 self.handle_behaviour_event(e).await;
             }
             SwarmEvent::ConnectionEstablished {
-                peer_id, endpoint, ..
+                peer_id,
+                endpoint,
+                connection_id,
+                ..
             } => {
                 // If it was caused by using the Dial message, then send the response
                 if endpoint.is_dialer() {
-                    if let Some(sender) = self.behaviour.pending_dial.remove(&peer_id) {
+                    if let Some(sender) = self.behaviour.pending_dial.remove(&connection_id) {
                         let _ = sender.send(Ok(()));
                     }
                 }
@@ -219,20 +222,18 @@ impl SwarmContext {
                 self.print_neighbours();
             }
             SwarmEvent::OutgoingConnectionError {
-                connection_id: _connection_id,
+                connection_id,
                 peer_id,
                 error,
             } => {
-                if let Some(peer_id) = peer_id {
-                    warn!(
-                        node = self.node.name,
-                        peer_id = format!("{peer_id:?}"),
-                        error = format!("{error}"),
-                        "Outgoing connection error"
-                    );
-                    if let Some(sender) = self.behaviour.pending_dial.remove(&peer_id) {
-                        let _ = sender.send(Err(anyhow!(error)));
-                    }
+                warn!(
+                    node = self.node.name,
+                    peer_id = format!("{peer_id:?}"),
+                    error = format!("{error}"),
+                    "Outgoing connection error"
+                );
+                if let Some(sender) = self.behaviour.pending_dial.remove(&connection_id) {
+                    let _ = sender.send(Err(anyhow!(error)));
                 }
             }
             SwarmEvent::ConnectionClosed { .. } => {}
