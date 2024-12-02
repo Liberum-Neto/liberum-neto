@@ -22,6 +22,7 @@ for test_file in ${TO_RUN[@]}; do
   TESTS+=("$test_file")
   printf "${YELLOW}Running test: ${test_file}${NC}\n"
   bash -x "$test_file"
+  set +x
   RESULTS+=("$?")
 done
 
