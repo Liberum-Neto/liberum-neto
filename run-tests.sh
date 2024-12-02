@@ -13,6 +13,13 @@ else
   TO_RUN=($ARGS);
 fi
 
+# build dependencies
+cargo build -p liberum_core
+cargo build -p liberum_cli
+CLI_BIN="./target/debug/liberum_cli"
+CORE_BIN="./target/debug/liberum_core"
+
+
 for test_file in ${TO_RUN[@]}; do
   if [[ ! -f $test_file ]]; then
     printf "${RED}Test file not found: ${test_file}${NC}\n"
@@ -21,9 +28,10 @@ for test_file in ${TO_RUN[@]}; do
 
   TESTS+=("$test_file")
   printf "${YELLOW}Running test: ${test_file}${NC}\n"
-  bash -x "$test_file"
-  set +x
+  set -x
+  $test_file $CORE_BIN $CLI_BIN
   RESULTS+=("$?")
+  set +x
 done
 
 printf "\n\n================================================================================\n"
