@@ -2,6 +2,9 @@
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "$SCRIPT_DIR"/lib/asserts.sh
 
+CORE_BIN=$1
+CLI_BIN=$2
+
 # 12D3KooWMuKGmUs6rXeNNGYKKiF53DKpeEQKr2GPNab7oUQujKj1
 N1="test_n1"
 N1_SEED=1
@@ -38,38 +41,38 @@ echo "Publish and get providers ULTRA test:"
 
 # run daemon
 killall liberum_core &> /dev/null
-nohup cargo run -p liberum_core -- --daemon  &> /dev/null &
-sleep 0.5; # the socket file is created asynchronously and may not be ready yet :))))
+$CORE_BIN --daemon  &> /dev/null &
+sleep 0.1; # the socket file is created asynchronously and may not be ready yet :))))
 
 # create ndoes
-cargo run -p liberum_cli -- -d new-node $N1 --id-seed $N1_SEED 2> /dev/null
-cargo run -p liberum_cli -- -d new-node $N2 --id-seed $N2_SEED 2> /dev/null
-cargo run -p liberum_cli -- -d new-node $N3 --id-seed $N3_SEED 2> /dev/null
-cargo run -p liberum_cli -- -d new-node $N4 --id-seed $N4_SEED 2> /dev/null
+$CLI_BIN -d new-node $N1 --id-seed $N1_SEED 2> /dev/null
+$CLI_BIN -d new-node $N2 --id-seed $N2_SEED 2> /dev/null
+$CLI_BIN -d new-node $N3 --id-seed $N3_SEED 2> /dev/null
+$CLI_BIN -d new-node $N4 --id-seed $N4_SEED 2> /dev/null
 
 #config addresses
-cargo run -p liberum_cli -- -d config-node $N1 add-external-addr $N1_ADDR 2> /dev/null
-cargo run -p liberum_cli -- -d config-node $N2 add-external-addr $N2_ADDR 2> /dev/null
-cargo run -p liberum_cli -- -d config-node $N3 add-external-addr $N3_ADDR 2> /dev/null
-cargo run -p liberum_cli -- -d config-node $N4 add-external-addr $N4_ADDR 2> /dev/null
+$CLI_BIN -d config-node $N1 add-external-addr $N1_ADDR 2> /dev/null
+$CLI_BIN -d config-node $N2 add-external-addr $N2_ADDR 2> /dev/null
+$CLI_BIN -d config-node $N3 add-external-addr $N3_ADDR 2> /dev/null
+$CLI_BIN -d config-node $N4 add-external-addr $N4_ADDR 2> /dev/null
 
 # get peer ids
-cargo run -p liberum_cli -- -d start-node $N1 2> /dev/null
-N1_ID=$(cargo run -p liberum_cli -- -d get-peer-id $N1 2> /dev/null)
-cargo run -p liberum_cli -- -d start-node $N2 2> /dev/null
-N2_ID=$(cargo run -p liberum_cli -- -d get-peer-id $N2 2> /dev/null)
-cargo run -p liberum_cli -- -d start-node $N3 2> /dev/null
-N3_ID=$(cargo run -p liberum_cli -- -d get-peer-id $N3 2> /dev/null)
-cargo run -p liberum_cli -- -d start-node $N4 2> /dev/null
-N4_ID=$(cargo run -p liberum_cli -- -d get-peer-id $N4 2> /dev/null)
-cargo run -p liberum_cli -- -d stop-node $N1 2> /dev/null
-cargo run -p liberum_cli -- -d stop-node $N2 2> /dev/null
-cargo run -p liberum_cli -- -d stop-node $N3 2> /dev/null
-cargo run -p liberum_cli -- -d stop-node $N4 2> /dev/null
+$CLI_BIN -d start-node $N1 2> /dev/null
+N1_ID=$($CLI_BIN -d get-peer-id $N1 2> /dev/null)
+$CLI_BIN -d start-node $N2 2> /dev/null
+N2_ID=$($CLI_BIN -d get-peer-id $N2 2> /dev/null)
+$CLI_BIN -d start-node $N3 2> /dev/null
+N3_ID=$($CLI_BIN -d get-peer-id $N3 2> /dev/null)
+$CLI_BIN -d start-node $N4 2> /dev/null
+N4_ID=$($CLI_BIN -d get-peer-id $N4 2> /dev/null)
+$CLI_BIN -d stop-node $N1 2> /dev/null
+$CLI_BIN -d stop-node $N2 2> /dev/null
+$CLI_BIN -d stop-node $N3 2> /dev/null
+$CLI_BIN -d stop-node $N4 2> /dev/null
 
 # setup bootstraps
-cargo run -p liberum_cli -- -d config-node $N2 add-bootstrap-node "${N1_ID}" $N1_ADDR 2> /dev/null
-cargo run -p liberum_cli -- -d config-node $N3 add-bootstrap-node "${N1_ID}" $N1_ADDR 2> /dev/null
+$CLI_BIN -d config-node $N2 add-bootstrap-node "${N1_ID}" $N1_ADDR 2> /dev/null
+$CLI_BIN -d config-node $N3 add-bootstrap-node "${N1_ID}" $N1_ADDR 2> /dev/null
 
 
 # create files
@@ -79,27 +82,28 @@ echo "${FILE3_CONTENT}" > "$FILE3_NAME"
 echo "${FILE4_CONTENT}" > "$FILE4_NAME"
 
 # start nodes
-cargo run -p liberum_cli -- -d start-node $N1 2> /dev/null
-cargo run -p liberum_cli -- -d start-node $N2 2> /dev/null
-cargo run -p liberum_cli -- -d start-node $N3 2> /dev/null
-cargo run -p liberum_cli -- -d start-node $N4 2> /dev/null
+$CLI_BIN -d start-node $N1 2> /dev/null
+$CLI_BIN -d start-node $N2 2> /dev/null
+$CLI_BIN -d start-node $N3 2> /dev/null
+$CLI_BIN -d start-node $N4 2> /dev/null
 
-
+# wait for nodes to connect
+sleep 0.1
 
 # publish files
-cargo run -p liberum_cli -- -d publish-file $N1 "$FILE1_NAME" 2> /dev/null
-cargo run -p liberum_cli -- -d publish-file $N2 "$FILE2_NAME" 2> /dev/null
-cargo run -p liberum_cli -- -d publish-file $N3 "$FILE3_NAME" 2> /dev/null
+$CLI_BIN -d publish-file $N1 "$FILE1_NAME" 2> /dev/null
+$CLI_BIN -d publish-file $N2 "$FILE2_NAME" 2> /dev/null
+$CLI_BIN -d publish-file $N3 "$FILE3_NAME" 2> /dev/null
 
-# cargo run -p liberum_cli -- -d publish-file $N4 "$FILE4_NAME" 2> /dev/null
+# $CLI_BIN -d publish-file $N4 "$FILE4_NAME" 2> /dev/null
 # if [[ $? -ne 1 ]]; then
 #     echo "Should fail, 4 does not know any other nodes"
 #     exit 1
 # fi
 
 # dial
-cargo run -p liberum_cli -- -d dial $N4 $N3_ID $N3_ADDR 2> /dev/null
-cargo run -p liberum_cli -- -d publish-file $N4 "$FILE4_NAME" 2> /dev/null
+$CLI_BIN -d dial $N4 $N3_ID $N3_ADDR 2> /dev/null
+$CLI_BIN -d publish-file $N4 "$FILE4_NAME" 2> /dev/null
 if [[ $? -ne 0 ]]; then
     echo "Should succeed, 4 knows other nodes"
     exit 1
@@ -147,10 +151,10 @@ should_not_be_equal "$RESULT44" ""
 
 
 # cleanup
-cargo run -p liberum_cli -- -d stop-node $N1 2> /dev/null
-cargo run -p liberum_cli -- -d stop-node $N2 2> /dev/null
-cargo run -p liberum_cli -- -d stop-node $N3 2> /dev/null
-cargo run -p liberum_cli -- -d stop-node $N4 2> /dev/null
+$CLI_BIN -d stop-node $N1 2> /dev/null
+$CLI_BIN -d stop-node $N2 2> /dev/null
+$CLI_BIN -d stop-node $N3 2> /dev/null
+$CLI_BIN -d stop-node $N4 2> /dev/null
 killall liberum_core &> /dev/null
 rm "$FILE1_NAME"
 rm "$FILE2_NAME"

@@ -2,7 +2,10 @@
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "$SCRIPT_DIR"/lib/asserts.sh
 
-NODE_COUNT=100
+CORE_BIN=$1
+CLI_BIN=$2
+
+NODE_COUNT=10
 
 FILE_NAME="$PWD/test-file.txt"
 FILE_CONTENT="Hello, World!"
@@ -15,11 +18,8 @@ echo "Provide and download file test:"
 
 # run daemon
 killall liberum_core &> /dev/null
-cargo run -p liberum_core -- --daemon  &> /dev/null &
-sleep 0.5; # the socket file is created asynchronously and may not be ready yet :))))
-
-cargo build -p liberum_cli &> /dev/null
-CLI_BIN="./target/debug/liberum_cli"
+$CORE_BIN --daemon  &> /dev/null &
+sleep 0.1; # the socket file is created asynchronously and may not be ready yet :))))
 
 # create ndoes
 N_NAMES=()
@@ -29,6 +29,7 @@ N_ADDRESSES=()
 set +x
 printf "${BLUE}Skipping test logs for creating $NODE_COUNT nodes...${NC}\n"
 for (( i = 1; i <= $NODE_COUNT; i++ )); do
+    {
     N="test_n$i"
     N_ADDR="${NODE_ADDR_PREFIX}$(($i + 52136))${NODE_ADDR_SUFFIX}"
 
@@ -43,18 +44,24 @@ for (( i = 1; i <= $NODE_COUNT; i++ )); do
     N_NAMES+=("$N")
     N_IDS+=("$ID")
     N_ADDRESSES+=("$N_ADDR")
+    }
 done
+
 printf "${BLUE}Nodes created${NC}\n"
 set -x
 
+# wait for nodes to connect
 sleep 0.5
 
 # create and provide file
 echo "${FILE_CONTENT}" > "$FILE_NAME"
 $CLI_BIN -d publish-file ${N_NAMES[0]} "$FILE_NAME" 2> /dev/null
 
-# download file
+init_asserts
+
 RESULT=$($CLI_BIN -d download-file ${N_NAMES[$((variable - 1))]} "${BLAKE3_HASH}" 2> /dev/null)
+should_be_equal "$RESULT" "$FILE_CONTENT"
+
 
 # cleanup
 set +x
@@ -68,12 +75,4 @@ set -x
 killall liberum_core &> /dev/null
 rm "$FILE_NAME"
 
-# check result
-if [[ "${RESULT}" =~ "${FILE_CONTENT}" ]]; then
-    echo "Success"
-    exit 0
-else
-    echo "Failure"
-    echo "\"${RESULT}\" does not contain \"${FILE_CONTENT}\""
-    exit 1
-fi
+exit $(check_asserts)

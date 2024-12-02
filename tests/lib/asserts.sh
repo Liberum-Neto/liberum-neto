@@ -1,4 +1,3 @@
-set +x
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "$SCRIPT_DIR"/colors.sh
 
@@ -11,31 +10,25 @@ check_asserts() {
 }
 
 should_be_equal () {
-    set +x
     input="$1"
     expected="$2"
     printf "${BLUE}ASSERT${NC} \"$input\" ${BLUE}should be equal to${NC} \"$expected\""
     if [ ! "$input" == "$expected" ]; then
         printf "${RED}FAILED${NC}\n"
-        set -x
         ASSERT_FAILED=1
     fi
     printf "${GREEN}OK${NC}\n"
-    set -x
 }
 
 should_not_be_equal () {
-    set +x
     input="$1"
     expected="$2"
     printf "${BLUE}ASSERT${NC} \"$input\" ${BLUE}should not be equal to${NC} \"$expected\""
     if [ ! "$input" != "$expected" ]; then
         printf "${RED}FAILED${NC}\n"
-        set -x
         ASSERT_FAILED=1
     fi
     printf "${GREEN}OK${NC}\n"
-    set -x
 }
 
 should_contain () {
@@ -93,5 +86,3 @@ should_not_be_in () {
     printf "${GREEN}OK${NC}\n"
     set -x
 }
-
-set -x
