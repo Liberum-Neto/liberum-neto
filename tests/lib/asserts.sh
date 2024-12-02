@@ -1,3 +1,4 @@
+set +x
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "$SCRIPT_DIR"/colors.sh
 
@@ -92,3 +93,5 @@ should_not_be_in () {
     printf "${GREEN}OK${NC}\n"
     set -x
 }
+
+set -x
