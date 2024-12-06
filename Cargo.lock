@@ -2581,7 +2581,24 @@ dependencies = [
  "dyn-clone",
  "futures",
  "itertools",
- "kameo_macros",
+ "kameo_macros 0.12.2",
+ "once_cell",
+ "serde",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
+name = "kameo"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62237a96597618543798a36ec723eb75c5ac301e2690243fd600be1f5eb3dd2d"
+dependencies = [
+ "dyn-clone",
+ "futures",
+ "itertools",
+ "kameo_macros 0.13.0",
  "once_cell",
  "serde",
  "tokio",
@@ -2594,6 +2611,19 @@ name = "kameo_macros"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddec4971b183c643aa91d83f85effe39c7d27b2914a54b06a979cd87b13a79b7"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.89",
+ "uuid",
+]
+
+[[package]]
+name = "kameo_macros"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5bbbd8e8d7b02bc67eae0dcbdb82c0a71cc7cc61734059ee3e7439a1ee1e0e85"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -2657,7 +2687,7 @@ dependencies = [
  "daemonize",
  "futures",
  "homedir",
- "kameo",
+ "kameo 0.12.2",
  "libp2p",
  "nix 0.29.0",
  "postcard",
@@ -2680,7 +2710,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui_file",
- "kameo",
+ "kameo 0.13.0",
  "liberum_core",
  "tokio",
  "tracing",
@@ -2696,7 +2726,7 @@ dependencies = [
  "bs58",
  "futures",
  "futures-util",
- "kameo",
+ "kameo 0.12.2",
  "pretty_assertions",
  "rand 0.8.5",
  "rusqlite",
