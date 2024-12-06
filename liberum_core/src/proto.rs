@@ -1,5 +1,8 @@
-mod modules;
-use serde::{Serialize, Deserialize};
+pub mod modules;
+pub mod parser;
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
+
 pub(crate) type Hash = [u8; 32];
 pub(crate) type UserId = Hash;
 pub(crate) type GroupId = Hash;
@@ -9,8 +12,8 @@ pub(crate) type UUID = [u8; 16];
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct GroupAccessToken {
-   pub binding: GroupAccessBinding,
-   pub group_owner_signature: Signature,
+    pub binding: GroupAccessBinding,
+    pub group_owner_signature: Signature,
 }
 
 pub(crate) type UnixTimestamp = u64;
@@ -21,11 +24,13 @@ pub(crate) struct GroupAccessBinding {
     pub recipient: UserId,
     pub revocation_date: UnixTimestamp,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct UserGroup {
     definition: GroupDefinition,
     signature: Signature,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct GroupDefinition {
     id: GroupId,
@@ -33,13 +38,18 @@ pub(crate) struct GroupDefinition {
     parent: GroupId,
     parent_membership_proof: GroupAccessToken,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) enum Signature {
     Ed25519(SignatureEd25519),
 }
-#[derive(Serialize, Deserialize, Debug)]
-type SignatureBytes = [u8; 64];
 
+#[serde_as]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub(crate) struct SignatureBytes {
+    #[serde_as(as = "serde_with::Bytes")]
+    bytes: [u8; 64],
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct SignatureEd25519 {
@@ -47,23 +57,34 @@ pub(crate) struct SignatureEd25519 {
     pub signature: SignatureBytes,
 }
 
-const TYPED_OBJECT_ID: UUID = [3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+#[allow(unused)]
+const TYPED_OBJECT_ID: UUID = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct TypedObject {
     pub uuid: UUID,
     pub data: Vec<u8>,
 }
-const SIGNED_OBJECT_ID: UUID = [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+
+#[allow(unused)]
+const SIGNED_OBJECT_ID: UUID = [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct SignedObject {
     pub object: TypedObject,
     pub signature: Signature,
 }
 
-const GROUP_OBJECT_ID: UUID = [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+#[allow(unused)]
+const GROUP_OBJECT_ID: UUID = [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct GroupObject {
-    group: GroupId,
-    object: SignedObject,
+    pub group: GroupId,
+    pub object: SignedObject,
 }
 
+#[allow(unused)]
+const PLAIN_FILE_OBJECT_ID: UUID = [4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct PlainFileObject {
+    pub name: String,
+    pub content: Content,
+}
