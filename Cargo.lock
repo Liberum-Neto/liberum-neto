@@ -2688,13 +2688,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "liberum_proto"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "liberum_vault"
 version = "0.1.0"
 dependencies = [
