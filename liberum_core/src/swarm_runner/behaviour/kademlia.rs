@@ -1,18 +1,17 @@
-use std::{collections::HashSet, path::PathBuf};
-
+use crate::swarm_runner::{object_sender, SwarmContext};
+use anyhow::Result;
+use liberum_core::proto;
 use libp2p::{
     kad::{
-        store::RecordStore, AddProviderError, AddProviderOk, Event, GetProvidersError,
-        GetProvidersOk, InboundRequest, ProgressStep, ProviderRecord, PutRecordError, PutRecordOk,
-        QueryId, QueryResult, QueryStats, Record, RecordKey,
+        store::RecordStore, AddProviderError, AddProviderOk, Event, GetClosestPeersResult,
+        GetProvidersError, GetProvidersOk, InboundRequest, ProgressStep, ProviderRecord, QueryId,
+        QueryResult, QueryStats, RecordKey,
     },
-    swarm::ConnectionId,
     PeerId,
 };
-use tokio::sync::oneshot;
-use tracing::{debug, error, info, warn};
+use std::{collections::HashSet, path::PathBuf};
 
-use crate::swarm_runner::{file_share, SwarmContext};
+use tracing::{debug, error, info, warn};
 
 ///! The module contains methods to handle Kademlia events
 ///! Kademlia is used mostly for finding other nodes in the network.
@@ -21,7 +20,7 @@ use crate::swarm_runner::{file_share, SwarmContext};
 /// On QueryProgressed events generally it is required to remember the query ID
 /// from when the query was started to react to the event
 impl SwarmContext {
-    pub(crate) fn handle_kademlia(&mut self, event: Event) {
+    pub(crate) async fn handle_kademlia(&mut self, event: Event) {
         match event {
             Event::OutboundQueryProgressed {
                 id,
@@ -29,7 +28,8 @@ impl SwarmContext {
                 stats,
                 step,
             } => {
-                self.handle_outbound_query_progressed(id, result, stats, step);
+                self.handle_outbound_query_progressed(id, result, stats, step)
+                    .await;
             }
             Event::InboundRequest { request } => {
                 self.handle_inound_request(request);
@@ -40,7 +40,7 @@ impl SwarmContext {
 }
 
 impl SwarmContext {
-    fn handle_outbound_query_progressed(
+    async fn handle_outbound_query_progressed(
         &mut self,
         id: QueryId,
         result: QueryResult,
@@ -50,15 +50,17 @@ impl SwarmContext {
         match result {
             // Triggered when a node starts providing an ID
             QueryResult::StartProviding(result) => {
-                self.handle_outbound_query_progressed_start_providing(id, result, stats, step);
+                self.handle_outbound_query_progressed_start_providing(id, result, stats, step)
+                    .await;
             }
-            // Triggered when a record is put in the DHT
-            QueryResult::PutRecord(result) => {
-                self.handle_outbound_query_progressed_put_record(id, result, stats, step);
+            QueryResult::GetClosestPeers(result) => {
+                self.handle_outbound_query_progressed_get_closest_peers(id, result, stats, step)
+                    .await;
             }
             // Triggered when more providers found or there is no more providers to find
             QueryResult::GetProviders(result) => {
-                self.handle_outbound_query_progressed_get_providers(id, result, stats, step);
+                self.handle_outbound_query_progressed_get_providers(id, result, stats, step)
+                    .await;
             }
             _ => {}
         }
@@ -66,12 +68,6 @@ impl SwarmContext {
 
     fn handle_inound_request(&mut self, request: InboundRequest) {
         match request {
-            // Triggered when the node is asked to put a record into it's store as a part of the DHT
-            InboundRequest::PutRecord {
-                source,
-                connection,
-                record,
-            } => self.handle_inbound_request_put_record(source, connection, record),
             // Triggered when the node is asked to add a provider for a record
             InboundRequest::AddProvider { record } => {
                 self.handle_inbound_request_add_provider(record)
@@ -88,7 +84,7 @@ impl SwarmContext {
 
 /// Methods to handle Kademlia OutboundQueryProgressed events
 impl SwarmContext {
-    fn handle_outbound_query_progressed_start_providing(
+    async fn handle_outbound_query_progressed_start_providing(
         &mut self,
         id: QueryId,
         result: Result<AddProviderOk, AddProviderError>,
@@ -115,14 +111,8 @@ impl SwarmContext {
             );
         }
 
-        debug!(
-            node = self.node_snapshot.name,
-            "Start Providing, all known providers:",
-        );
-
         // Respond to the caller of StartProviding
-        let sender = self.behaviour.pending_start_providing.remove(&id);
-        if let Some(sender) = sender {
+        if let Some(sender) = self.behaviour.pending_start_providing.remove(&id) {
             match result {
                 Ok(_) => {
                     let _ = sender.send(Ok(()));
@@ -131,55 +121,56 @@ impl SwarmContext {
                     let _ = sender.send(Err(e.into()));
                 }
             }
-        } else {
-            debug!(qid = format!("{id}"), "Channel closed");
+        } else if let Some((object_id, response_channel)) =
+            self.behaviour.pending_object_start_providing.remove(&id)
+        {
+            let _ = self.swarm.behaviour_mut().object_sender.send_response(
+                response_channel,
+                object_sender::ObjectResponse {
+                    object: proto::ResultObject { result: Ok(()) }.into(),
+                    object_id,
+                },
+            );
         }
     }
 
-    fn handle_outbound_query_progressed_put_record(
+    async fn handle_outbound_query_progressed_get_closest_peers(
         &mut self,
         id: QueryId,
-        result: Result<PutRecordOk, PutRecordError>,
+        result: GetClosestPeersResult,
         _stats: QueryStats,
         _step: ProgressStep,
     ) {
-        if result.is_ok() {
-            info!(
-                node = self.node_snapshot.name,
-                id = format!("{id:?}"),
-                "Put file"
-            );
-        } else {
-            error!(
-                node = self.node_snapshot.name,
-                id = format!("{id:?}"),
-                err = format!("{result:?}"),
-                "Failed to put file"
-            );
-            self.print_neighbours();
-        }
-
-        let sender = self.behaviour.pending_publish_file.remove(&id);
-
-        if let Some(sender) = sender {
-            match result {
-                Ok(_) => {
-                    let _ = sender.send(Ok(()));
-                }
-                Err(e) => {
-                    let _ = sender.send(Err(e.into()));
+        match result {
+            Ok(closest_peers) => {
+                if let Some(sender) = self.behaviour.pending_get_closest_peers.remove(&id) {
+                    let peers: Vec<PeerId> = closest_peers
+                        .peers
+                        .iter()
+                        .map(|p| p.peer_id.clone())
+                        .collect();
+                    let _ = sender.send(HashSet::from_iter(peers)).inspect_err(|e| {
+                        debug!(
+                            node = self.node_snapshot.name,
+                            qid = format!("{id}"),
+                            err = format!("{e:?}"),
+                            "Channel closed"
+                        )
+                    });
                 }
             }
-        } else {
-            debug!(
-                node = self.node_snapshot.name,
-                qid = format!("{id}"),
-                "Put Record Progressed: Channel closed"
-            );
+            Err(e) => {
+                error!(
+                    node = self.node_snapshot.name,
+                    id = format!("{id:?}"),
+                    err = format!("{e:?}"),
+                    "Failed to get closest peers"
+                );
+            }
         }
     }
 
-    fn handle_outbound_query_progressed_get_providers(
+    async fn handle_outbound_query_progressed_get_providers(
         &mut self,
         id: QueryId,
         result: Result<GetProvidersOk, GetProvidersError>,
@@ -236,42 +227,6 @@ impl SwarmContext {
 
 /// Methods to handle Kademlia InboundRequest events
 impl SwarmContext {
-    fn handle_inbound_request_put_record(
-        &mut self,
-        _source: PeerId,
-        _connection: ConnectionId,
-        record: Option<Record>,
-    ) {
-        debug!(node = self.node_snapshot.name, "Kad Received PutRecord");
-        if record.is_none() {
-            warn!("Received PutRecord with no record");
-            return;
-        }
-        let record = record.unwrap();
-        let id = record.key.clone();
-
-        // save record to filem should use a VAULT here instead
-        self.put_record_into_vault(record);
-
-        // Start a query to be providing the file ID in kademlia
-        let qid = self.swarm.behaviour_mut().kademlia.start_providing(id);
-        if let Err(e) = qid {
-            debug!(
-                node = self.node_snapshot.name,
-                err = format!("{e:?}"),
-                "Failed to start providing file"
-            );
-            return;
-        }
-        let qid = qid.unwrap();
-
-        // We can't await for a response here because it would block the event loop
-        let (response_sender, _) = oneshot::channel();
-        self.behaviour
-            .pending_start_providing
-            .insert(qid, response_sender);
-    }
-
     fn handle_inbound_request_add_provider(&mut self, record: Option<ProviderRecord>) {
         match record {
             Some(record) => {
@@ -309,24 +264,48 @@ impl SwarmContext {
 
 /// Utility related to the Kademlia behaviour
 impl SwarmContext {
-    pub(crate) fn put_record_into_vault(&mut self, record: Record) {
+    pub fn get_object_from_vault(&mut self, key: proto::Hash) -> Option<proto::TypedObjectOld> {
+        let path = PathBuf::from("FILE_SHARE_SAVED_FILES")
+            .join(self.node_snapshot.name.clone())
+            .join(liberum_core::file_id_hash_to_str(&key.bytes.clone()));
+
+        match std::fs::read(&path) {
+            Ok(data) => {
+                debug!("Getting object from vault: {:?}", data);
+                let obj = bincode::deserialize::<proto::TypedObjectOld>(&data).unwrap();
+                Some(obj)
+            }
+            Err(e) => {
+                error!(
+                    node = self.node_snapshot.name,
+                    key = bs58::encode(&key.bytes).into_string(),
+                    err = format!("{e:?}"),
+                    path = format!("{path:?}"),
+                    "Failed to read file"
+                );
+                None
+            }
+        }
+    }
+    pub async fn put_object_into_vault(&mut self, obj: proto::TypedObjectOld) -> Result<()> {
         let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.node_snapshot.name.clone());
         std::fs::create_dir_all(&dir).ok();
-        let path = dir.join(liberum_core::file_id_to_str(record.key.clone()));
-        if let Err(e) = std::fs::write(path.clone(), record.value) {
+        let data = bincode::serialize(&obj).unwrap();
+        debug!("Putting file to vault: {:?}", data);
+        let id: proto::Hash = blake3::hash(&data).as_bytes().try_into().unwrap();
+
+        let path = dir.join(liberum_core::file_id_hash_to_str(&id.bytes));
+
+        if let Err(e) = std::fs::write(path.clone(), data) {
             error!(
                 node = self.node_snapshot.name,
                 path = format!("{path:?}"),
                 err = format!("{e:?}"),
                 "Failed to save file"
             );
-            return;
+            return Err(e.into());
         }
-        // also should be handled by a VAULT
-        self.behaviour.providing.insert(
-            record.key.clone(),
-            file_share::SharedResource::File { path: path.clone() },
-        );
+        Ok(())
     }
 
     pub(crate) fn print_providers(&mut self, key: &RecordKey) {

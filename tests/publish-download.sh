@@ -12,7 +12,7 @@ N2="test_n2"
 N2_SEED=2
 FILE_NAME="$PWD/test-file.txt"
 FILE_CONTENT="Hello, World!"
-BLAKE3_HASH="7cLWjV2o1VsqwkAnyDWK3UemS2psCBHjj865Dovpu4p1"
+BLAKE3_HASH="5ckG8X2Ad8avzL57V5tvHbHpgxVtgAU5swwsxeMaNszx"
 
 echo "Publish and download file test:"
 
