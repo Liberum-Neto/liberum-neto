@@ -1,5 +1,3 @@
-pub mod modules;
-pub mod parser;
 use anyhow::{anyhow, Error, Result};
 use libp2p;
 use serde::{Deserialize, Serialize};
@@ -141,7 +139,7 @@ impl TypedObject {
     }
 }
 
-const QUERY_OBJECT_ID: UUID = [7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const QUERY_OBJECT_ID: UUID = [16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Query {
     pub(crate) query_object: TypedObject,

@@ -1,5 +1,6 @@
 pub mod behaviour;
 pub mod messages;
+mod parser;
 
 use crate::node::NodeSnapshot;
 use crate::node::{self, Node};

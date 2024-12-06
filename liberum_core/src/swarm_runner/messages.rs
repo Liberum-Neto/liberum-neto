@@ -136,44 +136,7 @@ impl SwarmContext {
                 object,
                 response_sender,
             } => {
-                let id_hash: proto::Hash = blake3::hash(object.data.as_slice())
-                    .as_bytes()
-                    .to_vec()
-                    .try_into()?;
-                let id = kad::RecordKey::new(&id_hash.bytes);
-                if self.behaviour.lock().await.providing.contains_key(&id_hash) {
-                    info!(
-                        node = self.node_snapshot.name,
-                        id = format!("{id:?}"),
-                        "File is already being provided"
-                    );
-                    return Ok(false);
-                }
-
-                // Add the file to the providing list TODO VAULT
-                self.behaviour
-                    .lock()
-                    .await
-                    .providing
-                    .insert(id_hash, object.clone());
-
-                if let Ok(s) = self
-                    .node_actor
-                    .ask(PutObjectIntoVault { obj: object })
-                    .await
-                {
-                    // Strat a query to be providing the file ID in kademlia
-                    let qid = self
-                        .swarm
-                        .behaviour_mut()
-                        .kademlia
-                        .start_providing(id.clone())?;
-                    self.behaviour
-                        .lock()
-                        .await
-                        .pending_start_providing
-                        .insert(qid, response_sender);
-                }
+                self.provide_object(object, response_sender).await;
                 Ok(false)
             }
 
@@ -304,6 +267,48 @@ impl SwarmContext {
                     .insert(request_id, response_sender);
                 Ok(false)
             }
+        }
+    }
+
+    pub(crate) async fn provide_object(
+        &mut self,
+        object: TypedObject,
+        response_sender: oneshot::Sender<Result<()>>,
+    ) {
+        let id_hash: proto::Hash = blake3::hash(object.data.as_slice())
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .unwrap();
+        let id = kad::RecordKey::new(&id_hash.bytes);
+        if self.behaviour.lock().await.providing.contains_key(&id_hash) {
+            info!(
+                node = self.node_snapshot.name,
+                id = format!("{id:?}"),
+                "File is already being provided"
+            );
+        }
+
+        // Add the file to the providing list TODO VAULT
+        self.behaviour
+            .lock()
+            .await
+            .providing
+            .insert(id_hash, object.clone());
+
+        if let Ok(_) = self.put_object_into_vault(object).await {
+            // Strat a query to be providing the file ID in kademlia
+            let qid = self
+                .swarm
+                .behaviour_mut()
+                .kademlia
+                .start_providing(id.clone())
+                .unwrap();
+            self.behaviour
+                .lock()
+                .await
+                .pending_start_providing
+                .insert(qid, response_sender);
         }
     }
 }

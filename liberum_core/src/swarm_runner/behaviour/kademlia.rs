@@ -286,6 +286,46 @@ impl SwarmContext {
 
 /// Utility related to the Kademlia behaviour
 impl SwarmContext {
+    pub fn get_object_from_vault(&mut self, key: proto::Hash) -> Option<TypedObject> {
+        let path = PathBuf::from("FILE_SHARE_SAVED_FILES")
+            .join(self.node_snapshot.name.clone())
+            .join(liberum_core::file_id_hash_to_str(&key.bytes.clone()));
+        match std::fs::read(&path) {
+            Ok(data) => Some(bincode::deserialize(&data).unwrap()),
+            Err(e) => {
+                error!(
+                    node = self.node_snapshot.name,
+                    key = bs58::encode(&key.bytes).into_string(),
+                    err = format!("{e:?}"),
+                    path = format!("{path:?}"),
+                    "Failed to read file"
+                );
+                None
+            }
+        }
+    }
+    pub async fn put_object_into_vault(&mut self, obj: TypedObject) -> Result<()> {
+        let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.node_snapshot.name.clone());
+        std::fs::create_dir_all(&dir).ok();
+        let id: proto::Hash = blake3::hash(obj.data.as_slice())
+            .as_bytes()
+            .try_into()
+            .unwrap();
+
+        let path = dir.join(liberum_core::file_id_hash_to_str(&id.bytes));
+
+        if let Err(e) = std::fs::write(path.clone(), obj.data) {
+            error!(
+                node = self.node_snapshot.name,
+                path = format!("{path:?}"),
+                err = format!("{e:?}"),
+                "Failed to save file"
+            );
+            return Err(e.into());
+        }
+        Ok(())
+    }
+
     pub(crate) fn print_providers(&mut self, key: &RecordKey) {
         debug!(
             node = self.node_snapshot.name,

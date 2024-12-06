@@ -1,4 +1,4 @@
-use crate::proto::{self, parser, TypedObject};
+use crate::proto::{self, TypedObject};
 use anyhow::{anyhow, Result};
 use libp2p::{
     kad,
@@ -89,12 +89,7 @@ impl SwarmContext {
             .await
             .pending_object_requests
             .insert(id, (request_id, response_channel));
-        parser::parse_typed(
-            request.object.clone(),
-            self.node_actor.clone(),
-            self.behaviour.clone(),
-        )
-        .await;
+        self.parse_typed(request.object.clone()).await;
     }
 
     /// Handle a file share response by sending the data to the pending download
