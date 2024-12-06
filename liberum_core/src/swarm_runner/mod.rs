@@ -20,7 +20,9 @@ use tokio::sync::mpsc;
 use tracing::warn;
 use tracing::{debug, error, info};
 const KAD_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/kad/1.0.0");
-const FILE_SHARE_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/file-share/1.0.0");
+//const FILE_SHARE_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/file-share/1.0.0");
+const OBJECT_SENDER_PROTO_NAME: StreamProtocol =
+    StreamProtocol::new("/liberum/object-sender/1.0.0");
 const DEFAULT_MULTIADDR_STR_IP6: &str = "/ip6/::/udp/0/quic-v1";
 const DEFAULT_MULTIADDR_STR_IP4: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 
@@ -33,8 +35,9 @@ const DEFAULT_MULTIADDR_STR_IP4: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 
 /// The context of the swarm which holds all the data required to handle swarm events
 /// and messages to the swarm runner
-struct SwarmContext {
+pub struct SwarmContext {
     swarm: Swarm<LiberumNetoBehavior>,
+    _node_actor: ActorRef<Node>,
     node_snapshot: NodeSnapshot,
     behaviour: BehaviourContext,
 }
@@ -83,17 +86,16 @@ async fn run_swarm_main(
 
             conf.set_record_filtering(kad::StoreInserts::FilterBoth);
             let kademlia = kad::Behaviour::with_config(id, store, conf);
-
-            let req_resp = request_response::cbor::Behaviour::<
-                file_share::FileRequest,
-                file_share::FileResponse,
+            let obj_sender = request_response::cbor::Behaviour::<
+                object_sender::ObjectSendRequest,
+                object_sender::ObjectResponse,
             >::new(
-                [(FILE_SHARE_PROTO_NAME, ProtocolSupport::Full)],
-                request_response::Config::default(),
+                [(OBJECT_SENDER_PROTO_NAME, ProtocolSupport::Full)],
+                request_response::Config::default().with_request_timeout(Duration::from_secs(10)),
             );
             LiberumNetoBehavior {
                 kademlia,
-                file_share: req_resp,
+                object_sender: obj_sender,
             }
         })
         .inspect_err(|e| error!(err = e.to_string(), "could not create behavior"))?
@@ -101,6 +103,7 @@ async fn run_swarm_main(
         .build();
 
     let mut context = SwarmContext {
+        _node_actor: node_ref,
         node_snapshot,
         swarm: swarm,
         behaviour: BehaviourContext::new(),

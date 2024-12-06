@@ -7,6 +7,9 @@ use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::{BootstrapNode, NodeConfig};
+use liberum_core::parser;
+use liberum_core::proto;
+use liberum_core::proto::ResultObject;
 use liberum_core::str_to_file_id;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
@@ -51,12 +54,13 @@ impl Actor for Node {
     }
 
     async fn on_stop(
-        self,
+        &mut self,
         _: kameo::actor::WeakActorRef<Self>,
         _: kameo::error::ActorStopReason,
     ) -> std::result::Result<(), kameo::error::BoxError> {
         Ok(self
             .swarm_sender
+            .as_ref()
             .unwrap()
             .send(SwarmRunnerMessage::Kill)
             .await?)
@@ -91,7 +95,10 @@ impl Node {
     #[message]
     pub async fn get_providers(&mut self, id: String) -> Result<HashSet<PeerId>> {
         debug!(node = self.name, "Node got GetProviders");
-        let id = str_to_file_id(&id)?;
+        let id_key = str_to_file_id(&id)?;
+        let id = proto::Hash {
+            bytes: id_key.to_vec().as_slice().try_into()?,
+        };
         let (send, recv) = oneshot::channel();
 
         self.swarm_sender
@@ -116,33 +123,44 @@ impl Node {
     /// the ID of the file using which it can be found.
     #[message]
     pub async fn provide_file(&mut self, path: PathBuf) -> Result<String> {
-        let id = liberum_core::get_file_id(&path)
-            .await
-            .map_err(|e| error!(err = e.to_string(), "Failed to hash file"))
-            .unwrap();
-
         let (resp_send, resp_recv) = oneshot::channel();
+
+        let object: proto::TypedObjectOld = proto::PlainFileObject {
+            name: path.file_name().unwrap().to_str().unwrap().to_string(),
+            content: tokio::fs::read(path).await?,
+        }
+        .into();
+
+        let obj_id: proto::Hash = proto::Hash {
+            bytes: blake3::hash(bincode::serialize(&object).unwrap().as_slice())
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .unwrap(),
+        };
 
         self.swarm_sender
             .as_mut()
             .unwrap()
-            .send(SwarmRunnerMessage::ProvideFile {
-                id: id.clone(),
-                path,
+            .send(SwarmRunnerMessage::ProvideObject {
+                object,
+                id: obj_id.clone(),
                 response_sender: resp_send,
             })
             .await?;
 
         resp_recv.await??;
-        let id_str = liberum_core::file_id_to_str(id);
+        let id_str = liberum_core::file_id_hash_to_str(&obj_id.bytes);
 
         Ok(id_str)
     }
 
     #[message]
-    pub async fn download_file(&mut self, id: String) -> Result<Vec<u8>> {
+    pub async fn download_file(&mut self, id: String) -> Result<proto::PlainFileObject> {
         let id_str = id;
-        let id = liberum_core::str_to_file_id(&id_str)?;
+        let id_hash = proto::Hash {
+            bytes: bs58::decode(&id_str).into_vec()?.as_slice().try_into()?,
+        };
 
         // first get the providers of the file
         // Maybe getting the providers could be reused from GetProviders node message handler??
@@ -152,7 +170,7 @@ impl Node {
             .as_mut()
             .unwrap()
             .send(SwarmRunnerMessage::GetProviders {
-                id: id.clone(),
+                id: id_hash.clone(),
                 response_sender: resp_send,
             })
             .await?;
@@ -161,7 +179,11 @@ impl Node {
         if providers.is_empty() {
             return Err(anyhow!("Could not find provider for file {id_str}.").into());
         }
-
+        debug!(
+            node = self.name,
+            id = id_str,
+            "Found providers: {providers:?}"
+        );
         for peer in &providers {
             debug!(
                 node = self.name,
@@ -171,15 +193,15 @@ impl Node {
             );
 
             let (file_sender, file_receiver) = oneshot::channel();
-            let result =
-                self.swarm_sender
-                    .as_mut()
-                    .unwrap()
-                    .send(SwarmRunnerMessage::DownloadFile {
-                        id: id.clone(),
-                        peer: peer.clone(),
-                        response_sender: file_sender,
-                    });
+            let result = self
+                .swarm_sender
+                .as_mut()
+                .unwrap()
+                .send(SwarmRunnerMessage::GetObject {
+                    id: id_hash.clone(),
+                    peer: peer.clone(),
+                    response_sender: file_sender,
+                });
 
             if let Err(e) = result.await {
                 error!(
@@ -211,16 +233,26 @@ impl Node {
                 }
 
                 Ok(Ok(file)) => {
-                    let hash = bs58::encode(blake3::hash(&file).as_bytes()).into_string();
-                    if hash != id_str {
+                    let hash: proto::Hash =
+                        blake3::hash(bincode::serialize(&file).unwrap().to_vec().as_slice())
+                            .as_bytes()
+                            .try_into()
+                            .unwrap();
+                    if hash != id_hash {
                         debug!(
                             node = self.name,
                             from = format!("{peer}"),
-                            "Received wrong file! {hash} != {id_str}"
+                            data = format!("{:?}", &file.data),
+                            "Received wrong file! {} != {id_str}",
+                            bs58::encode(hash.bytes).into_string()
                         );
                         continue;
                     }
-                    return Ok(file);
+                    match parser::parse_typed(file).await {
+                        Ok(parser::ObjectEnum::PlainFile(file)) => return Ok(file),
+                        Err(e) => return Err(e),
+                        Ok(_) => return Err(anyhow!("Received object was not a file!")),
+                    }
                 }
             }
         }
@@ -256,16 +288,6 @@ impl Node {
 
     #[message]
     pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
-        let id = liberum_core::get_file_id(&path).await.inspect_err(|e| {
-            error!(
-                err = e.to_string(),
-                path = format!("{path:?}"),
-                "Failed to hash file"
-            );
-        })?;
-
-        let (send, recv) = oneshot::channel();
-
         // The file has to be read to the memory to be published. There is no other way without
         // a new behaviour kademlia could talk to, which would provide streams of data.
         // (Maybe could be implemented on the existing request_response if it would be generalised more?)
@@ -273,29 +295,129 @@ impl Node {
             error!(node = self.name, err = e.to_string(), "Failed to read file");
         })?;
 
-        let record = libp2p::kad::Record {
-            key: id.clone(),
-            value: data,
-            publisher: Some(PeerId::from(self.keypair.public())),
-            expires: None,
-        };
+        let object: proto::TypedObjectOld = proto::PlainFileObject {
+            name: path.file_name().unwrap().to_str().unwrap().to_string(),
+            content: data,
+        }
+        .into();
 
+        let id: proto::Hash =
+            blake3::hash(bincode::serialize(&object).unwrap().to_vec().as_slice())
+                .as_bytes()
+                .to_vec()
+                .as_slice()
+                .try_into()
+                .unwrap();
+        let id_str = bs58::encode(&id.bytes).into_string();
+
+        let (resp_send, resp_recv) = oneshot::channel();
         self.swarm_sender
             .as_mut()
             .unwrap()
-            .send(SwarmRunnerMessage::PublishFile {
-                record,
-                response_sender: send,
+            .send(SwarmRunnerMessage::GetClosestPeers {
+                id: id.clone(),
+                response_sender: resp_send,
             })
             .await?;
 
-        let id_str = liberum_core::file_id_to_str(id);
-
-        match recv.await {
-            Ok(Ok(_)) => Ok(id_str),
-            Ok(Err(e)) => Err(e.into()),
-            Err(e) => Err(e.into()),
+        let peers = resp_recv.await?;
+        if peers.is_empty() {
+            return Err(anyhow!("Could not find provider for file {id_str}.").into());
         }
+
+        for peer in &peers {
+            let (send, recv) = oneshot::channel();
+            self.swarm_sender
+                .as_mut()
+                .unwrap()
+                .send(SwarmRunnerMessage::SendObject {
+                    object: object.clone(),
+                    id: id.clone(),
+                    peer: peer.clone(),
+                    response_sender: send,
+                })
+                .await?;
+
+            if let Ok(obj) = recv.await {
+                match obj {
+                    Ok(ResultObject { result: Ok(_) }) => return Ok(id_str),
+                    _ => {
+                        continue;
+                    }
+                }
+            }
+        }
+        Err(anyhow!("Could not publish file"))
+    }
+
+    #[message]
+    pub async fn provide_object(&mut self, object: proto::TypedObjectOld) -> Result<String> {
+        let id: proto::Hash = blake3::hash(&bincode::serialize(&object).unwrap())
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .unwrap();
+        let id_str = liberum_core::file_id_hash_to_str(&id.bytes);
+
+        let (resp_send, _) = oneshot::channel();
+        let _ = self
+            .swarm_sender
+            .as_mut()
+            .unwrap()
+            .send(SwarmRunnerMessage::ProvideObject {
+                object,
+                id,
+                response_sender: resp_send,
+            })
+            .await?;
+
+        Ok(id_str)
+    }
+
+    #[message]
+    pub(crate) fn get_object_from_vault(
+        &mut self,
+        key: proto::Hash,
+    ) -> Option<proto::TypedObjectOld> {
+        let path = PathBuf::from("FILE_SHARE_SAVED_FILES")
+            .join(self.name.clone())
+            .join(liberum_core::file_id_hash_to_str(&key.bytes.clone()));
+        match std::fs::read(&path) {
+            Ok(data) => Some(bincode::deserialize(&data).unwrap()),
+            Err(e) => {
+                error!(
+                    node = self.name,
+                    key = bs58::encode(&key.bytes).into_string(),
+                    err = format!("{e:?}"),
+                    path = format!("{path:?}"),
+                    "Failed to read file"
+                );
+                None
+            }
+        }
+    }
+
+    #[message]
+    pub async fn put_object_into_vault(&mut self, obj: proto::TypedObjectOld) -> Result<()> {
+        let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.name.clone());
+        std::fs::create_dir_all(&dir).ok();
+        let id: proto::Hash = blake3::hash(obj.data.as_slice())
+            .as_bytes()
+            .try_into()
+            .unwrap();
+
+        let path = dir.join(liberum_core::file_id_hash_to_str(&id.bytes));
+
+        if let Err(e) = std::fs::write(path.clone(), obj.data) {
+            error!(
+                node = self.name,
+                path = format!("{path:?}"),
+                err = format!("{e:?}"),
+                "Failed to save file"
+            );
+            return Err(e.into());
+        }
+        Ok(())
     }
 }
 

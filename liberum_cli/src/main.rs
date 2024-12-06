@@ -390,7 +390,7 @@ async fn handle_download_file(
 
     match response {
         Ok(DaemonResponse::FileDownloaded { data }) => {
-            println!("{}", String::from_utf8(data)?);
+            println!("{}", String::from_utf8(data.content)?);
         }
         Err(DaemonError::Other(_)) => {
             println!("Failed to download file");

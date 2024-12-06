@@ -1,9 +1,12 @@
 pub mod codec;
 pub mod node_config;
+pub mod parser;
+pub mod proto;
 pub mod types;
 
 use libp2p::futures::StreamExt;
 use node_config::NodeConfig;
+use proto::*;
 use std::path::{Path, PathBuf};
 use tokio::fs::File;
 use tokio::net::UnixStream;
@@ -81,7 +84,7 @@ pub enum DaemonResponse {
     NodeList(Vec<NodeInfo>),
     FileProvided { id: String },
     Providers { ids: Vec<String> },
-    FileDownloaded { data: Vec<u8> }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
+    FileDownloaded { data: PlainFileObject }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
     PeerId { id: String },
     Dialed,
     FilePublished { id: String },
@@ -162,7 +165,18 @@ pub fn str_to_file_id(s: &str) -> Result<libp2p::kad::RecordKey> {
     let k = libp2p::kad::RecordKey::from(k);
     Ok(k)
 }
+
+pub fn str_to_file_id_bytes(s: &str) -> Result<[u8; 32]> {
+    let k: Vec<u8> = bs58::decode::<Vec<u8>>(s.into()).into_vec()?;
+    let mut id = [0u8; 32];
+    id.copy_from_slice(&k);
+    Ok(id)
+}
+
 pub fn file_id_to_str(id: libp2p::kad::RecordKey) -> String {
+    bs58::encode(id.to_vec()).into_string()
+}
+pub fn file_id_hash_to_str(id: &[u8; 32]) -> String {
     bs58::encode(id.to_vec()).into_string()
 }
 
