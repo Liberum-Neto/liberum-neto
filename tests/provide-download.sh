@@ -7,14 +7,14 @@ N2="test_n2"
 N2_SEED=2
 FILE_NAME="test-file.txt"
 FILE_CONTENT="Hello, World!"
-BLAKE3_HASH="7cLWjV2o1VsqwkAnyDWK3UemS2psCBHjj865Dovpu4p1"
+BLAKE3_HASH="5ckG8X2Ad8avzL57V5tvHbHpgxVtgAU5swwsxeMaNszx"
 
 echo "Provide and download file test:"
 
 # run daemon
-killall liberum_core &> /dev/null
-cargo run -p liberum_core -- --daemon  &> /dev/null &
-sleep 0.5; # the socket file is created asynchronously and may not be ready yet :))))
+# killall liberum_core &> /dev/null
+# cargo run -p liberum_core -- --daemon  &> /dev/null &
+# sleep 0.5; # the socket file is created asynchronously and may not be ready yet :))))
 
 # create ndoes
 cargo run -p liberum_cli -- -d new-node $N1 --id-seed $N1_SEED 2> /dev/null

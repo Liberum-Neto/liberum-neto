@@ -1,6 +1,8 @@
 pub mod connection;
 pub mod node;
+pub mod proto;
 pub mod swarm_runner;
+
 use anyhow::{anyhow, Result};
 use connection::listen;
 use daemonize::*;

@@ -242,7 +242,7 @@ impl Actor for NodeManager {
     }
 
     async fn on_stop(
-        mut self,
+        &mut self,
         _: kameo::actor::WeakActorRef<Self>,
         _: kameo::error::ActorStopReason,
     ) -> std::result::Result<(), kameo::error::BoxError> {

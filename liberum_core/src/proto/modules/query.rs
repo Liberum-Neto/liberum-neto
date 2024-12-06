@@ -6,6 +6,7 @@ pub(crate) struct PinObject {
     pub from: ObjectId,
     pub to: SignedObject,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct PinContext {
     pub direction: PinContextDirection,
