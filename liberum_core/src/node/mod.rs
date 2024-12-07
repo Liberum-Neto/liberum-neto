@@ -8,11 +8,12 @@ use kameo::messages;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::{BootstrapNode, NodeConfig};
 use liberum_core::parser;
-use liberum_core::proto;
 use liberum_core::proto::ResultObject;
+use liberum_core::proto::{self, TypedObject};
 use liberum_core::str_to_file_id;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
+use std::any::TypeId;
 use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::fmt;
@@ -131,13 +132,7 @@ impl Node {
         }
         .into();
 
-        let obj_id: proto::Hash = proto::Hash {
-            bytes: blake3::hash(bincode::serialize(&object).unwrap().as_slice())
-                .as_bytes()
-                .to_vec()
-                .try_into()
-                .unwrap(),
-        };
+        let obj_id = proto::Hash::try_from(&object).unwrap();
 
         self.swarm_sender
             .as_mut()
@@ -158,9 +153,7 @@ impl Node {
     #[message]
     pub async fn download_file(&mut self, id: String) -> Result<proto::PlainFileObject> {
         let id_str = id;
-        let id_hash = proto::Hash {
-            bytes: bs58::decode(&id_str).into_vec()?.as_slice().try_into()?,
-        };
+        let id_hash = proto::Hash::try_from(&id_str).unwrap();
 
         // first get the providers of the file
         // Maybe getting the providers could be reused from GetProviders node message handler??
@@ -233,11 +226,7 @@ impl Node {
                 }
 
                 Ok(Ok(file)) => {
-                    let hash: proto::Hash =
-                        blake3::hash(bincode::serialize(&file).unwrap().to_vec().as_slice())
-                            .as_bytes()
-                            .try_into()
-                            .unwrap();
+                    let hash = proto::Hash::try_from(&file).unwrap();
                     if hash != id_hash {
                         debug!(
                             node = self.name,
@@ -301,13 +290,7 @@ impl Node {
         }
         .into();
 
-        let id: proto::Hash =
-            blake3::hash(bincode::serialize(&object).unwrap().to_vec().as_slice())
-                .as_bytes()
-                .to_vec()
-                .as_slice()
-                .try_into()
-                .unwrap();
+        let id = proto::Hash::try_from(&object).unwrap();
         let id_str = bs58::encode(&id.bytes).into_string();
 
         let (resp_send, resp_recv) = oneshot::channel();
@@ -352,11 +335,7 @@ impl Node {
 
     #[message]
     pub async fn provide_object(&mut self, object: proto::TypedObject) -> Result<String> {
-        let id: proto::Hash = blake3::hash(&bincode::serialize(&object).unwrap())
-            .as_bytes()
-            .to_vec()
-            .try_into()
-            .unwrap();
+        let id = proto::Hash::try_from(&object).unwrap();
         let id_str = liberum_core::file_id_hash_to_str(&id.bytes);
 
         let (resp_send, _) = oneshot::channel();
@@ -380,7 +359,7 @@ impl Node {
             .join(self.name.clone())
             .join(liberum_core::file_id_hash_to_str(&key.bytes.clone()));
         match std::fs::read(&path) {
-            Ok(data) => Some(bincode::deserialize(&data).unwrap()),
+            Ok(data) => Some(TypedObject::try_from(data).unwrap()),
             Err(e) => {
                 error!(
                     node = self.name,
@@ -398,10 +377,7 @@ impl Node {
     pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {
         let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.name.clone());
         std::fs::create_dir_all(&dir).ok();
-        let id: proto::Hash = blake3::hash(obj.data.as_slice())
-            .as_bytes()
-            .try_into()
-            .unwrap();
+        let id = proto::Hash::try_from(&obj).unwrap();
 
         let path = dir.join(liberum_core::file_id_hash_to_str(&id.bytes));
 

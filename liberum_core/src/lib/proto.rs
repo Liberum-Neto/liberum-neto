@@ -1,4 +1,6 @@
-use anyhow::{Error, Result};
+use std::fmt::Display;
+
+use anyhow::{anyhow, Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
@@ -35,6 +37,26 @@ impl TryFrom<&[u8; 32]> for Hash {
         Ok(Hash {
             bytes: bytes[..32].try_into()?,
         })
+    }
+}
+impl TryFrom<&TypedObject> for Hash {
+    type Error = Error;
+
+    fn try_from(value: &TypedObject) -> Result<Self> {
+        blake3::hash(bincode::serialize(value)?.as_slice())
+            .as_bytes()
+            .try_into()
+    }
+}
+impl Display for Hash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(bs58::encode(&self.bytes).into_string().as_str())
+    }
+}
+impl TryFrom<&String> for Hash {
+    type Error = Error;
+    fn try_from(value: &String) -> Result<Self> {
+        bs58::decode(value).into_vec()?.as_slice().try_into()
     }
 }
 
@@ -92,6 +114,12 @@ pub struct TypedObject {
     pub uuid: UUID,
     pub data: Vec<u8>,
 }
+impl TryFrom<Vec<u8>> for TypedObject {
+    type Error = Error;
+    fn try_from(value: Vec<u8>) -> std::result::Result<Self, Self::Error> {
+        bincode::deserialize::<TypedObject>(&value).map_err(|e| anyhow!(e))
+    }
+}
 
 #[allow(unused)]
 pub const SIGNED_OBJECT_ID: UUID = [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -124,6 +152,12 @@ impl From<PlainFileObject> for TypedObject {
         }
     }
 }
+impl TryFrom<&TypedObject> for PlainFileObject {
+    type Error = Error;
+    fn try_from(value: &TypedObject) -> Result<Self> {
+        bincode::deserialize::<PlainFileObject>(&(value.data)).map_err(|e| anyhow!(e))
+    }
+}
 
 #[allow(unused)]
 pub const EMPTY_OBJECT_ID: UUID = [6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -151,6 +185,12 @@ impl From<QueryObject> for TypedObject {
         }
     }
 }
+impl TryFrom<&TypedObject> for QueryObject {
+    type Error = Error;
+    fn try_from(value: &TypedObject) -> Result<Self> {
+        bincode::deserialize::<QueryObject>(&(value.data)).map_err(|e| anyhow!(e))
+    }
+}
 
 #[allow(unused)]
 pub const SIMPLE_ID_QUERY_ID: UUID = [8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -173,6 +213,12 @@ impl From<SimpleIDQuery> for QueryObject {
         }
     }
 }
+impl TryFrom<&TypedObject> for SimpleIDQuery {
+    type Error = Error;
+    fn try_from(value: &TypedObject) -> Result<Self> {
+        bincode::deserialize::<SimpleIDQuery>(&(value.data)).map_err(|e| anyhow!(e))
+    }
+}
 
 #[allow(unused)]
 pub const RESULT_OBJECT_ID: UUID = [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -186,5 +232,11 @@ impl From<ResultObject> for TypedObject {
             uuid: RESULT_OBJECT_ID,
             data: bincode::serialize(&obj).unwrap(),
         }
+    }
+}
+impl TryFrom<&TypedObject> for ResultObject {
+    type Error = Error;
+    fn try_from(value: &TypedObject) -> Result<Self> {
+        bincode::deserialize::<ResultObject>(&(value.data)).map_err(|e| anyhow!(e))
     }
 }
