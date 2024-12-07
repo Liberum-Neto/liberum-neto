@@ -14,6 +14,22 @@ pub type ObjectId = Hash;
 pub type Content = Vec<u8>;
 pub type UUID = [u8; 16];
 
+pub trait Object {
+    fn get_uuid(&self) -> UUID;
+}
+
+impl<T> From<T> for TypedObject
+where
+    T: Object + Serialize,
+{
+    fn from(value: T) -> Self {
+        TypedObject {
+            uuid: value.get_uuid(),
+            data: bincode::serialize(&value).unwrap(),
+        }
+    }
+}
+
 impl TryFrom<Vec<u8>> for Hash {
     type Error = Error;
 
@@ -116,6 +132,11 @@ pub struct TypedObject {
     pub uuid: UUID,
     pub data: Vec<u8>,
 }
+impl TypedObject {
+    pub fn get_uuid(&self) -> UUID {
+        TYPED_OBJECT_ID
+    }
+}
 impl TryFrom<Vec<u8>> for TypedObject {
     type Error = Error;
     fn try_from(value: Vec<u8>) -> std::result::Result<Self, Self::Error> {
@@ -132,6 +153,11 @@ pub struct SignedObject {
     pub object: TypedObject,
     pub signature: Signature,
 }
+impl Object for SignedObject {
+    fn get_uuid(&self) -> UUID {
+        SIGNED_OBJECT_ID
+    }
+}
 
 #[allow(unused)]
 pub const GROUP_OBJECT_ID: UUID = [
@@ -141,6 +167,11 @@ pub const GROUP_OBJECT_ID: UUID = [
 pub struct GroupObject {
     pub group: GroupId,
     pub object: SignedObject,
+}
+impl Object for GroupObject {
+    fn get_uuid(&self) -> UUID {
+        GROUP_OBJECT_ID
+    }
 }
 
 #[allow(unused)]
@@ -152,14 +183,12 @@ pub struct PlainFileObject {
     pub name: String,
     pub content: Content,
 }
-impl From<PlainFileObject> for TypedObject {
-    fn from(obj: PlainFileObject) -> Self {
-        TypedObject {
-            uuid: PLAIN_FILE_OBJECT_ID,
-            data: bincode::serialize(&obj).unwrap(),
-        }
+impl Object for PlainFileObject {
+    fn get_uuid(&self) -> UUID {
+        PLAIN_FILE_OBJECT_ID
     }
 }
+
 impl TryFrom<&TypedObject> for PlainFileObject {
     type Error = Error;
     fn try_from(value: &TypedObject) -> Result<Self> {
@@ -181,6 +210,11 @@ impl TypedObject {
         }
     }
 }
+impl Object for EmptyObject {
+    fn get_uuid(&self) -> UUID {
+        EMPTY_OBJECT_ID
+    }
+}
 
 pub const QUERY_OBJECT_ID: UUID = [
     1, 147, 161, 245, 154, 110, 116, 17, 176, 69, 43, 183, 7, 155, 208, 245,
@@ -189,12 +223,9 @@ pub const QUERY_OBJECT_ID: UUID = [
 pub struct QueryObject {
     pub query_object: TypedObject,
 }
-impl From<QueryObject> for TypedObject {
-    fn from(obj: QueryObject) -> Self {
-        TypedObject {
-            uuid: QUERY_OBJECT_ID,
-            data: bincode::serialize(&obj).unwrap(),
-        }
+impl Object for QueryObject {
+    fn get_uuid(&self) -> UUID {
+        QUERY_OBJECT_ID
     }
 }
 impl TryFrom<&TypedObject> for QueryObject {
@@ -212,12 +243,9 @@ pub const SIMPLE_ID_QUERY_ID: UUID = [
 pub struct SimpleIDQuery {
     pub id: ObjectId,
 }
-impl From<SimpleIDQuery> for TypedObject {
-    fn from(obj: SimpleIDQuery) -> Self {
-        TypedObject {
-            uuid: SIMPLE_ID_QUERY_ID,
-            data: bincode::serialize(&obj).unwrap(),
-        }
+impl Object for SimpleIDQuery {
+    fn get_uuid(&self) -> UUID {
+        SIMPLE_ID_QUERY_ID
     }
 }
 impl From<SimpleIDQuery> for QueryObject {
@@ -242,12 +270,9 @@ pub const RESULT_OBJECT_ID: UUID = [
 pub struct ResultObject {
     pub result: Result<(), ()>,
 }
-impl From<ResultObject> for TypedObject {
-    fn from(obj: ResultObject) -> Self {
-        TypedObject {
-            uuid: RESULT_OBJECT_ID,
-            data: bincode::serialize(&obj).unwrap(),
-        }
+impl Object for ResultObject {
+    fn get_uuid(&self) -> UUID {
+        RESULT_OBJECT_ID
     }
 }
 impl TryFrom<&TypedObject> for ResultObject {

@@ -15,6 +15,20 @@ pub enum ObjectEnum {
     Query(QueryObject),
     Result(ResultObject),
 }
+impl Object for ObjectEnum {
+    fn get_uuid(&self) -> UUID {
+        match self {
+            ObjectEnum::Group(group_object) => group_object.get_uuid(),
+            ObjectEnum::Signed(signed_object) => signed_object.get_uuid(),
+            ObjectEnum::PlainFile(plain_file_object) => plain_file_object.get_uuid(),
+            ObjectEnum::Typed(typed_object) => typed_object.get_uuid(),
+            ObjectEnum::Empty(empty_object) => empty_object.get_uuid(),
+            ObjectEnum::SimpleIDQuery(simple_idquery) => simple_idquery.get_uuid(),
+            ObjectEnum::Query(query_object) => query_object.get_uuid(),
+            ObjectEnum::Result(result_object) => result_object.get_uuid(),
+        }
+    }
+}
 
 pub async fn parse_typed(object: TypedObject) -> Result<ObjectEnum> {
     match object.uuid {
