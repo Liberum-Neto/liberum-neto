@@ -308,6 +308,8 @@ impl Node {
             return Err(anyhow!("Could not find provider for file {id_str}.").into());
         }
 
+        let k = 20;
+        let mut successes = 0;
         for peer in &peers {
             let (send, recv) = oneshot::channel();
             self.swarm_sender
@@ -323,11 +325,19 @@ impl Node {
 
             if let Ok(obj) = recv.await {
                 match obj {
-                    Ok(ResultObject { result: Ok(_) }) => return Ok(id_str),
+                    Ok(ResultObject { result: Ok(_) }) => {
+                        successes += 1;
+                        if successes >= 20 {
+                            break;
+                        }
+                    }
                     _ => {
                         continue;
                     }
                 }
+            }
+            if successes >= 1 {
+                return Ok(id_str);
             }
         }
         Err(anyhow!("Could not publish file"))
