@@ -42,7 +42,7 @@ FILE_ID=$($CLI_BIN publish-file $N1 "$FILE_NAME" 2> /dev/null)
 
 init_asserts
 # download file
-RESULT=$($CLI_BIN -d download-file $N2 "${FILE_NAME}" 2> /dev/null)
+RESULT=$($CLI_BIN -d download-file $N2 "${FILE_ID}" 2> /dev/null)
 should_contain "$RESULT" "${FILE_CONTENT}"
 
 # cleanup
