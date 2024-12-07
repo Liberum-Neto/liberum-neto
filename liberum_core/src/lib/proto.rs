@@ -108,7 +108,9 @@ pub struct SignatureEd25519 {
 }
 
 #[allow(unused)]
-pub const TYPED_OBJECT_ID: UUID = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const TYPED_OBJECT_ID: UUID = [
+    1, 147, 161, 239, 26, 127, 113, 163, 185, 33, 40, 174, 137, 227, 40, 209,
+];
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq)]
 pub struct TypedObject {
     pub uuid: UUID,
@@ -122,7 +124,9 @@ impl TryFrom<Vec<u8>> for TypedObject {
 }
 
 #[allow(unused)]
-pub const SIGNED_OBJECT_ID: UUID = [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const SIGNED_OBJECT_ID: UUID = [
+    1, 147, 161, 244, 14, 189, 120, 240, 162, 112, 46, 1, 58, 126, 158, 67,
+];
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SignedObject {
     pub object: TypedObject,
@@ -130,7 +134,9 @@ pub struct SignedObject {
 }
 
 #[allow(unused)]
-pub const GROUP_OBJECT_ID: UUID = [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const GROUP_OBJECT_ID: UUID = [
+    1, 147, 161, 244, 181, 102, 121, 10, 173, 204, 172, 162, 140, 15, 106, 229,
+];
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GroupObject {
     pub group: GroupId,
@@ -138,7 +144,9 @@ pub struct GroupObject {
 }
 
 #[allow(unused)]
-pub const PLAIN_FILE_OBJECT_ID: UUID = [4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const PLAIN_FILE_OBJECT_ID: UUID = [
+    1, 147, 161, 244, 248, 38, 112, 38, 175, 186, 173, 159, 0, 120, 46, 101,
+];
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PlainFileObject {
     pub name: String,
@@ -160,7 +168,9 @@ impl TryFrom<&TypedObject> for PlainFileObject {
 }
 
 #[allow(unused)]
-pub const EMPTY_OBJECT_ID: UUID = [6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const EMPTY_OBJECT_ID: UUID = [
+    1, 147, 161, 245, 89, 238, 121, 208, 148, 153, 23, 225, 203, 214, 75, 42,
+];
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EmptyObject {}
 impl TypedObject {
@@ -172,7 +182,9 @@ impl TypedObject {
     }
 }
 
-pub const QUERY_OBJECT_ID: UUID = [16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const QUERY_OBJECT_ID: UUID = [
+    1, 147, 161, 245, 154, 110, 116, 17, 176, 69, 43, 183, 7, 155, 208, 245,
+];
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct QueryObject {
     pub query_object: TypedObject,
@@ -193,7 +205,9 @@ impl TryFrom<&TypedObject> for QueryObject {
 }
 
 #[allow(unused)]
-pub const SIMPLE_ID_QUERY_ID: UUID = [8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const SIMPLE_ID_QUERY_ID: UUID = [
+    1, 147, 161, 245, 225, 238, 122, 22, 139, 29, 161, 219, 76, 77, 119, 63,
+];
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SimpleIDQuery {
     pub id: ObjectId,
@@ -221,7 +235,9 @@ impl TryFrom<&TypedObject> for SimpleIDQuery {
 }
 
 #[allow(unused)]
-pub const RESULT_OBJECT_ID: UUID = [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const RESULT_OBJECT_ID: UUID = [
+    1, 147, 161, 246, 34, 158, 127, 249, 138, 17, 211, 212, 89, 233, 236, 156,
+];
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ResultObject {
     pub result: Result<(), ()>,
