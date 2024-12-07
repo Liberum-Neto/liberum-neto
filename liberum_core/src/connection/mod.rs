@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-
 use crate::node;
 use crate::node::manager::GetNode;
 use crate::node::manager::IsNodeRunning;
@@ -35,17 +34,22 @@ type SocketFramed =
     Framed<tokio::net::UnixStream, AsymmetricMessageCodec<DaemonResult, DaemonRequest>>;
 
 #[derive(Clone)]
-struct AppContext {
+pub struct AppContext {
     node_manager: ActorRef<NodeManager>,
 }
 
 impl AppContext {
-    fn new(node_store: ActorRef<NodeStore>) -> Self {
+    pub(super) fn new(node_store: ActorRef<NodeStore>) -> Self {
         AppContext {
             node_manager: kameo::spawn(NodeManager::new(node_store.clone())),
         }
     }
 }
+
+pub async fn create_app_context_for_test() -> Result<AppContext,anyhow::Error>{
+    Ok(AppContext::new(kameo::spawn(NodeStore::with_custom_nodes_dir(std::env::temp_dir().as_path()).await?)))
+}
+
 
 pub async fn listen(listener: UnixListener) -> Result<()> {
     info!("Server listening on {:?}", listener);
@@ -91,7 +95,7 @@ async fn handle_connection(
 
 /// Used by the core daemon to listen for incoming connections from UI
 /// Only one UI connection is possible at a time
-async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonResult {
+pub async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonResult {
     match message {
         DaemonRequest::NewNode { node_name, id_seed } => {
             handle_new_node(node_name, id_seed, context).await
@@ -122,7 +126,7 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         } => handle_dial(node_name, peer_id, addr, context).await,
         DaemonRequest::PublishFile { node_name, path } => {
             handle_publish_file(node_name, path, context).await
-        }
+        },
     }
 }
 

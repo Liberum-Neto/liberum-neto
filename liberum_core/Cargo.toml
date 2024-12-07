@@ -8,6 +8,15 @@ license = "MIT"
 [lib]
 path="src/lib/lib.rs"
 
+[[bin]]
+name = "liberum_core"
+path = "src/main.rs"
+
+[[bin]]
+name = "liberum_test"
+path = "src/liberum_test.rs"
+
+
 [package.metadata.release]
 release = false
 
@@ -32,3 +41,10 @@ tempdir = "0.3.7"
 postcard = { version = "1.0.10", features = ["alloc"] }
 blake3 = "1.5.4"
 bs58 = "0.5.1"
+tonic = "0.12.3"
+prost = "0.13.4"
+tokio-stream = "0.1.17"
+futures-util = "0.3.31"
+
+[build-dependencies]
+tonic-build = "0.12.3"
