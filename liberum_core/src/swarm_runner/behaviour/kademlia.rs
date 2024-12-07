@@ -264,7 +264,7 @@ impl SwarmContext {
 
 /// Utility related to the Kademlia behaviour
 impl SwarmContext {
-    pub fn get_object_from_vault(&mut self, key: proto::Hash) -> Option<proto::TypedObjectOld> {
+    pub fn get_object_from_vault(&mut self, key: proto::Hash) -> Option<proto::TypedObject> {
         let path = PathBuf::from("FILE_SHARE_SAVED_FILES")
             .join(self.node_snapshot.name.clone())
             .join(liberum_core::file_id_hash_to_str(&key.bytes.clone()));
@@ -272,7 +272,7 @@ impl SwarmContext {
         match std::fs::read(&path) {
             Ok(data) => {
                 debug!("Getting object from vault: {:?}", data);
-                let obj = bincode::deserialize::<proto::TypedObjectOld>(&data).unwrap();
+                let obj = bincode::deserialize::<proto::TypedObject>(&data).unwrap();
                 Some(obj)
             }
             Err(e) => {
@@ -287,7 +287,7 @@ impl SwarmContext {
             }
         }
     }
-    pub async fn put_object_into_vault(&mut self, obj: proto::TypedObjectOld) -> Result<()> {
+    pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {
         let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.node_snapshot.name.clone());
         std::fs::create_dir_all(&dir).ok();
         let data = bincode::serialize(&obj).unwrap();

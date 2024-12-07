@@ -1,5 +1,5 @@
 use liberum_core::proto::ResultObject;
-use liberum_core::proto::{self, TypedObjectOld};
+use liberum_core::proto::{self, TypedObject};
 
 use super::behaviour::object_sender;
 use super::SwarmContext;
@@ -44,7 +44,7 @@ pub enum SwarmRunnerMessage {
     /// will be a provider for the file. The fact of providing the file will be
     /// announced to up to `k` network members close to the provided ID.
     ProvideObject {
-        object: TypedObjectOld,
+        object: TypedObject,
         id: proto::Hash,
         response_sender: oneshot::Sender<Result<()>>,
     },
@@ -54,7 +54,7 @@ pub enum SwarmRunnerMessage {
     GetObject {
         id: proto::Hash,
         peer: PeerId,
-        response_sender: oneshot::Sender<Result<TypedObjectOld>>,
+        response_sender: oneshot::Sender<Result<TypedObject>>,
     },
     /// Publish a file in the network. This will ask up to `k` nodes near the
     /// published ID to store the file. The nodes will announce to be providers
@@ -63,7 +63,7 @@ pub enum SwarmRunnerMessage {
     ///
     /// The current node will not be a provider of the file as a result. (TODO: Do we want this?)
     SendObject {
-        object: TypedObjectOld,
+        object: TypedObject,
         id: proto::Hash,
         peer: PeerId,
         response_sender: oneshot::Sender<Result<ResultObject>>,
@@ -264,7 +264,7 @@ impl SwarmContext {
 
     pub(crate) async fn provide_object(
         &mut self,
-        object: TypedObjectOld,
+        object: TypedObject,
         id: proto::Hash,
         response_sender: oneshot::Sender<Result<()>>,
     ) {

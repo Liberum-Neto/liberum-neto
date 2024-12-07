@@ -14,7 +14,7 @@ use libp2p::{
 use object_sender::*;
 use tokio::sync::oneshot;
 
-use liberum_core::proto::{self, TypedObjectOld};
+use liberum_core::proto::{self, TypedObject};
 
 use super::SwarmContext;
 
@@ -32,11 +32,11 @@ pub struct LiberumNetoBehavior {
 pub struct BehaviourContext {
     /// A hashmap of resources that are provided by the node. Should be replaced with
     /// an implementation of VAULT
-    pub providing: HashMap<proto::Hash, TypedObjectOld>, // TODO VAULT sHOULD REPLACE THIS
+    pub providing: HashMap<proto::Hash, TypedObject>, // TODO VAULT sHOULD REPLACE THIS
     pub pending_start_providing: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
     pub pending_send_object: HashMap<OutboundRequestId, oneshot::Sender<Result<ResultObject>>>,
     pub pending_get_providers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
-    pub pending_get_object: HashMap<OutboundRequestId, oneshot::Sender<Result<TypedObjectOld>>>,
+    pub pending_get_object: HashMap<OutboundRequestId, oneshot::Sender<Result<TypedObject>>>,
     pub pending_dial: HashMap<ConnectionId, oneshot::Sender<Result<()>>>,
     pub pending_get_closest_peers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
     pub pending_object_start_providing:
