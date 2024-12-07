@@ -239,8 +239,14 @@ impl Node {
                     }
                     match parser::parse_typed(file).await {
                         Ok(parser::ObjectEnum::PlainFile(file)) => return Ok(file),
-                        Err(e) => return Err(e),
-                        Ok(_) => return Err(anyhow!("Received object was not a file!")),
+                        Err(e) => {
+                            debug!("{e}");
+                            continue;
+                        }
+                        Ok(_) => {
+                            debug!("Received object was not a file!");
+                            continue;
+                        }
                     }
                 }
             }
@@ -337,6 +343,11 @@ impl Node {
                 }
             }
             if successes >= 1 {
+                debug!(
+                    node = self.name,
+                    obj_id = id_str,
+                    "Published object to {successes} other nodes"
+                );
                 return Ok(id_str);
             }
         }

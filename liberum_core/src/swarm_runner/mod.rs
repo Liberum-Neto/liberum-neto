@@ -222,7 +222,7 @@ impl SwarmContext {
                     .behaviour_mut()
                     .kademlia
                     .add_address(&peer_id, addr);
-                self.print_neighbours();
+                //self.print_neighbours();
             }
             SwarmEvent::OutgoingConnectionError {
                 connection_id,
@@ -266,14 +266,17 @@ impl SwarmContext {
 impl SwarmContext {
     fn print_neighbours(&mut self) {
         debug!(node = self.node_snapshot.name, "Neighbours:");
+        let mut i = 0;
         self.swarm
             .behaviour_mut()
             .kademlia
             .kbuckets()
             .for_each(|k| {
                 k.iter().for_each(|e| {
-                    debug!("neighbour: {:?}: {:?}", e.node.key, e.node.value);
+                    i += 1;
+                    //debug!("neighbour: {:?}: {:?}", e.node.key, e.node.value);
                 });
             });
+        error!(node = self.node_snapshot.name, "Neighbour count: {i}")
     }
 }

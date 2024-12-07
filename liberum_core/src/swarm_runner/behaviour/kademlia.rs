@@ -305,6 +305,13 @@ impl SwarmContext {
             );
             return Err(e.into());
         }
+
+        self.swarm
+            .behaviour_mut()
+            .kademlia
+            .start_providing(RecordKey::from(id.bytes.to_vec()))
+            .ok();
+
         Ok(())
     }
 

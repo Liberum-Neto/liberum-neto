@@ -201,6 +201,8 @@ impl SwarmContext {
                         .pending_get_object
                         .insert(qid, response_sender);
                 }
+
+                self.print_neighbours();
                 Ok(false)
             }
             SwarmRunnerMessage::GetClosestPeers {
