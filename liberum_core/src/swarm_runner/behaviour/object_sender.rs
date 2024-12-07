@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use liberum_core::parser::{self, ObjectEnum};
-use liberum_core::proto::{self, PlainFileObject, QueryObject, TypedObjectOld};
+use liberum_core::proto::{self, PlainFileObject, QueryObject, TypedObject};
 use libp2p::{
     kad,
     request_response::{self, InboundRequestId, OutboundRequestId, ResponseChannel},
@@ -19,7 +19,7 @@ use super::super::SwarmContext;
 /// A request to the file_share protocol
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq)]
 pub struct ObjectSendRequest {
-    pub object: TypedObjectOld,
+    pub object: TypedObject,
     pub object_id: proto::Hash,
 }
 
@@ -27,7 +27,7 @@ pub struct ObjectSendRequest {
 /// in the future, probably using the VAULT and OBJECTS
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq)]
 pub struct ObjectResponse {
-    pub object: TypedObjectOld,
+    pub object: TypedObject,
     pub object_id: proto::Hash,
 }
 

@@ -88,7 +88,7 @@ pub struct SignatureEd25519 {
 #[allow(unused)]
 pub const TYPED_OBJECT_ID: UUID = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq)]
-pub struct TypedObjectOld {
+pub struct TypedObject {
     pub uuid: UUID,
     pub data: Vec<u8>,
 }
@@ -97,7 +97,7 @@ pub struct TypedObjectOld {
 pub const SIGNED_OBJECT_ID: UUID = [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SignedObject {
-    pub object: TypedObjectOld,
+    pub object: TypedObject,
     pub signature: Signature,
 }
 
@@ -116,9 +116,9 @@ pub struct PlainFileObject {
     pub name: String,
     pub content: Content,
 }
-impl From<PlainFileObject> for TypedObjectOld {
+impl From<PlainFileObject> for TypedObject {
     fn from(obj: PlainFileObject) -> Self {
-        TypedObjectOld {
+        TypedObject {
             uuid: PLAIN_FILE_OBJECT_ID,
             data: bincode::serialize(&obj).unwrap(),
         }
@@ -129,9 +129,9 @@ impl From<PlainFileObject> for TypedObjectOld {
 pub const EMPTY_OBJECT_ID: UUID = [6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EmptyObject {}
-impl TypedObjectOld {
+impl TypedObject {
     pub fn empty() -> Self {
-        TypedObjectOld {
+        TypedObject {
             uuid: EMPTY_OBJECT_ID,
             data: bincode::serialize(&EmptyObject {}).unwrap(),
         }
@@ -141,11 +141,11 @@ impl TypedObjectOld {
 pub const QUERY_OBJECT_ID: UUID = [16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct QueryObject {
-    pub query_object: TypedObjectOld,
+    pub query_object: TypedObject,
 }
-impl From<QueryObject> for TypedObjectOld {
+impl From<QueryObject> for TypedObject {
     fn from(obj: QueryObject) -> Self {
-        TypedObjectOld {
+        TypedObject {
             uuid: QUERY_OBJECT_ID,
             data: bincode::serialize(&obj).unwrap(),
         }
@@ -158,9 +158,9 @@ pub const SIMPLE_ID_QUERY_ID: UUID = [8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 pub struct SimpleIDQuery {
     pub id: ObjectId,
 }
-impl From<SimpleIDQuery> for TypedObjectOld {
+impl From<SimpleIDQuery> for TypedObject {
     fn from(obj: SimpleIDQuery) -> Self {
-        TypedObjectOld {
+        TypedObject {
             uuid: SIMPLE_ID_QUERY_ID,
             data: bincode::serialize(&obj).unwrap(),
         }
@@ -180,9 +180,9 @@ pub const RESULT_OBJECT_ID: UUID = [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 pub struct ResultObject {
     pub result: Result<(), ()>,
 }
-impl From<ResultObject> for TypedObjectOld {
+impl From<ResultObject> for TypedObject {
     fn from(obj: ResultObject) -> Self {
-        TypedObjectOld {
+        TypedObject {
             uuid: RESULT_OBJECT_ID,
             data: bincode::serialize(&obj).unwrap(),
         }

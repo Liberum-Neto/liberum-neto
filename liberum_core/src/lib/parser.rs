@@ -9,14 +9,14 @@ pub enum ObjectEnum {
     Group(GroupObject),
     Signed(SignedObject),
     PlainFile(PlainFileObject),
-    Typed(TypedObjectOld),
+    Typed(TypedObject),
     Empty(EmptyObject),
     SimpleIDQuery(SimpleIDQuery),
     Query(QueryObject),
     Result(ResultObject),
 }
 
-pub async fn parse_typed(object: TypedObjectOld) -> Result<ObjectEnum> {
+pub async fn parse_typed(object: TypedObject) -> Result<ObjectEnum> {
     match object.uuid {
         GROUP_OBJECT_ID => {
             debug!("Parser: Group object: {:?}", object);

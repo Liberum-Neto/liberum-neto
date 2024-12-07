@@ -125,7 +125,7 @@ impl Node {
     pub async fn provide_file(&mut self, path: PathBuf) -> Result<String> {
         let (resp_send, resp_recv) = oneshot::channel();
 
-        let object: proto::TypedObjectOld = proto::PlainFileObject {
+        let object: proto::TypedObject = proto::PlainFileObject {
             name: path.file_name().unwrap().to_str().unwrap().to_string(),
             content: tokio::fs::read(path).await?,
         }
@@ -296,7 +296,7 @@ impl Node {
             error!(node = self.name, err = e.to_string(), "Failed to read file");
         })?;
 
-        let object: proto::TypedObjectOld = proto::PlainFileObject {
+        let object: proto::TypedObject = proto::PlainFileObject {
             name: path.file_name().unwrap().to_str().unwrap().to_string(),
             content: data,
         }
@@ -352,7 +352,7 @@ impl Node {
     }
 
     #[message]
-    pub async fn provide_object(&mut self, object: proto::TypedObjectOld) -> Result<String> {
+    pub async fn provide_object(&mut self, object: proto::TypedObject) -> Result<String> {
         let id: proto::Hash = blake3::hash(&bincode::serialize(&object).unwrap())
             .as_bytes()
             .to_vec()
@@ -376,10 +376,7 @@ impl Node {
     }
 
     #[message]
-    pub(crate) fn get_object_from_vault(
-        &mut self,
-        key: proto::Hash,
-    ) -> Option<proto::TypedObjectOld> {
+    pub(crate) fn get_object_from_vault(&mut self, key: proto::Hash) -> Option<proto::TypedObject> {
         let path = PathBuf::from("FILE_SHARE_SAVED_FILES")
             .join(self.name.clone())
             .join(liberum_core::file_id_hash_to_str(&key.bytes.clone()));
@@ -399,7 +396,7 @@ impl Node {
     }
 
     #[message]
-    pub async fn put_object_into_vault(&mut self, obj: proto::TypedObjectOld) -> Result<()> {
+    pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {
         let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.name.clone());
         std::fs::create_dir_all(&dir).ok();
         let id: proto::Hash = blake3::hash(obj.data.as_slice())
