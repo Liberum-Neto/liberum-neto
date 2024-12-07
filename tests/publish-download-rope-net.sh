@@ -21,7 +21,7 @@ killall liberum_core &> /dev/null
 $CORE_BIN --daemon  &> /dev/null &
 sleep 0.1; # the socket file is created asynchronously and may not be ready yet :))))
 
-# create ndoes
+# create nodes
 N_NAMES=()
 N_IDS=()
 N_ADDRESSES=()
