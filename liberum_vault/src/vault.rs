@@ -3,6 +3,7 @@ use std::iter::once;
 use std::iter::successors;
 use std::path::Path;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use anyhow::anyhow;
 use anyhow::bail;
@@ -13,6 +14,9 @@ use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::message::{Context, Message};
 use kameo::messages;
 use kameo::Actor;
+use liberum_core::parser::ObjectEnum;
+use liberum_core::proto::Hash;
+use liberum_core::proto::TypedObject;
 use rusqlite::OptionalExtension;
 use tokio::fs::remove_file;
 use tokio::fs::File;
@@ -93,6 +97,30 @@ impl Vault {
         self.store_fragment_info(fragment_info).await?;
 
         Ok(fragment_key)
+    }
+
+    #[message]
+    async fn store_object(&self, hash: Hash, object: ObjectEnum) -> Result<()> {
+        let key: Key = hash.bytes.into();
+
+        match object {
+            ObjectEnum::Empty(_) => {}
+            ObjectEnum::Typed(typed_object) => {
+                self.store_typed_object(key, typed_object).await?;
+            }
+            _ => return Result::Err(anyhow!("Storing this object type is not supported!")),
+        }
+
+        return Ok(());
+    }
+
+    #[message]
+    async fn load_object(&self, hash: Hash) -> Result<Option<ObjectEnum>> {
+        let key: Key = hash.bytes.into();
+
+        self.load_typed_object(key)
+            .await
+            .map(|r| r.map(|o| ObjectEnum::Typed(o)))
     }
 }
 
@@ -206,6 +234,22 @@ impl Vault {
             .call(|conn| Ok(conn.execute(CREATE_FRAGMENT_TABLE_QUERY, ())?))
             .await?;
 
+        const CREATE_TYPED_OBJECT_TABLE_QUERY: &str = "
+            CREATE TABLE IF NOT EXISTS typed_object (
+                hash0 INTEGER NOT NULL,
+                hash1 INTEGER NOT NULL,
+                hash2 INTEGER NOT NULL,
+                hash3 INTEGER NOT NULL,
+                uuid TEXT,
+                data BLOB,
+                PRIMARY KEY (hash0, hash1, hash2, hash3)
+            )
+        ";
+
+        self.db
+            .call(|conn| Ok(conn.execute(CREATE_TYPED_OBJECT_TABLE_QUERY, ())?))
+            .await?;
+
         Ok(())
     }
 
@@ -316,6 +360,96 @@ impl Vault {
         Ok(Some(ReaderStream::new(fragment_file).boxed()))
     }
 
+    async fn load_typed_object(&self, key: Key) -> Result<Option<TypedObject>> {
+        const SELECT_TYPED_OBJECT_QUERY: &str = "
+            SELECT uuid, data
+            FROM typed_object
+            WHERE hash0 = ?1 AND hash1 = ?2 AND hash2 = ?3 AND hash3 = ?4
+        ";
+
+        self.db
+            .call(move |conn| {
+                let mut stmt = conn.prepare(SELECT_TYPED_OBJECT_QUERY)?;
+                let key_u64_slice = key.as_u64_slice_be();
+                let key_as_i64 = [
+                    key_u64_slice[0] as i64,
+                    key_u64_slice[1] as i64,
+                    key_u64_slice[2] as i64,
+                    key_u64_slice[3] as i64,
+                ];
+
+                let typed_object = stmt
+                    .query_row(key_as_i64, |r| {
+                        let uuid: String = r.get(0)?;
+                        let data: Vec<u8> = r.get(1)?;
+
+                        Result::Ok(TypedObject {
+                            uuid: uuid::Uuid::from_str(&uuid).unwrap(),
+                            data,
+                        })
+                    })
+                    .optional()?;
+
+                Ok(typed_object)
+            })
+            .await
+            .map_err(|e| anyhow!(e))
+    }
+
+    async fn store_typed_object(&self, key: Key, object: TypedObject) -> Result<()> {
+        const SELECT_TYPED_OBJECT_QUERY: &str =
+            "SELECT COUNT(*) FROM typed_object WHERE hash0 = ?1 AND hash1 = ?2 AND hash2 = ?3 AND hash3 = ?4";
+        const INSERT_TYPED_OBJECT_QUERY: &str =
+            "INSERT INTO typed_object (hash0, hash1, hash2, hash3, uuid, data)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
+
+        let hash_as_u64 = key.as_u64_slice_be();
+
+        let cnt = self
+            .db
+            .call(move |conn| {
+                let key_as_i64 = [
+                    hash_as_u64[0] as i64,
+                    hash_as_u64[1] as i64,
+                    hash_as_u64[2] as i64,
+                    hash_as_u64[3] as i64,
+                ];
+
+                let cnt = conn.query_row(SELECT_TYPED_OBJECT_QUERY, key_as_i64, |r| {
+                    let cnt: usize = r.get(0)?;
+
+                    Ok(cnt)
+                })?;
+
+                Ok(cnt)
+            })
+            .await?;
+
+        if cnt != 0 {
+            // Already stored, no need to change as objects are immutable
+            return Ok(());
+        }
+
+        self.db
+            .call(move |conn| {
+                conn.execute(
+                    INSERT_TYPED_OBJECT_QUERY,
+                    (
+                        hash_as_u64[0] as i64,
+                        hash_as_u64[1] as i64,
+                        hash_as_u64[2] as i64,
+                        hash_as_u64[3] as i64,
+                        object.uuid.to_string(),
+                        object.data,
+                    ),
+                )?;
+
+                Ok(())
+            })
+            .await
+            .map_err(|e| anyhow!(e))
+    }
+
     async fn ensure_dirs(vault_dir_path: &Path) -> Result<()> {
         debug!(
             path = vault_dir_path.display().to_string(),
@@ -361,6 +495,7 @@ mod tests {
     use rand::{rngs::StdRng, Rng, SeedableRng};
     use tempdir::TempDir;
     use tokio::io::AsyncWriteExt;
+    use uuid::Uuid;
 
     use super::*;
 
@@ -475,5 +610,42 @@ mod tests {
         let fragment_sizes = Vault::fragment_sizes(some_file_size);
 
         assert_eq!(fragment_sizes, vec![4096]);
+    }
+
+    #[tokio::test]
+    async fn typed_object_load_store_test() {
+        let tmp_dir = TempDir::new("liberum_tests").unwrap();
+        let vault_dir_path = tmp_dir.path();
+        let vault = Vault::new(vault_dir_path).await.unwrap();
+        let vault = kameo::spawn(vault);
+        let some_uuid = Uuid::new_v4();
+
+        vault
+            .ask(StoreObject {
+                hash: Hash { bytes: [1; 32] },
+                object: ObjectEnum::Typed(TypedObject {
+                    uuid: some_uuid,
+                    data: vec![1, 2, 3],
+                }),
+            })
+            .send()
+            .await
+            .unwrap();
+
+        let typed_object = vault
+            .ask(LoadObject {
+                hash: Hash { bytes: [1; 32] },
+            })
+            .send()
+            .await
+            .unwrap()
+            .unwrap();
+
+        if let ObjectEnum::Typed(TypedObject { uuid, data }) = typed_object {
+            assert_eq!(uuid, some_uuid);
+            assert_eq!(data, vec![1, 2, 3]);
+        } else {
+            panic!("Object enum is not TypedObject, but it should be")
+        }
     }
 }

@@ -2792,6 +2792,7 @@ dependencies = [
  "futures",
  "futures-util",
  "kameo 0.12.2",
+ "liberum_core",
  "pretty_assertions",
  "rand 0.8.5",
  "rusqlite",
