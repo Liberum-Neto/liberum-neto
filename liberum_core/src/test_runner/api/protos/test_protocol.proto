@@ -1,0 +1,98 @@
+syntax = "proto3";
+package test_protocol;
+
+
+// this is handshake, it would be much easier if this was continous or i could call service on client
+service IdentityServer {
+    rpc Identify(Identity) returns (TestScenario);
+    rpc TestReady(NodesCreated) returns (CallableNodes);
+    rpc TestPartake(stream TestPartResult) returns (stream TestPartDescriptor);
+}
+
+
+message Identity {
+    string hostId = 1; 
+}
+
+message CallableNodes {
+    message CallableNode{
+        uint64 NodeId = 1;
+        string NodeHash = 2;
+        optional string NodeAddress = 3;
+    }
+    repeated CallableNode nodes = 1;
+}
+
+message TestScenario{
+    int64 TestInstanceId = 1;
+    repeated TestPartScenario parts = 2;
+    repeated NodeDefinition nodes = 3;
+}
+
+message NodeDefinition {
+    uint64 NodeId = 1;
+    string Name = 2;
+    enum NodeDefinitionLevel {
+        None = 0;
+        Hash = 1;
+        Address = 2;
+    }
+    NodeDefinitionLevel visibility = 3;
+}
+
+message TestPartScenario{
+    sint64 PartId  = 2;
+    oneof part{
+        TestPartSimple simple = 1;
+    }
+}
+
+message TestPartSimple{
+    repeated Action actions = 1;
+}
+
+message Action {
+    uint64 ActionId = 1;
+    // oneof data{
+
+    // }
+    // optional DialNode dial = 2;
+    // optional PublishObject publish = 3;
+    // optional PublishMeta publishMeta = 4;
+    // optional GetObject GetObject = 5;
+}
+
+
+message NodesCreated{
+    repeated NodeInstance nodes = 1;
+}
+
+message NodeInstance{
+    uint64 NodeId = 1;
+    string NodeHash = 2;
+    optional string NodeAdress = 3;
+}
+
+
+message TestPartDescriptor{
+    uint64 partId = 1;
+}
+
+message TestPartResult{
+    repeated ActionResoult resoults = 1;
+}
+
+message ActionResoult{
+    uint64 ActionSourceId = 1;
+    uint64 ActionStartTime = 2;
+    uint64 ActionStopTime = 3;
+
+    // optional DialNodeResoult dial = 2;
+    // optional PublishObjectResoult publish = 3;
+    // optional PublishMetaResoult publishMeta = 4;
+    // optional GetObjectResoult getObject = 5; 
+}
+
+message ACK{
+uint64 Id = 1;
+}

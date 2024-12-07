@@ -8,6 +8,15 @@ license = "MIT"
 [lib]
 path="src/lib/lib.rs"
 
+[[bin]]
+name = "liberum_core"
+path = "src/main.rs"
+
+[[bin]]
+name = "liberum_test"
+path = "src/liberum_test.rs"
+
+
 [package.metadata.release]
 release = false
 
@@ -41,3 +50,9 @@ rand = "0.8.5"
 rusqlite = "0.32.1"
 tokio-rusqlite = "0.6.0"
 tokio-stream = "0.1.17"
+tonic = "0.12.3"
+prost = "0.13.4"
+futures-util = "0.3.31"
+
+[build-dependencies]
+tonic-build = "0.12.3"
