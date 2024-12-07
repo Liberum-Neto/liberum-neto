@@ -225,13 +225,7 @@ impl SwarmContext {
             } => {
                 debug!("Sending Object {:?}", object);
 
-                let obj_id = proto::Hash {
-                    bytes: blake3::hash(bincode::serialize(&object).unwrap().as_slice())
-                        .as_bytes()
-                        .to_vec()
-                        .try_into()
-                        .unwrap(),
-                };
+                let obj_id = proto::Hash::try_from(&object).unwrap();
 
                 if obj_id != id {
                     debug!(
@@ -268,11 +262,7 @@ impl SwarmContext {
         id: proto::Hash,
         response_sender: oneshot::Sender<Result<()>>,
     ) {
-        let id_hash: proto::Hash = blake3::hash(bincode::serialize(&object).unwrap().as_slice())
-            .as_bytes()
-            .to_vec()
-            .try_into()
-            .unwrap();
+        let id_hash = proto::Hash::try_from(&object).unwrap();
         if id != id_hash {
             error!(
                 received_id = bs58::encode(&id.bytes).into_string(),

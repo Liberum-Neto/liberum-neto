@@ -290,9 +290,9 @@ impl SwarmContext {
     pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {
         let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.node_snapshot.name.clone());
         std::fs::create_dir_all(&dir).ok();
+        let id = proto::Hash::try_from(&obj).unwrap();
         let data = bincode::serialize(&obj).unwrap();
         debug!("Putting file to vault: {:?}", data);
-        let id: proto::Hash = blake3::hash(&data).as_bytes().try_into().unwrap();
 
         let path = dir.join(liberum_core::file_id_hash_to_str(&id.bytes));
 
