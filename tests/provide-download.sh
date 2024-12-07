@@ -13,9 +13,9 @@ BLAKE3_HASH="4TVCksdig9bKrC6JRRQeYqsnDTf9gUXUTYXM7JGiGzM8"
 echo "Provide and download file test:"
 
 # run daemon
-# killall liberum_core &> /dev/null
-# cargo run -p liberum_core -- --daemon  &> /dev/null &
-# sleep 0.5; # the socket file is created asynchronously and may not be ready yet :))))
+killall liberum_core &> /dev/null
+cargo run -p liberum_core -- --daemon  &> /dev/null &
+sleep 0.5; # the socket file is created asynchronously and may not be ready yet :))))
 
 # create ndoes
 cargo run -p liberum_cli -- -d new-node $N1 --id-seed $N1_SEED 2> /dev/null

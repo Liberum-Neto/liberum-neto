@@ -9,14 +9,14 @@ N2="test_n2"
 N2_SEED=2
 FILE_NAME="$PWD/test-file.txt"
 FILE_CONTENT="Hello, World!"
-BLAKE3_HASH="5ckG8X2Ad8avzL57V5tvHbHpgxVtgAU5swwsxeMaNszx"
+BLAKE3_HASH="4TVCksdig9bKrC6JRRQeYqsnDTf9gUXUTYXM7JGiGzM8"
 
 echo "Publish and download file test:"
 
 # run daemon
-# killall liberum_core &> /dev/null
-# nohup cargo run -p liberum_core -- --daemon  &> /dev/null &
-# sleep 0.5; # the socket file is created asynchronously and may not be ready yet :))))
+killall liberum_core &> /dev/null
+nohup cargo run -p liberum_core -- --daemon  &> /dev/null &
+sleep 0.5; # the socket file is created asynchronously and may not be ready yet :))))
 
 # create ndoes
 cargo run -p liberum_cli -- -d new-node $N1 --id-seed $N1_SEED 2> /dev/null
@@ -32,10 +32,10 @@ cargo run -p liberum_cli -- -d config-node $N2 add-bootstrap-node "${N1_ID}" $N1
 cargo run -p liberum_cli -- -d start-node $N2 2> /dev/null
 N2_ID=$(cargo run -p liberum_cli -- -d get-peer-id $N2 2> /dev/null)
 
-# create and provide file
+# create and publish file
 echo "${FILE_CONTENT}" > "$FILE_NAME"
 
-cargo run -p liberum_cli -- -d publish-file $N1 "$FILE_NAME" &> /dev/null
+cargo run -p liberum_cli -- -d publish-file $N1 "$FILE_NAME" 2> /dev/null
 
 
 
