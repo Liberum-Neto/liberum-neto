@@ -368,7 +368,25 @@ async fn handle_provide_file(
     .await
     .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
 
-    handle_response(&mut res).await
+    let response = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))?;
+
+    match response {
+        Ok(DaemonResponse::FileProvided { id }) => {
+            info!(id = id, "File provided");
+            println!("{id}");
+            return Ok(());
+        }
+        Err(e) => {
+            println!("Error providing file: {e}");
+            bail!("Error providing file");
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
+        }
+    }
 }
 
 async fn handle_download_file(
@@ -508,6 +526,8 @@ async fn handle_publish_file(
     match resp {
         Ok(DaemonResponse::FilePublished { id }) => {
             info!(id = id, "File published");
+            println!("{id}");
+            return Ok(());
         }
         Err(e) => {
             println!("Error publishing file: {e}");
@@ -517,7 +537,6 @@ async fn handle_publish_file(
             bail!("Daemon returned wrong response");
         }
     }
-    Ok(())
 }
 
 async fn handle_response(
