@@ -79,14 +79,11 @@ impl SwarmContext {
             "received object sender request!"
         );
 
-        let id: proto::Hash = blake3::hash(bincode::serialize(&request.object).unwrap().as_slice())
-            .as_bytes()
-            .try_into()
-            .unwrap();
+        let id = proto::Hash::try_from(&request.object).unwrap();
         if request.object_id != id {
             error!(
-                received_id = bs58::encode(request.object_id.bytes).into_string(),
-                id = bs58::encode(id.bytes).into_string(),
+                received_id = request.object_id.to_string(),
+                id = id.to_string(),
                 "File Request ID does not match actual ID!"
             )
         }
@@ -198,7 +195,7 @@ impl SwarmContext {
                     return;
                 }
                 let obj = obj.unwrap();
-                let id = proto::Hash::try_from(bincode::serialize(&obj).unwrap().to_vec()).unwrap();
+                let id = proto::Hash::try_from(&obj).unwrap();
                 if query.id != id {
                     error!(
                         received_id = bs58::encode(&query.id.bytes).into_string(),

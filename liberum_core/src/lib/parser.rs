@@ -28,7 +28,7 @@ pub async fn parse_typed(object: TypedObject) -> Result<ObjectEnum> {
         }
         PLAIN_FILE_OBJECT_ID => {
             debug!("Parser: Plain File Object: {:?}", object);
-            let plain_file_object: PlainFileObject = bincode::deserialize(&object.data).unwrap();
+            let plain_file_object = PlainFileObject::try_from(&object)?;
             Ok(ObjectEnum::PlainFile(plain_file_object))
         }
         EMPTY_OBJECT_ID => {
@@ -38,19 +38,19 @@ pub async fn parse_typed(object: TypedObject) -> Result<ObjectEnum> {
         }
         SIMPLE_ID_QUERY_ID => {
             debug!("Parser: Simple ID Query: {:?}", object);
-            let query: SimpleIDQuery = bincode::deserialize(&object.data).unwrap();
+            let query = SimpleIDQuery::try_from(&object).unwrap();
             Ok(ObjectEnum::SimpleIDQuery(query))
         }
         QUERY_OBJECT_ID => {
             debug!("Parser: Got Query object: {:?}", object);
-            let query: QueryObject = bincode::deserialize(&object.data).unwrap();
+            let query = QueryObject::try_from(&object).unwrap();
             Ok(ObjectEnum::Query(QueryObject {
                 query_object: query.query_object,
             }))
         }
         RESULT_OBJECT_ID => {
             debug!("Parser: Got Result object: {:?}", object);
-            let obj: ResultObject = bincode::deserialize(&object.data).unwrap();
+            let obj = ResultObject::try_from(&object).unwrap();
             Ok(ObjectEnum::Result(obj))
         }
         _ => {
