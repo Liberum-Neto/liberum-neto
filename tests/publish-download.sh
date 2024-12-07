@@ -12,7 +12,7 @@ N2="test_n2"
 N2_SEED=2
 FILE_NAME="$PWD/test-file.txt"
 FILE_CONTENT="Hello, World!"
-BLAKE3_HASH="5ckG8X2Ad8avzL57V5tvHbHpgxVtgAU5swwsxeMaNszx"
+BLAKE3_HASH="4TVCksdig9bKrC6JRRQeYqsnDTf9gUXUTYXM7JGiGzM8"
 
 echo "Publish and download file test:"
 
@@ -37,7 +37,7 @@ $CLI_BIN -d start-node $N2 2> /dev/null
 # wait for nodes to connect
 sleep 0.1
 
-# create and provide file
+# create and publish file
 echo "${FILE_CONTENT}" > "$FILE_NAME"
 $CLI_BIN -d publish-file $N1 "$FILE_NAME" &> /dev/null
 

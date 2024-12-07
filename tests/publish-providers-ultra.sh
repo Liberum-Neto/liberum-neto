@@ -11,7 +11,7 @@ N1_SEED=1
 N1_ADDR="/ip6/::1/udp/52137/quic-v1"
 FILE1_NAME="$PWD/test-file1.txt"
 FILE1_CONTENT="11111 Hello, World! 11111"
-FILE1_HASH="FhFBdCe9PqTjgptawEAxybYUTMwGDdamafRjCJ2P8Gsx"
+FILE1_HASH="EKMp67LEX2hBuejfSEgb48pNsFN6KZcqsnCAKf8JpdUH"
 
 # 12D3KooWHdZxC6sYDzNCKkHPvgdvAqESoNEb2ThCC6Pv9g6YyVTS
 N2="test_n2"
@@ -19,7 +19,7 @@ N2_SEED=2
 N2_ADDR="/ip6/::1/udp/52138/quic-v1"
 FILE2_NAME="$PWD/test-file2.txt"
 FILE2_CONTENT="22222 Hello, World! 22222"
-FILE2_HASH="4Xryc3R1pQjfjLrM7yG4rkvjoDrrW9rbe9qCK24kj4Pc"
+FILE2_HASH="FyrNdKeJZf1QPvym8kPx3D69q7WWMcwKWkMybkp1Coyx"
 
 # 12D3KooWS8JMXPNwghcKvDsazagjdE2YKVW7RobBoqiVZvU38XSG
 N3="test_n3"
@@ -27,7 +27,7 @@ N3_SEED=3
 N3_ADDR="/ip6/::1/udp/52139/quic-v1"
 FILE3_NAME="$PWD/test-file3.txt"
 FILE3_CONTENT="33333 Hello, World! 33333"
-FILE3_HASH="6KxBVAEgRzM9fNFo3243wefmJTqgdoTdJ4hLmkNFaxrf"
+FILE3_HASH="8Yucj7Box5FDq4mmwp7RZHH8Aymd5Puwpb7QQCpaAYuZ"
 
 # 12D3KooWEEKLJ8c9u89npG77CPN9uJE6Jr2net22MYbzZ9n8KeTp
 N4="test_n4"
@@ -35,7 +35,7 @@ N4_SEED=4
 N4_ADDR="/ip6/::1/udp/52140/quic-v1"
 FILE4_NAME="$PWD/test-file4.txt"
 FILE4_CONTENT="44444 Hello, World! 44444"
-FILE4_HASH="EdfX8prcsmXYs7FxwSjp5hqCuB3kwinWvM6KwNdFFzNj"
+FILE4_HASH="4KQZTD1ejdyZr1sJ5by6WQyfEPtaU1Tib57mDeCEaiW8"
 
 echo "Publish and get providers ULTRA test:"
 
