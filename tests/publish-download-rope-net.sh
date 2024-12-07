@@ -59,7 +59,7 @@ $CLI_BIN -d publish-file ${N_NAMES[0]} "$FILE_NAME" 2> /dev/null
 
 init_asserts
 
-RESULT=$($CLI_BIN -d download-file ${N_NAMES[$((variable - 1))]} "${BLAKE3_HASH}" 2> /dev/null)
+RESULT=$($CLI_BIN -d download-file ${N_NAMES[$(($NODE_COUNT - 1))]} "${BLAKE3_HASH}" 2> /dev/null)
 should_be_equal "$RESULT" "$FILE_CONTENT"
 
 
