@@ -12,7 +12,6 @@ N2="test_n2"
 N2_SEED=2
 FILE_NAME="test-file.txt"
 FILE_CONTENT="Hello, World!"
-BLAKE3_HASH="4TVCksdig9bKrC6JRRQeYqsnDTf9gUXUTYXM7JGiGzM8"
 echo "Provide and download file test:"
 
 # run daemon
@@ -38,12 +37,12 @@ sleep 0.1
 
 # create and provide file
 echo "${FILE_CONTENT}" > "$FILE_NAME"
-$CLI_BIN -d provide-file $N1 "$FILE_NAME" &> /dev/null
+FILE_ID=$($CLI_BIN provide-file $N1 "$FILE_NAME" 2> /dev/null)
 
 init_asserts
 
 # download file
-RESULT=$($CLI_BIN -d download-file $N2 "${BLAKE3_HASH}" 2> /dev/null)
+RESULT=$($CLI_BIN -d download-file $N2 "${FILE_ID}" 2> /dev/null)
 should_contain "$RESULT" "${FILE_CONTENT}"
 
 # cleanup
