@@ -352,7 +352,7 @@ async fn handle_download_file(node_name: String, id: String, context: &AppContex
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
     let file = node
-        .ask(DownloadFile { id })
+        .ask(DownloadFile { obj_id_str: id })
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
