@@ -38,7 +38,7 @@ pub enum SwarmRunnerMessage {
     /// no provider was found.
     GetProviders {
         obj_id: proto::Hash,
-        response_sender: oneshot::Sender<HashSet<PeerId>>,
+        response_sender: oneshot::Sender<Vec<PeerId>>,
     },
     /// Start providing a file in the network. Only the node that sent this message
     /// will be a provider for the file. The fact of providing the file will be
@@ -72,7 +72,7 @@ pub enum SwarmRunnerMessage {
     /// up to `k` peers that are closest to the given key.
     GetClosestPeers {
         obj_id: proto::Hash,
-        response_sender: oneshot::Sender<HashSet<PeerId>>,
+        response_sender: oneshot::Sender<Vec<PeerId>>,
     },
     GetAddresses {
         response_sender: oneshot::Sender<Result<Vec<Multiaddr>>>,
@@ -150,6 +150,7 @@ impl SwarmContext {
                 obj_id,
                 response_sender,
             } => {
+                self.print_neighbours();
                 let query_id = self
                     .swarm
                     .behaviour_mut()
@@ -157,7 +158,7 @@ impl SwarmContext {
                     .get_providers(kad::RecordKey::new(&obj_id.bytes));
                 self.behaviour
                     .pending_inner_get_providers
-                    .insert(query_id, response_sender);
+                    .insert(query_id, (Vec::new(), response_sender));
                 Ok(false)
             }
 
@@ -169,10 +170,9 @@ impl SwarmContext {
             } => {
                 debug!(
                     "Sending a get object request for obj_id {} to peer {}",
-                    bs58::encode(kad::RecordKey::new(&obj_id.bytes)).into_string(),
+                    obj_id.to_string(),
                     peer_id.to_base58()
                 );
-
                 // If the local peer
                 if &peer_id == self.swarm.local_peer_id() {
                     debug!(
@@ -191,14 +191,16 @@ impl SwarmContext {
                     }
                 } else {
                     // Send a request to the peer
+                    let query_obj: TypedObject = proto::QueryObject {
+                        query_object: proto::SimpleIDQuery { id: obj_id.clone() }.into(),
+                    }
+                    .into();
+                    let query_obj_id = proto::Hash::try_from(&query_obj).unwrap();
                     let query_id = self.swarm.behaviour_mut().object_sender.send_request(
                         &peer_id,
                         object_sender::ObjectSendRequest {
-                            object: proto::QueryObject {
-                                query_object: proto::SimpleIDQuery { id: obj_id.clone() }.into(),
-                            }
-                            .into(),
-                            object_id: obj_id,
+                            object: query_obj,
+                            object_id: query_obj_id,
                         },
                     );
 
@@ -206,7 +208,6 @@ impl SwarmContext {
                         .pending_inner_get_object
                         .insert(query_id, response_sender);
                 }
-
                 self.print_neighbours();
                 Ok(false)
             }
@@ -214,6 +215,7 @@ impl SwarmContext {
                 obj_id,
                 response_sender,
             } => {
+                self.print_neighbours();
                 let query_id = self
                     .swarm
                     .behaviour_mut()
