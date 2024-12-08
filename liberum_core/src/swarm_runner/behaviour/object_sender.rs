@@ -68,6 +68,9 @@ impl SwarmContext {
                     err = format!("{error}"),
                     "Outbound failure"
                 );
+                if let Some(sender) = self.behaviour.pending_inner_get_object.remove(&request_id) {
+                    let _ = sender.send(Err(anyhow!("Outbound failure").context(error)));
+                }
             }
             e => debug!(
                 node = self.node_snapshot.name,
