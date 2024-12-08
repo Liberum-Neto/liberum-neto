@@ -16,6 +16,7 @@ pub enum ObjectEnum {
     Result(ResultObject),
 }
 impl Object for ObjectEnum {
+    // TODO couldn't we do this better? Is it possible to force a member of an enum to implement a trait??
     fn get_uuid(&self) -> UUID {
         match self {
             ObjectEnum::Group(group_object) => group_object.get_uuid(),
