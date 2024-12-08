@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Messages that can be sent from the UI to the daemon
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug,Clone)]
 pub enum DaemonRequest {
     NewNode {
         node_name: String,
