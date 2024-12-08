@@ -167,7 +167,7 @@ pub fn str_to_file_id(s: &str) -> Result<libp2p::kad::RecordKey> {
 }
 
 pub fn str_to_file_id_bytes(s: &str) -> Result<[u8; 32]> {
-    let k: Vec<u8> = bs58::decode::<Vec<u8>>(s.into()).into_vec()?;
+    let k: Vec<u8> = bs58::decode(s).into_vec()?;
     let mut id = [0u8; 32];
     id.copy_from_slice(&k);
     Ok(id)
