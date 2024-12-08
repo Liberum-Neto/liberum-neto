@@ -63,6 +63,9 @@ pub enum SwarmRunnerMessage {
         record: kad::Record,
         response_sender: oneshot::Sender<Result<()>>,
     },
+    GetAddresses {
+        response_sender: oneshot::Sender<Result<Vec<Multiaddr>>>,
+    },
 }
 
 /// Methods on SwarmContext for handling SwarmRunner messages
@@ -221,6 +224,20 @@ impl SwarmContext {
                 self.behaviour
                     .pending_publish_file
                     .insert(qid, response_sender);
+                Ok(false)
+            }
+
+            SwarmRunnerMessage::GetAddresses { response_sender } => {
+                debug!("Getting external addresses");
+
+                let addrs = self
+                    .swarm
+                    .listeners()
+                    .map(|a| a.clone())
+                    .collect::<Vec<Multiaddr>>();
+
+                let _ = response_sender.send(Ok(addrs));
+
                 Ok(false)
             }
         }

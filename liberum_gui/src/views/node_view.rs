@@ -88,12 +88,12 @@ impl NodeView {
                     ui.colored_label(Color32::from_rgb(0, 100, 200), "Addresses:");
 
                     ui.vertical(|ui| {
-                        for addr in &node_info.addresses {
+                        for addr in &node_info.config_addresses {
                             ui.label(addr);
                         }
                     });
 
-                    if node_info.addresses.is_empty() {
+                    if node_info.config_addresses.is_empty() {
                         ui.label("No addresses");
                     }
                 });
