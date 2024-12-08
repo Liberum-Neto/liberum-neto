@@ -7,16 +7,19 @@ import subprocess
 CORE_BIN = "./target/release/liberum_core"
 CLI_BIN = "./target/release/liberum_cli"
 INIT_COUNT = 5
-NODE_COUNT = 25
+NODE_COUNT = 200
+MEASURE_EVERY=3
+DOWNLOAD_EVERY=3
 FILE_NAME = os.path.dirname(os.path.realpath(__file__)) + "/test-file.txt"
 FILE_CONTENT = "Hello, World!"
+AVG_CLI_TIME_NORMALIZATION=1.6 # ms
 
 NODE_ADDR_PREFIX = "/ip6/::1/udp/"
 NODE_ADDR_SUFFIX = "/quic-v1"
 
-subprocess.run(["killall", "liberum_core"])
-os.system(CORE_BIN + "$CORE_BIN --daemon  &> /dev/null &")
-time.sleep(0.5)
+# subprocess.run(["killall", "liberum_core"])
+# os.system(CORE_BIN + "$CORE_BIN --daemon  &> /dev/null &")
+# time.sleep(0.5)
 
 # create nodes
 N_NAMES=[]
@@ -36,10 +39,18 @@ N_NAMES.append(N)
 N_IDS.append(ID)
 N_ADDRESSES.append(N_ADDR)
 
+# tN=100000
+# total_time = 0
+# for i in range(0,tN):
+#     t0 = time.time()
+#     subprocess.run([CLI_BIN, "-d", "get-peer-id", N], stdout=subprocess.PIPE).stdout.decode().strip()
+#     total_time += time.time()-t0
+# print("Średni czas użycia cli: ", total_time/tN*1000, "ms")
+# exit(0)
+
 # create and provide file
 with open(FILE_NAME, mode="w") as f:
     f.write(FILE_CONTENT)
-
 
 RESULTS=[]
 FIND_TIMES=[]
@@ -62,43 +73,60 @@ for i in range (1, NODE_COUNT) :
     if i == INIT_COUNT:
         FILE_ID=subprocess.run([CLI_BIN, "publish-file", N_NAMES[0], FILE_NAME], stdout=subprocess.PIPE).stdout.decode().strip()
     if i > INIT_COUNT:
-        RESULTS.append([])
-        FIND_TIMES.append(0)
+        if i % MEASURE_EVERY == 0:
+            RESULTS.append([i+INIT_COUNT, []])
+            FIND_TIMES.append([i+INIT_COUNT, 0])
+            for j in range(1, i):
+                if j % DOWNLOAD_EVERY == 0:
+                    t0 = time.time()
+                    RESULT=subprocess.run([CLI_BIN, "-d", "download-file", N_NAMES[j], FILE_ID], stdout=subprocess.PIPE).stdout.decode().strip()
+                    t = time.time()-t0
+                    cmp = FILE_CONTENT == RESULT
+                    RESULTS[-1][1].append(cmp)
+                    FIND_TIMES[-1][1] += t
+                FIND_TIMES[-1][1] = (FIND_TIMES[-1][1] / i) * 1000.0 - AVG_CLI_TIME_NORMALIZATION
 
-        for j in range(1, i):
-            t0 = time.time()
-            RESULT=subprocess.run([CLI_BIN, "-d", "download-file", N_NAMES[j], FILE_ID], stdout=subprocess.PIPE).stdout.decode().strip()
-            t = time.time()-t0
-            cmp = FILE_CONTENT == RESULT
-            RESULTS[-1].append(cmp)
-            FIND_TIMES[-1] += t
-        FIND_TIMES[-1] = (FIND_TIMES[-1] / i) * 1000.0
+
+    # if i == NODE_COUNT//2:
+    #     FILE_ID=subprocess.run([CLI_BIN, "publish-file", N_NAMES[0], FILE_NAME], stdout=subprocess.PIPE).stdout.decode().strip()
+
 
 for x in range(0, len(RESULTS)):
-    data = [i for i in range(len(RESULTS[x])) if RESULTS[x][i] == True]
-    X = [x] * len(data)
-    plt.scatter(X, data)
-plt.title("Udane wyszukania, " + str(INIT_COUNT) + " węzłów w sieci w chwili publikacji")
+    data = [i for i in range(len(RESULTS[x][1])) if RESULTS[x][1][i] == True]
+    X = [RESULTS[x][0]] * len(data)
+    plt.scatter(X, data, c='b')
+plt.title("Udane wyszukania, B=" + str(INIT_COUNT) + ", N=" +  str(NODE_COUNT))
 plt.ylabel("Numer węzła")
-plt.xlabel("Ilość nowych węzłów dodanych do sieci")
+plt.xlabel("n - ilość węzłów w sieci")
+plt.savefig('udane-wyszukania_B='+str(INIT_COUNT)+'_N='+str(NODE_COUNT)+".svg")
 plt.show()
 
 failed_counts = []
 for x in range(0, len(RESULTS)):
-    data = [i for i in range(len(RESULTS[x])) if RESULTS[x][i] == True]
-    failed = len(data) - len(RESULTS[x])
+    found = [i for i in range(len(RESULTS[x][1])) if RESULTS[x][1][i] == True]
+    failed = len(RESULTS[x][1]) - len(found)
     failed_counts.append(failed)
-plt.plot(failed_counts)
-plt.title("Liczba nieudanch wyszukań, " + str(INIT_COUNT) + " węzłów w sieci w chwili publikacji")
-plt.ylabel("iczba nieudanch wyszukań")
-plt.xlabel("Ilość nowych węzłów dodanych do sieci")
+X = [x[0] for x in RESULTS]
+print(X)
+print(failed_counts)
+print(RESULTS)
+
+plt.plot(X, failed_counts, 'b')
+plt.title("Liczba nieudanch wyszukań, B=" + str(INIT_COUNT) + ", N=" +  str(NODE_COUNT))
+plt.ylabel("Liczba nieudanch wyszukań")
+plt.xlabel("n - ilość węzłów w sieci")
+plt.savefig('nieudane-wyszukania_B='+str(INIT_COUNT)+'_N='+str(NODE_COUNT)+".svg")
 plt.show()
 
-plt.plot(FIND_TIMES)
-plt.title("Średni czas odnajdywania, " + str(INIT_COUNT) + " węzłów w sieci w chwili publikacji")
+X = [x[0] for x in FIND_TIMES]
+Y = [x[1] for x in FIND_TIMES]
+plt.plot(X, Y, 'b')
+plt.title("Średni czas odnajdywania, B=" + str(INIT_COUNT) + ", N=" +  str(NODE_COUNT))
 plt.ylabel("Czas [ms]")
-plt.xlabel("Ilość nowych węzłów dodanych do sieci")
+plt.xlabel("n - ilość węzłów w sieci")
+plt.savefig('czas-wyszukania_B='+str(INIT_COUNT)+'_N='+str(NODE_COUNT)+".svg")
 plt.show()
+
 
 for i in range(0, NODE_COUNT):
     subprocess.run([CLI_BIN, "stop-node", N_NAMES[i]])
