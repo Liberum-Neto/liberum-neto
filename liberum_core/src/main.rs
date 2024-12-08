@@ -1,6 +1,8 @@
 pub mod connection;
+pub mod liberum_vault;
 pub mod node;
 pub mod swarm_runner;
+
 use anyhow::{anyhow, Result};
 use connection::listen;
 use daemonize::*;
@@ -35,7 +37,7 @@ fn setup_logging() {
         .with_target(true)
         .compact()
         .with_file(true)
-        .with_env_filter("liberum_core=debug")
+        .with_env_filter("liberum_core=error")
         .init();
 }
 

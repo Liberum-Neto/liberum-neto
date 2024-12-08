@@ -12,7 +12,6 @@ N2="test_n2"
 N2_SEED=2
 FILE_NAME="$PWD/test-file.txt"
 FILE_CONTENT="Hello, World!"
-BLAKE3_HASH="7cLWjV2o1VsqwkAnyDWK3UemS2psCBHjj865Dovpu4p1"
 
 echo "Publish and download file test:"
 
@@ -37,13 +36,13 @@ $CLI_BIN -d start-node $N2 2> /dev/null
 # wait for nodes to connect
 sleep 0.1
 
-# create and provide file
+# create and publish file
 echo "${FILE_CONTENT}" > "$FILE_NAME"
-$CLI_BIN -d publish-file $N1 "$FILE_NAME" &> /dev/null
+FILE_ID=$($CLI_BIN publish-file $N1 "$FILE_NAME" 2> /dev/null)
 
 init_asserts
 # download file
-RESULT=$($CLI_BIN -d download-file $N2 "${BLAKE3_HASH}" 2> /dev/null)
+RESULT=$($CLI_BIN -d download-file $N2 "${FILE_ID}" 2> /dev/null)
 should_contain "$RESULT" "${FILE_CONTENT}"
 
 # cleanup
