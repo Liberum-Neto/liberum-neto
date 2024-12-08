@@ -110,8 +110,10 @@ impl SwarmContext {
             } => {
                 let dial_opts = DialOpts::from(peer_addr.clone());
 
-                if let hash_map::Entry::Vacant(entry) =
-                    self.behaviour.pending_dial.entry(dial_opts.connection_id())
+                if let hash_map::Entry::Vacant(entry) = self
+                    .behaviour
+                    .pending_inner_dial
+                    .entry(dial_opts.connection_id())
                 {
                     match self.swarm.dial(dial_opts) {
                         Ok(()) => {
@@ -151,7 +153,7 @@ impl SwarmContext {
                     .kademlia
                     .get_providers(kad::RecordKey::new(&obj_id.bytes));
                 self.behaviour
-                    .pending_get_providers
+                    .pending_inner_get_providers
                     .insert(query_id, response_sender);
                 Ok(false)
             }
@@ -198,7 +200,7 @@ impl SwarmContext {
                     );
 
                     self.behaviour
-                        .pending_get_object
+                        .pending_inner_get_object
                         .insert(query_id, response_sender);
                 }
                 Ok(false)
@@ -213,7 +215,7 @@ impl SwarmContext {
                     .kademlia
                     .get_closest_peers(obj_id.bytes.to_vec());
                 self.behaviour
-                    .pending_get_closest_peers
+                    .pending_inner_get_closest_peers
                     .insert(query_id, response_sender);
                 Ok(false)
             }
@@ -249,7 +251,7 @@ impl SwarmContext {
                 );
 
                 self.behaviour
-                    .pending_send_object
+                    .pending_inner_send_object
                     .insert(request_id, response_sender);
                 Ok(false)
             }
@@ -296,7 +298,7 @@ impl SwarmContext {
                 .start_providing(obj_id_kad.clone())
                 .unwrap();
             self.behaviour
-                .pending_start_providing
+                .pending_inner_start_providing
                 .insert(query_id, response_sender);
         }
     }

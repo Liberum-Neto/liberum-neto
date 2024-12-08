@@ -33,15 +33,16 @@ pub struct BehaviourContext {
     /// A hashmap of resources that are provided by the node. Should be replaced with
     /// an implementation of VAULT
     pub providing: HashMap<proto::Hash, TypedObject>, // TODO VAULT sHOULD REPLACE THIS
-    pub pending_start_providing: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
-    pub pending_send_object: HashMap<OutboundRequestId, oneshot::Sender<Result<ResultObject>>>,
-    pub pending_get_providers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
-    pub pending_get_object: HashMap<OutboundRequestId, oneshot::Sender<Result<TypedObject>>>,
-    pub pending_dial: HashMap<ConnectionId, oneshot::Sender<Result<()>>>,
-    pub pending_get_closest_peers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
-    pub pending_object_start_providing:
+    pub pending_inner_start_providing: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
+    pub pending_inner_send_object:
+        HashMap<OutboundRequestId, oneshot::Sender<Result<ResultObject>>>,
+    pub pending_inner_get_providers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
+    pub pending_inner_get_object: HashMap<OutboundRequestId, oneshot::Sender<Result<TypedObject>>>,
+    pub pending_inner_dial: HashMap<ConnectionId, oneshot::Sender<Result<()>>>,
+    pub pending_inner_get_closest_peers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
+    pub pending_outer_start_providing:
         HashMap<kad::QueryId, (proto::Hash, ResponseChannel<ObjectResponse>)>,
-    pub pending_object_requests: HashMap<
+    pub pending_outer_get_object: HashMap<
         proto::Hash,
         (
             request_response::InboundRequestId,
@@ -54,14 +55,14 @@ impl BehaviourContext {
     pub fn new() -> Self {
         BehaviourContext {
             providing: HashMap::new(),
-            pending_start_providing: HashMap::new(),
-            pending_object_start_providing: HashMap::new(),
-            pending_send_object: HashMap::new(),
-            pending_get_providers: HashMap::new(),
-            pending_get_object: HashMap::new(),
-            pending_dial: HashMap::new(),
-            pending_get_closest_peers: HashMap::new(),
-            pending_object_requests: HashMap::new(),
+            pending_inner_start_providing: HashMap::new(),
+            pending_outer_start_providing: HashMap::new(),
+            pending_inner_send_object: HashMap::new(),
+            pending_inner_get_providers: HashMap::new(),
+            pending_inner_get_object: HashMap::new(),
+            pending_inner_dial: HashMap::new(),
+            pending_inner_get_closest_peers: HashMap::new(),
+            pending_outer_get_object: HashMap::new(),
         }
     }
 }

@@ -207,7 +207,7 @@ impl SwarmContext {
             } => {
                 // If it was caused by using the Dial message, then send the response
                 if endpoint.is_dialer() {
-                    if let Some(sender) = self.behaviour.pending_dial.remove(&connection_id) {
+                    if let Some(sender) = self.behaviour.pending_inner_dial.remove(&connection_id) {
                         let _ = sender.send(Ok(()));
                     }
                 }
@@ -235,7 +235,7 @@ impl SwarmContext {
                     error = format!("{error}"),
                     "Outgoing connection error"
                 );
-                if let Some(sender) = self.behaviour.pending_dial.remove(&connection_id) {
+                if let Some(sender) = self.behaviour.pending_inner_dial.remove(&connection_id) {
                     let _ = sender.send(Err(anyhow!(error)));
                 }
             }

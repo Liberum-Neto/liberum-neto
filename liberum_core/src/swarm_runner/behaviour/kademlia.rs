@@ -112,7 +112,7 @@ impl SwarmContext {
         }
 
         // Respond to the caller of StartProviding
-        if let Some(sender) = self.behaviour.pending_start_providing.remove(&id) {
+        if let Some(sender) = self.behaviour.pending_inner_start_providing.remove(&id) {
             match result {
                 Ok(_) => {
                     let _ = sender.send(Ok(()));
@@ -122,7 +122,7 @@ impl SwarmContext {
                 }
             }
         } else if let Some((object_id, response_channel)) =
-            self.behaviour.pending_object_start_providing.remove(&id)
+            self.behaviour.pending_outer_start_providing.remove(&id)
         {
             let _ = self.swarm.behaviour_mut().object_sender.send_response(
                 response_channel,
@@ -143,7 +143,7 @@ impl SwarmContext {
     ) {
         match result {
             Ok(closest_peers) => {
-                if let Some(sender) = self.behaviour.pending_get_closest_peers.remove(&id) {
+                if let Some(sender) = self.behaviour.pending_inner_get_closest_peers.remove(&id) {
                     let peers: Vec<PeerId> = closest_peers
                         .peers
                         .iter()
@@ -179,7 +179,7 @@ impl SwarmContext {
     ) {
         match result {
             Ok(GetProvidersOk::FoundProviders { key: _, providers }) => {
-                if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
+                if let Some(sender) = self.behaviour.pending_inner_get_providers.remove(&id) {
                     let _ = sender.send(providers).inspect_err(|e| {
                         debug!(
                             node = self.node_snapshot.name,
@@ -203,7 +203,7 @@ impl SwarmContext {
                     node = self.node_snapshot.name,
                     "Get providers didn't find any new records"
                 );
-                if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
+                if let Some(sender) = self.behaviour.pending_inner_get_providers.remove(&id) {
                     let _ = sender.send(HashSet::new()).inspect_err(|e| {
                         debug!(
                             qid = format!("{id}"),
