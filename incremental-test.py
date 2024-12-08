@@ -33,9 +33,9 @@ AVG_CLI_TIME_NORMALIZATION=1.6 # ms
 NODE_ADDR_PREFIX = "/ip6/::1/udp/"
 NODE_ADDR_SUFFIX = "/quic-v1"
 
-subprocess.run(["killall", "liberum_core"])
-os.system(CORE_BIN + "$CORE_BIN --daemon  &> /dev/null &")
-time.sleep(0.5)
+# subprocess.run(["killall", "liberum_core"])
+# os.system(CORE_BIN + "$CORE_BIN --daemon  &> /dev/null &")
+# time.sleep(0.5)
 
 # create nodes
 N_NAMES=[]
