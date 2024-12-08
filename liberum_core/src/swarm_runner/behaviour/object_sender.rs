@@ -118,9 +118,9 @@ impl SwarmContext {
             response = format!("{response:?}"),
             "received object sender response!"
         );
-        if let Some(sender) = self.behaviour.pending_get_object.remove(&request_id) {
+        if let Some(sender) = self.behaviour.pending_inner_get_object.remove(&request_id) {
             let _ = sender.send(Ok(response.object));
-        } else if let Some(sender) = self.behaviour.pending_send_object.remove(&request_id) {
+        } else if let Some(sender) = self.behaviour.pending_inner_send_object.remove(&request_id) {
             if let ObjectEnum::Result(r) = parser::parse_typed(response.object).await.unwrap() {
                 let _ = sender.send(Ok(r));
             } else {
@@ -159,7 +159,7 @@ impl SwarmContext {
             .start_providing(kad::RecordKey::from(id.bytes.to_vec()))
             .unwrap();
         self.behaviour
-            .pending_object_start_providing
+            .pending_outer_start_providing
             .insert(qid, (request.object_id, response_channel));
     }
 
