@@ -22,6 +22,8 @@ struct Cli {
     command: Command,
     #[arg(long, short)]
     debug_log: bool,
+    #[arg(long, short)]
+    machine_readable: bool,
 }
 
 /// Subcommands for the CLI
@@ -160,6 +162,10 @@ struct FileInfoRow {
     pub path: String,
 }
 
+struct HandlerContext {
+    machine_readable: bool,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let path = Path::new("/tmp/liberum-core/");
@@ -184,17 +190,25 @@ async fn main() -> Result<()> {
             .init();
     }
 
-    handle_command(cli.command, request_sender, response_receiver).await?;
+    let ctx = HandlerContext {
+        machine_readable: cli.machine_readable,
+    };
+    handle_command(ctx, cli.command, request_sender, response_receiver).await?;
 
     Ok(())
 }
 
-async fn handle_command(cmd: Command, req: RequestSender, res: ReseponseReceiver) -> Result<()> {
+async fn handle_command(
+    ctx: HandlerContext,
+    cmd: Command,
+    req: RequestSender,
+    res: ReseponseReceiver,
+) -> Result<()> {
     match cmd {
         Command::NewNode(cmd) => handle_new_node(cmd, req, res).await,
         Command::StartNode(cmd) => handle_start_node(cmd, req, res).await,
         Command::ConfigNode(cmd) => handle_config_node(cmd, req, res).await,
-        Command::ListNodes => handle_list_nodes(req, res).await,
+        Command::ListNodes => handle_list_nodes(ctx, req, res).await,
         Command::StopNode(cmd) => handle_stop_node(cmd, req, res).await,
         Command::ProvideFile(cmd) => handle_provide_file(cmd, req, res).await,
         Command::DownloadFile(cmd) => handle_download_file(cmd, req, res).await,
@@ -202,7 +216,7 @@ async fn handle_command(cmd: Command, req: RequestSender, res: ReseponseReceiver
         Command::GetPeerID(cmd) => handle_get_peer_id(cmd, req, res).await,
         Command::Dial(cmd) => handle_dial(cmd, req, res).await,
         Command::PublishFile(cmd) => handle_publish_file(cmd, req, res).await,
-        Command::GetPublishedFiles(cmd) => handle_get_published_files(cmd, req, res).await,
+        Command::GetPublishedFiles(cmd) => handle_get_published_files(ctx, cmd, req, res).await,
     }
 }
 
@@ -254,7 +268,11 @@ async fn handle_config_node(
     Ok(())
 }
 
-async fn handle_list_nodes(req: RequestSender, mut res: ReseponseReceiver) -> Result<()> {
+async fn handle_list_nodes(
+    ctx: HandlerContext,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
     debug!("Listing nodes...");
     req.send(DaemonRequest::ListNodes)
         .await
@@ -272,7 +290,13 @@ async fn handle_list_nodes(req: RequestSender, mut res: ReseponseReceiver) -> Re
                 .map(|info| info.into())
                 .collect::<Vec<NodeInfoRow>>();
             let mut table = Table::new(node_info_rows);
-            table.with(Style::modern());
+
+            if ctx.machine_readable {
+                table.with(Style::blank());
+            } else {
+                table.with(Style::modern());
+            }
+
             let table = table.to_string();
             println!("{table}");
         }
@@ -554,6 +578,7 @@ async fn handle_publish_file(
 }
 
 async fn handle_get_published_files(
+    ctx: HandlerContext,
     cmd: GetPublishedFiles,
     req: RequestSender,
     mut res: ReseponseReceiver,
@@ -575,7 +600,13 @@ async fn handle_get_published_files(
                 .map(|info| info.into())
                 .collect::<Vec<FileInfoRow>>();
             let mut table = Table::new(file_info_rows);
-            table.with(Style::modern());
+
+            if ctx.machine_readable {
+                table.with(Style::blank());
+            } else {
+                table.with(Style::modern());
+            }
+
             let table = table.to_string();
             println!("{table}");
         }
