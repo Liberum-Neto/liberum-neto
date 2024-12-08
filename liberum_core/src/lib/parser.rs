@@ -34,37 +34,37 @@ impl UUIDTyped for ObjectEnum {
 
 pub async fn parse_typed(object: TypedObject) -> Result<ObjectEnum> {
     match object.uuid {
-        GROUP_OBJECT_ID => {
+        GroupObject::UUID => {
             debug!("Parser: Group object: {:?}", object);
             todo!()
         }
-        SIGNED_OBJECT_ID => {
+        SignedObject::UUID => {
             debug!("Parser: Signed object: {:?}", object);
             todo!()
         }
-        PLAIN_FILE_OBJECT_ID => {
+        PlainFileObject::UUID => {
             debug!("Parser: Plain File Object: {:?}", object);
             let plain_file_object = PlainFileObject::try_from(&object)?;
             Ok(ObjectEnum::PlainFile(plain_file_object))
         }
-        EMPTY_OBJECT_ID => {
+        EmptyObject::UUID => {
             debug!("Parser: Empty Object: {:?}", object);
             // Do nothing
             Ok(ObjectEnum::Empty(EmptyObject {}))
         }
-        SIMPLE_ID_QUERY_ID => {
+        SimpleIDQuery::UUID => {
             debug!("Parser: Simple ID Query: {:?}", object);
             let query = SimpleIDQuery::try_from(&object).unwrap();
             Ok(ObjectEnum::SimpleIDQuery(query))
         }
-        QUERY_OBJECT_ID => {
+        QueryObject::UUID => {
             debug!("Parser: Got Query object: {:?}", object);
             let query = QueryObject::try_from(&object).unwrap();
             Ok(ObjectEnum::Query(QueryObject {
                 query_object: query.query_object,
             }))
         }
-        RESULT_OBJECT_ID => {
+        ResultObject::UUID => {
             debug!("Parser: Got Result object: {:?}", object);
             let obj = ResultObject::try_from(&object).unwrap();
             Ok(ObjectEnum::Result(obj))

@@ -20,7 +20,6 @@ use codec::AsymmetricMessageCodec;
 use futures::prelude::*;
 use tokio_util::codec::Decoder;
 
-use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
