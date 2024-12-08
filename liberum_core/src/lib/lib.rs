@@ -167,21 +167,19 @@ pub fn str_to_file_id(s: &str) -> Result<libp2p::kad::RecordKey> {
     Ok(k)
 }
 
-pub fn str_to_file_id_bytes(s: &str) -> Result<[u8; 32]> {
+pub fn str_to_file_id_bytes(s: &str) -> Result<proto::Hash> {
     let k: Vec<u8> = bs58::decode(s).into_vec()?;
     if k.len() != 32 {
         return Err(anyhow!("\"{s}\" is not a valid base58 ID."));
     }
-    let mut id = [0u8; 32];
-    id.copy_from_slice(&k);
-    Ok(id)
+    proto::Hash::try_from(k)
 }
 
 pub fn file_id_to_str(id: libp2p::kad::RecordKey) -> String {
     bs58::encode(id.to_vec()).into_string()
 }
-pub fn file_id_hash_to_str(id: &[u8; 32]) -> String {
-    bs58::encode(id.to_vec()).into_string()
+pub fn object_hash_to_str(id: &proto::Hash) -> String {
+    bs58::encode(id.bytes).into_string()
 }
 
 pub fn node_keypair_from_seed(seed: &str) -> libp2p::identity::Keypair {

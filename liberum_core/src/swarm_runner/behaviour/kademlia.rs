@@ -267,12 +267,12 @@ impl SwarmContext {
     pub fn get_object_from_vault(&mut self, key: proto::Hash) -> Option<proto::TypedObject> {
         let path = PathBuf::from("FILE_SHARE_SAVED_FILES")
             .join(self.node_snapshot.name.clone())
-            .join(liberum_core::file_id_hash_to_str(&key.bytes.clone()));
+            .join(liberum_core::object_hash_to_str(&key));
 
         match std::fs::read(&path) {
             Ok(data) => {
                 debug!("Getting object from vault: {:?}", data);
-                let obj = bincode::deserialize::<proto::TypedObject>(&data).unwrap();
+                let obj = proto::TypedObject::try_from(&data).unwrap();
                 Some(obj)
             }
             Err(e) => {
@@ -294,7 +294,7 @@ impl SwarmContext {
         let data = bincode::serialize(&obj).unwrap();
         debug!("Putting file to vault: {:?}", data);
 
-        let path = dir.join(liberum_core::file_id_hash_to_str(&id.bytes));
+        let path = dir.join(liberum_core::object_hash_to_str(&id));
 
         if let Err(e) = std::fs::write(path.clone(), data) {
             error!(

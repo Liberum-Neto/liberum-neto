@@ -137,10 +137,10 @@ impl TypedObject {
         TYPED_OBJECT_ID
     }
 }
-impl TryFrom<Vec<u8>> for TypedObject {
+impl TryFrom<&Vec<u8>> for TypedObject {
     type Error = Error;
-    fn try_from(value: Vec<u8>) -> std::result::Result<Self, Self::Error> {
-        bincode::deserialize::<TypedObject>(&value).map_err(|e| anyhow!(e))
+    fn try_from(value: &Vec<u8>) -> std::result::Result<Self, Self::Error> {
+        bincode::deserialize::<TypedObject>(value).map_err(|e| anyhow!(e))
     }
 }
 
