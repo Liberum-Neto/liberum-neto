@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
 use liberum_core::node_config::NodeConfig;
-use liberum_core::types::NodeInfo;
+use liberum_core::types::{FileInfo, NodeInfo};
 use liberum_core::{node_config::BootstrapNode, DaemonError, DaemonRequest, DaemonResponse};
 use libp2p::Multiaddr;
 use std::path::Path;
@@ -41,6 +41,7 @@ enum Command {
     GetPeerID(GetPeerID),
     Dial(Dial),
     PublishFile(PublishFile),
+    GetPublishedFiles(GetPublishedFiles),
 }
 
 #[derive(Parser)]
@@ -140,11 +141,23 @@ struct PublishFile {
     path: PathBuf,
 }
 
+#[derive(Parser)]
+struct GetPublishedFiles {
+    #[arg()]
+    node_name: String,
+}
+
 #[derive(Tabled)]
 struct NodeInfoRow {
     pub name: String,
     pub is_running: bool,
     pub first_address: String,
+}
+
+#[derive(Tabled)]
+struct FileInfoRow {
+    pub id: String,
+    pub path: String,
 }
 
 #[tokio::main]
@@ -189,6 +202,7 @@ async fn handle_command(cmd: Command, req: RequestSender, res: ReseponseReceiver
         Command::GetPeerID(cmd) => handle_get_peer_id(cmd, req, res).await,
         Command::Dial(cmd) => handle_dial(cmd, req, res).await,
         Command::PublishFile(cmd) => handle_publish_file(cmd, req, res).await,
+        Command::GetPublishedFiles(cmd) => handle_get_published_files(cmd, req, res).await,
     }
 }
 
@@ -539,6 +553,43 @@ async fn handle_publish_file(
     }
 }
 
+async fn handle_get_published_files(
+    cmd: GetPublishedFiles,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    req.send(DaemonRequest::GetPublishedFiles {
+        node_name: cmd.node_name,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    let resp = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))?;
+    match resp {
+        Ok(DaemonResponse::PublishedFilesList { files }) => {
+            let file_info_rows = files
+                .iter()
+                .map(|info| info.into())
+                .collect::<Vec<FileInfoRow>>();
+            let mut table = Table::new(file_info_rows);
+            table.with(Style::modern());
+            let table = table.to_string();
+            println!("{table}");
+        }
+        Err(e) => {
+            println!("Error getting published files list: {e}");
+            bail!("Error getting published files list");
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
+        }
+    }
+    Ok(())
+}
+
 async fn handle_response(
     response_receiver: &mut tokio::sync::mpsc::Receiver<Result<DaemonResponse, DaemonError>>,
 ) -> Result<()> {
@@ -562,6 +613,15 @@ impl From<&NodeInfo> for NodeInfoRow {
                 .first()
                 .unwrap_or(&"N/A".to_string())
                 .to_string(),
+        }
+    }
+}
+
+impl From<&FileInfo> for FileInfoRow {
+    fn from(value: &FileInfo) -> Self {
+        Self {
+            id: value.id.clone(),
+            path: value.path.as_os_str().to_str().unwrap_or("-").to_string(),
         }
     }
 }
