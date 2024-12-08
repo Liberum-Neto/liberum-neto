@@ -93,11 +93,11 @@ impl Node {
     /// Message called on the node from the daemon to get the list of providers
     /// of an id. Changes the ID from string to libp2p format and just passes it to the swarm.
     #[message]
-    pub async fn get_providers(&mut self, id: String) -> Result<HashSet<PeerId>> {
+    pub async fn get_providers(&mut self, obj_id_str: String) -> Result<HashSet<PeerId>> {
         debug!(node = self.name, "Node got GetProviders");
-        let id_key = str_to_file_id(&id)?;
-        let id = proto::Hash {
-            bytes: id_key.to_vec().as_slice().try_into()?,
+        let obj_id_kad = str_to_file_id(&obj_id_str)?;
+        let obj_id = proto::Hash {
+            bytes: obj_id_kad.to_vec().as_slice().try_into()?,
         };
         let (send, recv) = oneshot::channel();
 
@@ -105,7 +105,7 @@ impl Node {
             .as_mut()
             .unwrap()
             .send(SwarmRunnerMessage::GetProviders {
-                id,
+                obj_id: obj_id,
                 response_sender: send,
             })
             .await?;
@@ -138,7 +138,7 @@ impl Node {
             .unwrap()
             .send(SwarmRunnerMessage::ProvideObject {
                 object,
-                id: obj_id.clone(),
+                obj_id: obj_id.clone(),
                 response_sender: resp_send,
             })
             .await?;
@@ -162,7 +162,7 @@ impl Node {
             .as_mut()
             .unwrap()
             .send(SwarmRunnerMessage::GetProviders {
-                id: id_hash.clone(),
+                obj_id: id_hash.clone(),
                 response_sender: resp_send,
             })
             .await?;
@@ -190,8 +190,8 @@ impl Node {
                 .as_mut()
                 .unwrap()
                 .send(SwarmRunnerMessage::GetObject {
-                    id: id_hash.clone(),
-                    peer: peer.clone(),
+                    obj_id: id_hash.clone(),
+                    peer_id: peer.clone(),
                     response_sender: file_sender,
                 });
 
@@ -289,25 +289,25 @@ impl Node {
         }
         .into();
 
-        let id = proto::Hash::try_from(&object).unwrap();
-        let id_str = bs58::encode(&id.bytes).into_string();
+        let obj_id = proto::Hash::try_from(&object).unwrap();
+        let obj_id_str = bs58::encode(&obj_id.bytes).into_string();
 
         let (resp_send, resp_recv) = oneshot::channel();
         self.swarm_sender
             .as_mut()
             .unwrap()
             .send(SwarmRunnerMessage::GetClosestPeers {
-                id: id.clone(),
+                obj_id: obj_id.clone(),
                 response_sender: resp_send,
             })
             .await?;
 
         let peers = resp_recv.await?;
         if peers.is_empty() {
-            return Err(anyhow!("Could not find provider for file {id_str}.").into());
+            return Err(anyhow!("Could not find provider for file {obj_id_str}.").into());
         }
 
-        let k: i32 = 20;
+        let kad_k_parameter: i32 = 20;
         let mut successes = 0;
         for peer in &peers {
             let (send, recv) = oneshot::channel();
@@ -316,8 +316,8 @@ impl Node {
                 .unwrap()
                 .send(SwarmRunnerMessage::SendObject {
                     object: object.clone(),
-                    id: id.clone(),
-                    peer: peer.clone(),
+                    obj_id: obj_id.clone(),
+                    peer_id: peer.clone(),
                     response_sender: send,
                 })
                 .await?;
@@ -326,7 +326,7 @@ impl Node {
                 match obj {
                     Ok(ResultObject { result: Ok(_) }) => {
                         successes += 1;
-                        if successes >= k {
+                        if successes >= kad_k_parameter {
                             break;
                         }
                     }
@@ -336,7 +336,7 @@ impl Node {
                 }
             }
             if successes >= 1 {
-                return Ok(id_str);
+                return Ok(obj_id_str);
             }
         }
         Err(anyhow!("Could not publish file"))
@@ -344,8 +344,8 @@ impl Node {
 
     #[message]
     pub async fn provide_object(&mut self, object: proto::TypedObject) -> Result<String> {
-        let id = proto::Hash::try_from(&object).unwrap();
-        let id_str = id.to_string();
+        let obj_id = proto::Hash::try_from(&object).unwrap();
+        let obj_id_str = obj_id.to_string();
 
         let (resp_send, _) = oneshot::channel();
         let _ = self
@@ -354,12 +354,12 @@ impl Node {
             .unwrap()
             .send(SwarmRunnerMessage::ProvideObject {
                 object,
-                id,
+                obj_id: obj_id,
                 response_sender: resp_send,
             })
             .await?;
 
-        Ok(id_str)
+        Ok(obj_id_str)
     }
 
     #[message]
@@ -386,9 +386,9 @@ impl Node {
     pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {
         let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.name.clone());
         std::fs::create_dir_all(&dir).ok();
-        let id = proto::Hash::try_from(&obj).unwrap();
+        let obj_id = proto::Hash::try_from(&obj).unwrap();
 
-        let path = dir.join(id.to_string());
+        let path = dir.join(obj_id.to_string());
 
         if let Err(e) = std::fs::write(path.clone(), obj.data) {
             error!(
