@@ -56,6 +56,19 @@ impl SwarmContext {
                         .await
                 }
             },
+            request_response::Event::OutboundFailure {
+                peer,
+                request_id,
+                error,
+            } => {
+                error!(
+                    node = self.node_snapshot.name,
+                    peeer = peer.to_base58(),
+                    request_id = format!("{request_id}"),
+                    err = format!("{error}"),
+                    "Outbound failure"
+                );
+            }
             e => debug!(
                 node = self.node_snapshot.name,
                 "Received request_response event! {e:?}"

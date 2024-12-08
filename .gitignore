@@ -1,3 +1,4 @@
 .vscode
 target/
-FILE_SHARE_SAVED_FILES/
+*.svg
+*.png

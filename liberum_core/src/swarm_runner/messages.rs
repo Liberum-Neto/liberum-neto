@@ -9,7 +9,6 @@ use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::PeerId;
 use libp2p::{kad, Multiaddr};
 use std::collections::hash_map;
-use std::collections::HashSet;
 use tokio::sync::oneshot;
 use tracing::error;
 use tracing::{debug, info};

@@ -13,7 +13,6 @@ use libp2p::{
     },
     PeerId,
 };
-use std::collections::HashSet;
 
 use tracing::{debug, error, info, warn};
 
