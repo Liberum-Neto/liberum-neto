@@ -5,8 +5,8 @@ source "$SCRIPT_DIR"/lib/asserts.sh
 CORE_BIN=$1
 CLI_BIN=$2
 
-INIT_COUNT=5
-NODE_COUNT=30
+INIT_COUNT=10
+NODE_COUNT=100
 
 FILE_NAME="$PWD/test-file.txt"
 FILE_CONTENT="Hello, World!"
@@ -31,7 +31,7 @@ printf "${BLUE}Skipping test logs for creating $NODE_COUNT nodes...${NC}\n"
 for (( i = 1; i <= $INIT_COUNT; i++ )); do
     {
     N="test_n$i"
-    N_ADDR="${NODE_ADDR_PREFIX}$(($i + 52136))${NODE_ADDR_SUFFIX}"
+    N_ADDR="${NODE_ADDR_PREFIX}$(($i + 22136))${NODE_ADDR_SUFFIX}"
 
     $CLI_BIN -d new-node $N --id-seed $i &> /dev/null
     $CLI_BIN -d config-node $N add-external-addr $N_ADDR &> /dev/null
@@ -61,10 +61,10 @@ init_asserts
 COUNT_PASS=0
 COUNT_FAIL=0
 set +x
-for (( i = 1; i <= $NODE_COUNT; i++ )); do
+for (( i = $INIT_COUNT+1; i <= $((INIT_COUNT + NODE_COUNT)); i++ )); do
     {
     N="test_n$i"
-    N_ADDR="${NODE_ADDR_PREFIX}$(($i + 52136))${NODE_ADDR_SUFFIX}"
+    N_ADDR="${NODE_ADDR_PREFIX}$(($i + 23136))${NODE_ADDR_SUFFIX}"
 
     $CLI_BIN -d new-node $N --id-seed $i &> /dev/null
     $CLI_BIN -d config-node $N add-external-addr $N_ADDR &> /dev/null
@@ -78,7 +78,8 @@ for (( i = 1; i <= $NODE_COUNT; i++ )); do
     N_IDS+=("$ID")
     N_ADDRESSES+=("$N_ADDR")
 
-    sleep 0.5
+    sleep 0.1
+
     RESULT=$($CLI_BIN -d download-file ${N} "${FILE_ID}" 2> /dev/null)
     if [[ "$RESULT" == "$FILE_CONTENT" ]]; then
         COUNT_PASS=$((COUNT_PASS+1))
