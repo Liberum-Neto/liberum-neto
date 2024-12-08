@@ -3,13 +3,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import subprocess
+import random
 
 CORE_BIN = "./target/release/liberum_core"
 CLI_BIN = "./target/release/liberum_cli"
 INIT_COUNT = 5
-NODE_COUNT = 200
+NODE_COUNT = 50
 MEASURE_EVERY=3
 DOWNLOAD_EVERY=3
+DOWNLOAD_PERCENT=50
 FILE_NAME = os.path.dirname(os.path.realpath(__file__)) + "/test-file.txt"
 FILE_CONTENT = "Hello, World!"
 AVG_CLI_TIME_NORMALIZATION=1.6 # ms
@@ -17,9 +19,9 @@ AVG_CLI_TIME_NORMALIZATION=1.6 # ms
 NODE_ADDR_PREFIX = "/ip6/::1/udp/"
 NODE_ADDR_SUFFIX = "/quic-v1"
 
-# subprocess.run(["killall", "liberum_core"])
-# os.system(CORE_BIN + "$CORE_BIN --daemon  &> /dev/null &")
-# time.sleep(0.5)
+subprocess.run(["killall", "liberum_core"])
+os.system(CORE_BIN + "$CORE_BIN --daemon  &> /dev/null &")
+time.sleep(0.5)
 
 # create nodes
 N_NAMES=[]
@@ -74,17 +76,23 @@ for i in range (1, NODE_COUNT) :
         FILE_ID=subprocess.run([CLI_BIN, "publish-file", N_NAMES[0], FILE_NAME], stdout=subprocess.PIPE).stdout.decode().strip()
     if i > INIT_COUNT:
         if i % MEASURE_EVERY == 0:
-            RESULTS.append([i+INIT_COUNT, []])
-            FIND_TIMES.append([i+INIT_COUNT, 0])
+            results_temp = [i+INIT_COUNT,[]]
+            find_tiems_temp = [i+INIT_COUNT, 0]
+            measurements=0
             for j in range(1, i):
-                if j % DOWNLOAD_EVERY == 0:
+                if j % DOWNLOAD_EVERY == 0 and random.random()*100 > DOWNLOAD_PERCENT:
+                    measurements+=1
                     t0 = time.time()
                     RESULT=subprocess.run([CLI_BIN, "-d", "download-file", N_NAMES[j], FILE_ID], stdout=subprocess.PIPE).stdout.decode().strip()
                     t = time.time()-t0
                     cmp = FILE_CONTENT == RESULT
-                    RESULTS[-1][1].append(cmp)
-                    FIND_TIMES[-1][1] += t
-                FIND_TIMES[-1][1] = (FIND_TIMES[-1][1] / i) * 1000.0 - AVG_CLI_TIME_NORMALIZATION
+                    results_temp[1].append((j,cmp))
+                    find_tiems_temp[1] += t
+                if find_tiems_temp[1] > AVG_CLI_TIME_NORMALIZATION:
+                    find_tiems_temp[1] = (find_tiems_temp[1] / measurements) * 1000.0 - AVG_CLI_TIME_NORMALIZATION
+            if measurements > 0:
+                RESULTS.append(results_temp)
+                FIND_TIMES.append(find_tiems_temp)
 
 
     # if i == NODE_COUNT//2:
@@ -92,7 +100,8 @@ for i in range (1, NODE_COUNT) :
 
 
 for x in range(0, len(RESULTS)):
-    data = [i for i in range(len(RESULTS[x][1])) if RESULTS[x][1][i] == True]
+    print(RESULTS[x])
+    data = [i[0] for i in RESULTS[x][1] if i[1] == True]
     X = [RESULTS[x][0]] * len(data)
     plt.scatter(X, data, c='b')
 plt.title("Udane wyszukania, B=" + str(INIT_COUNT) + ", N=" +  str(NODE_COUNT))
@@ -103,7 +112,7 @@ plt.show()
 
 failed_counts = []
 for x in range(0, len(RESULTS)):
-    found = [i for i in range(len(RESULTS[x][1])) if RESULTS[x][1][i] == True]
+    found = [i[0] for i in RESULTS[x][1] if i[1] == True]
     failed = len(RESULTS[x][1]) - len(found)
     failed_counts.append(failed)
 X = [x[0] for x in RESULTS]
