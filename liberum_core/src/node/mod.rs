@@ -8,8 +8,8 @@ use kameo::messages;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::{BootstrapNode, NodeConfig};
 use liberum_core::parser;
-use liberum_core::proto::ResultObject;
 use liberum_core::proto::{self, TypedObject};
+use liberum_core::proto::{PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
@@ -125,12 +125,7 @@ impl Node {
     pub async fn provide_file(&mut self, path: PathBuf) -> Result<String> {
         let (resp_send, resp_recv) = oneshot::channel();
 
-        let object: proto::TypedObject = proto::PlainFileObject {
-            name: path.file_name().unwrap().to_str().unwrap().to_string(),
-            content: tokio::fs::read(path).await?,
-        }
-        .into();
-
+        let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
         let obj_id = proto::Hash::try_from(&object).unwrap();
 
         self.swarm_sender
@@ -144,15 +139,14 @@ impl Node {
             .await?;
 
         resp_recv.await??;
-        let id_str = obj_id.to_string();
+        let obj_id_str = obj_id.to_string();
 
-        Ok(id_str)
+        Ok(obj_id_str)
     }
 
     #[message]
-    pub async fn download_file(&mut self, id: String) -> Result<proto::PlainFileObject> {
-        let id_str = id;
-        let id_hash = proto::Hash::try_from(&id_str).unwrap();
+    pub async fn download_file(&mut self, obj_id_str: String) -> Result<proto::PlainFileObject> {
+        let obj_id = proto::Hash::try_from(&obj_id_str).unwrap();
 
         // first get the providers of the file
         // Maybe getting the providers could be reused from GetProviders node message handler??
@@ -162,37 +156,37 @@ impl Node {
             .as_mut()
             .unwrap()
             .send(SwarmRunnerMessage::GetProviders {
-                obj_id: id_hash.clone(),
+                obj_id: obj_id.clone(),
                 response_sender: resp_send,
             })
             .await?;
 
         let providers = resp_recv.await?;
         if providers.is_empty() {
-            return Err(anyhow!("Could not find provider for file {id_str}.").into());
+            return Err(anyhow!("Could not find provider for file {obj_id_str}.").into());
         }
         debug!(
             node = self.name,
-            id = id_str,
+            obj_id = obj_id_str,
             "Found providers: {providers:?}"
         );
         for peer in &providers {
             debug!(
                 node = self.name,
-                peer = peer.to_base58(),
-                id = id_str,
+                peer_id = peer.to_base58(),
+                obj_id = obj_id_str,
                 "Trying to download from peer"
             );
 
-            let (file_sender, file_receiver) = oneshot::channel();
+            let (obj_sender, obj_receiver) = oneshot::channel();
             let result = self
                 .swarm_sender
                 .as_mut()
                 .unwrap()
                 .send(SwarmRunnerMessage::GetObject {
-                    obj_id: id_hash.clone(),
+                    obj_id: obj_id.clone(),
                     peer_id: peer.clone(),
-                    response_sender: file_sender,
+                    response_sender: obj_sender,
                 });
 
             if let Err(e) = result.await {
@@ -204,7 +198,7 @@ impl Node {
                 continue;
             }
 
-            match file_receiver.await {
+            match obj_receiver.await {
                 Err(e) => {
                     debug!(
                         node = self.name,
@@ -224,19 +218,19 @@ impl Node {
                     continue;
                 }
 
-                Ok(Ok(file)) => {
-                    let hash = proto::Hash::try_from(&file).unwrap();
-                    if hash != id_hash {
+                Ok(Ok(obj)) => {
+                    let calculated_obj_id = proto::Hash::try_from(&obj).unwrap();
+                    if obj_id != calculated_obj_id {
                         debug!(
                             node = self.name,
                             from = format!("{peer}"),
-                            data = format!("{:?}", &file.data),
-                            "Received wrong file! {} != {id_str}",
-                            bs58::encode(hash.bytes).into_string()
+                            data = format!("{:?}", &obj.data),
+                            "Received wrong file! {} != {obj_id_str}",
+                            calculated_obj_id.to_string()
                         );
                         continue;
                     }
-                    match parser::parse_typed(file).await {
+                    match parser::parse_typed(obj).await {
                         Ok(parser::ObjectEnum::PlainFile(file)) => return Ok(file),
                         Err(e) => return Err(e),
                         Ok(_) => return Err(anyhow!("Received object was not a file!")),
@@ -279,16 +273,7 @@ impl Node {
         // The file has to be read to the memory to be published. There is no other way without
         // a new behaviour kademlia could talk to, which would provide streams of data.
         // (Maybe could be implemented on the existing request_response if it would be generalised more?)
-        let data = tokio::fs::read(&path).await.inspect_err(|e| {
-            error!(node = self.name, err = e.to_string(), "Failed to read file");
-        })?;
-
-        let object: proto::TypedObject = proto::PlainFileObject {
-            name: path.file_name().unwrap().to_str().unwrap().to_string(),
-            content: data,
-        }
-        .into();
-
+        let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
         let obj_id = proto::Hash::try_from(&object).unwrap();
         let obj_id_str = bs58::encode(&obj_id.bytes).into_string();
 

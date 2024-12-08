@@ -1,5 +1,6 @@
-use std::fmt::Display;
+use std::{fmt::Display, path::Path};
 
+use anyhow::bail;
 use anyhow::{anyhow, Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -202,6 +203,26 @@ impl TryFrom<&TypedObject> for PlainFileObject {
     type Error = Error;
     fn try_from(value: &TypedObject) -> Result<Self> {
         bincode::deserialize::<PlainFileObject>(&(value.data)).map_err(|e| anyhow!(e))
+    }
+}
+impl PlainFileObject {
+    pub async fn try_from_path(path: &Path) -> Result<Self> {
+        let name = {
+            let name = path.file_name();
+            if let None = name {
+                bail!("Invalid filename! {}", path.to_string_lossy())
+            }
+            let name = name.unwrap().to_str();
+            if let None = name {
+                bail!("Invalid filename! {},", path.to_string_lossy())
+            }
+            name.unwrap().to_string()
+        };
+
+        Ok(PlainFileObject {
+            name,
+            content: tokio::fs::read(path).await?,
+        })
     }
 }
 
