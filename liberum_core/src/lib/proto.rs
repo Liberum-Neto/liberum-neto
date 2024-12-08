@@ -30,6 +30,12 @@ where
     }
 }
 
+impl Display for Hash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", bs58::encode(self.bytes).into_string())
+    }
+}
+
 impl TryFrom<Vec<u8>> for Hash {
     type Error = Error;
 
@@ -64,11 +70,7 @@ impl TryFrom<&TypedObject> for Hash {
             .try_into()
     }
 }
-impl Display for Hash {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(bs58::encode(&self.bytes).into_string().as_str())
-    }
-}
+
 impl TryFrom<&String> for Hash {
     type Error = Error;
     fn try_from(value: &String) -> Result<Self> {
