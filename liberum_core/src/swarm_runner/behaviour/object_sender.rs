@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use liberum_core::parser::{self, ObjectEnum};
-use liberum_core::proto::{self, PlainFileObject, QueryObject, TypedObject};
+use liberum_core::proto::{self, PlainFileObject, QueryObject, TypedObject, UUIDTyped};
+use libp2p::quic;
 use libp2p::{
     kad,
     request_response::{self, InboundRequestId, OutboundRequestId, ResponseChannel},
@@ -79,7 +80,18 @@ impl SwarmContext {
             "received object sender request!"
         );
 
-        let id = proto::Hash::try_from(&request.object).unwrap();
+        let id = proto::Hash::try_from(&request.object);
+        if let Err(e) = id {
+            error!(
+                received_id = request.object_id.to_string(),
+                err = format!("{e}"),
+                "Can't hash received object to verify hash"
+            );
+            self.respond_err(request, response_channel);
+            return;
+        }
+        let id = id.expect("To not be err, as it was checked earlier");
+
         if request.object_id != id {
             error!(
                 received_id = request.object_id.to_string(),
@@ -87,13 +99,14 @@ impl SwarmContext {
                 "File Request ID does not match actual ID!"
             )
         }
+
         let obj = parser::parse_typed(request.object.clone()).await;
         if let Err(e) = obj {
             error!(err = format!("{e}"), "Error parsing request object");
             self.respond_err(request, response_channel);
             return;
         }
-        let obj = obj.unwrap();
+        let obj = obj.expect("To not be err, as it was checked earlier");
         match obj {
             parser::ObjectEnum::PlainFile(obj) => {
                 self.handle_request_plain_file(obj, id, request, request_id, response_channel)
@@ -121,10 +134,21 @@ impl SwarmContext {
         if let Some(sender) = self.behaviour.pending_inner_get_object.remove(&request_id) {
             let _ = sender.send(Ok(response.object));
         } else if let Some(sender) = self.behaviour.pending_inner_send_object.remove(&request_id) {
-            if let ObjectEnum::Result(r) = parser::parse_typed(response.object).await.unwrap() {
-                let _ = sender.send(Ok(r));
-            } else {
-                let _ = sender.send(Err(anyhow!("Failed to parse result object")));
+            let r = parser::parse_typed(response.object).await;
+            match r {
+                Ok(obj) => {
+                    if let ObjectEnum::Result(obj) = obj {
+                        let _ = sender.send(Ok(obj));
+                    } else {
+                        let _ = sender.send(Err(anyhow!(
+                            "Unsupported object type {}",
+                            obj.get_type_uuid()
+                        )));
+                    }
+                }
+                Err(e) => {
+                    let _ = sender.send(Err(anyhow!("Failed to parse result object")));
+                }
             }
         }
     }
@@ -151,13 +175,26 @@ impl SwarmContext {
         _request_id: InboundRequestId,
         response_channel: ResponseChannel<ObjectResponse>,
     ) {
-        self.put_object_into_vault(obj.into()).await.unwrap();
+        let r = self.put_object_into_vault(obj.into()).await;
+        if let Err(e) = r {
+            error!("Failed to put object into vault");
+            self.respond_err(request, response_channel);
+            return;
+        }
+
         let qid = self
             .swarm
             .behaviour_mut()
             .kademlia
-            .start_providing(kad::RecordKey::from(id.bytes.to_vec()))
-            .unwrap();
+            .start_providing(kad::RecordKey::from(id.bytes.to_vec()));
+
+        if let Err(e) = qid {
+            error!(err = format!("{e}"), "Failed to start providing");
+            self.respond_err(request, response_channel);
+            return;
+        }
+
+        let qid = qid.expect("To not be err, as it was checked earlier");
         self.behaviour
             .pending_outer_start_providing
             .insert(qid, (request.object_id, response_channel));
@@ -173,11 +210,11 @@ impl SwarmContext {
     ) {
         let query = parser::parse_typed(query.query_object).await;
         if let Err(e) = query {
-            debug!(err = format!("{e}"), "query_object couldnt get parsed");
+            debug!(err = format!("{e}"), "query_object couldn't get parsed");
             self.respond_err(request, response_channel);
             return;
         }
-        let query = query.unwrap();
+        let query = query.expect("To not be err, as it was checked earlier");
 
         let query = match query {
             parser::ObjectEnum::SimpleIDQuery(query) => parser::ObjectEnum::SimpleIDQuery(query),
@@ -191,11 +228,20 @@ impl SwarmContext {
             parser::ObjectEnum::SimpleIDQuery(query) => {
                 let obj = self.get_object_from_vault(query.id.clone());
                 if let None = obj {
+                    error!("Failed to get asked object from vault");
                     self.respond_err(request, response_channel);
                     return;
                 }
-                let obj = obj.unwrap();
-                let id = proto::Hash::try_from(&obj).unwrap();
+                let obj = obj.expect("To not be err, as it was checked earlier");
+
+                let id = proto::Hash::try_from(&obj);
+                if let Err(e) = id {
+                    error!("Failed to calculate hash of object from vault");
+                    self.respond_err(request, response_channel);
+                    return;
+                }
+                let id = id.expect("Not to be err as it was checked earlier");
+
                 if query.id != id {
                     error!(
                         received_id = bs58::encode(&query.id.bytes).into_string(),
