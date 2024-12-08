@@ -1,5 +1,5 @@
 use core::error;
-use std::{collections::HashMap, fs::File, io::Write, iter::zip, panic, path::{Path, PathBuf}, str::FromStr, sync::Arc, usize};
+use std::{collections::HashMap, fs::File, io::Write, iter::zip, panic, path::PathBuf, str::FromStr, sync::Arc, usize};
 
 use connection::AppContext;
 use liberum_core::{node_config::NodeConfig, DaemonError, DaemonRequest, DaemonResponse};
@@ -9,7 +9,7 @@ use node::store::NodeStore;
 use crate::test_protocol::test_scenario::test_part_scenario::Part::Simple;
 use crate::test_protocol::test_scenario::node_definition::NodeDefinitionLevel;
 
-use test_protocol::{action_resoult::{Details, DialNodeResult, GetObjectResult, PublishObjectResult}, callable_nodes::{CallableNode}, identity_server_client::IdentityServerClient, Action, ActionResoult, Identity, NodeInstance, NodesCreated, TestPartResult, TestScenario};
+use test_protocol::{action_resoult::{Details, DialNodeResult, GetObjectResult, PublishObjectResult}, callable_nodes::CallableNode, identity_server_client::IdentityServerClient, Action, ActionResoult, Identity, NodeInstance, NodesCreated, TestPartResult, TestScenario};
 use tracing::error;
 pub mod connection;
 pub mod node;
@@ -48,8 +48,8 @@ pub(crate) async fn run_test(url: String, host_id: String) -> Result<(),Box<dyn 
         test_context.callable_nodes.insert(node.node_id, node);
     }
 
-    for file in test_context.scenario.files {
-        File::create(&PathBuf::from(file.hash).as_path())?.write(&file.object);
+    for file in &test_context.scenario.files {
+        File::create(&PathBuf::from(file.hash.to_string()).as_path())?.write(&file.object)?;
     }
 
 
