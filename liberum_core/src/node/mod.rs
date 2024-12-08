@@ -145,7 +145,7 @@ impl Node {
             .await?;
 
         resp_recv.await??;
-        let id_str = liberum_core::object_hash_to_str(&obj_id);
+        let id_str = obj_id.to_string();
 
         Ok(id_str)
     }
@@ -346,7 +346,7 @@ impl Node {
     #[message]
     pub async fn provide_object(&mut self, object: proto::TypedObject) -> Result<String> {
         let id = proto::Hash::try_from(&object).unwrap();
-        let id_str = liberum_core::object_hash_to_str(&id);
+        let id_str = id.to_string();
 
         let (resp_send, _) = oneshot::channel();
         let _ = self
@@ -367,7 +367,7 @@ impl Node {
     pub(crate) fn get_object_from_vault(&mut self, key: proto::Hash) -> Option<proto::TypedObject> {
         let path = PathBuf::from("FILE_SHARE_SAVED_FILES")
             .join(self.name.clone())
-            .join(liberum_core::object_hash_to_str(&key));
+            .join(key.to_string());
         match std::fs::read(&path) {
             Ok(data) => Some(TypedObject::try_from(&data).unwrap()),
             Err(e) => {
@@ -389,7 +389,7 @@ impl Node {
         std::fs::create_dir_all(&dir).ok();
         let id = proto::Hash::try_from(&obj).unwrap();
 
-        let path = dir.join(liberum_core::object_hash_to_str(&id));
+        let path = dir.join(id.to_string());
 
         if let Err(e) = std::fs::write(path.clone(), obj.data) {
             error!(
