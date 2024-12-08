@@ -35,3 +35,4 @@ blake3 = "1.5.4"
 bs58 = "0.5.1"
 strum = "0.26"
 strum_macros = "0.26"
+uuid = {version="1.11", features=["serde"]}

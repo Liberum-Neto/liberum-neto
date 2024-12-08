@@ -3,6 +3,7 @@ use std::fmt::Display;
 use anyhow::{anyhow, Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use uuid::{uuid, Uuid};
 
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq, Clone, Eq)]
 pub struct Hash {
@@ -12,10 +13,9 @@ pub type UserId = Hash;
 pub type GroupId = Hash;
 pub type ObjectId = Hash;
 pub type Content = Vec<u8>;
-pub type UUID = [u8; 16];
 
 pub trait UUIDTyped {
-    fn get_type_uuid(&self) -> UUID;
+    fn get_type_uuid(&self) -> Uuid;
 }
 
 impl<T> From<T> for TypedObject
@@ -138,16 +138,14 @@ pub struct SignatureEd25519 {
 }
 
 #[allow(unused)]
-pub const TYPED_OBJECT_ID: UUID = [
-    1, 147, 161, 239, 26, 127, 113, 163, 185, 33, 40, 174, 137, 227, 40, 209,
-];
+pub const TYPED_OBJECT_ID: Uuid = uuid!("0193a7be-425b-7158-8677-2dfdb28d3b00");
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq)]
 pub struct TypedObject {
-    pub uuid: UUID,
+    pub uuid: Uuid,
     pub data: Vec<u8>,
 }
 impl TypedObject {
-    pub fn get_uuid(&self) -> UUID {
+    pub fn get_uuid(&self) -> Uuid {
         TYPED_OBJECT_ID
     }
 }
@@ -159,46 +157,40 @@ impl TryFrom<&Vec<u8>> for TypedObject {
 }
 
 #[allow(unused)]
-pub const SIGNED_OBJECT_ID: UUID = [
-    1, 147, 161, 244, 14, 189, 120, 240, 162, 112, 46, 1, 58, 126, 158, 67,
-];
+pub const SIGNED_OBJECT_ID: Uuid = uuid!("0193a7bf-fb8f-7fdc-8be6-02d3a3cc7eb1");
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SignedObject {
     pub object: TypedObject,
     pub signature: Signature,
 }
 impl UUIDTyped for SignedObject {
-    fn get_type_uuid(&self) -> UUID {
+    fn get_type_uuid(&self) -> Uuid {
         SIGNED_OBJECT_ID
     }
 }
 
 #[allow(unused)]
-pub const GROUP_OBJECT_ID: UUID = [
-    1, 147, 161, 244, 181, 102, 121, 10, 173, 204, 172, 162, 140, 15, 106, 229,
-];
+pub const GROUP_OBJECT_ID: Uuid = uuid!("0193a7c0-1cb7-72e8-97cd-e84c15925233");
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GroupObject {
     pub group: GroupId,
     pub object: SignedObject,
 }
 impl UUIDTyped for GroupObject {
-    fn get_type_uuid(&self) -> UUID {
+    fn get_type_uuid(&self) -> Uuid {
         GROUP_OBJECT_ID
     }
 }
 
 #[allow(unused)]
-pub const PLAIN_FILE_OBJECT_ID: UUID = [
-    1, 147, 161, 244, 248, 38, 112, 38, 175, 186, 173, 159, 0, 120, 46, 101,
-];
+pub const PLAIN_FILE_OBJECT_ID: Uuid = uuid!("0193a7c0-3ad3-707c-897b-f23b30400c69");
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PlainFileObject {
     pub name: String,
     pub content: Content,
 }
 impl UUIDTyped for PlainFileObject {
-    fn get_type_uuid(&self) -> UUID {
+    fn get_type_uuid(&self) -> Uuid {
         PLAIN_FILE_OBJECT_ID
     }
 }
@@ -211,9 +203,7 @@ impl TryFrom<&TypedObject> for PlainFileObject {
 }
 
 #[allow(unused)]
-pub const EMPTY_OBJECT_ID: UUID = [
-    1, 147, 161, 245, 89, 238, 121, 208, 148, 153, 23, 225, 203, 214, 75, 42,
-];
+pub const EMPTY_OBJECT_ID: Uuid = uuid!("0193a7c0-5e33-7957-b34f-7ec0c4aa27f4");
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EmptyObject {}
 impl TypedObject {
@@ -225,20 +215,18 @@ impl TypedObject {
     }
 }
 impl UUIDTyped for EmptyObject {
-    fn get_type_uuid(&self) -> UUID {
+    fn get_type_uuid(&self) -> Uuid {
         EMPTY_OBJECT_ID
     }
 }
 
-pub const QUERY_OBJECT_ID: UUID = [
-    1, 147, 161, 245, 154, 110, 116, 17, 176, 69, 43, 183, 7, 155, 208, 245,
-];
+pub const QUERY_OBJECT_ID: Uuid = uuid!("0193a7c0-800f-7bba-9524-0244e86fd5dc");
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct QueryObject {
     pub query_object: TypedObject,
 }
 impl UUIDTyped for QueryObject {
-    fn get_type_uuid(&self) -> UUID {
+    fn get_type_uuid(&self) -> Uuid {
         QUERY_OBJECT_ID
     }
 }
@@ -250,15 +238,13 @@ impl TryFrom<&TypedObject> for QueryObject {
 }
 
 #[allow(unused)]
-pub const SIMPLE_ID_QUERY_ID: UUID = [
-    1, 147, 161, 245, 225, 238, 122, 22, 139, 29, 161, 219, 76, 77, 119, 63,
-];
+pub const SIMPLE_ID_QUERY_ID: Uuid = uuid!("0193a7c0-9cb7-7184-844e-42b5a1bf999e");
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SimpleIDQuery {
     pub id: ObjectId,
 }
 impl UUIDTyped for SimpleIDQuery {
-    fn get_type_uuid(&self) -> UUID {
+    fn get_type_uuid(&self) -> Uuid {
         SIMPLE_ID_QUERY_ID
     }
 }
@@ -277,15 +263,13 @@ impl TryFrom<&TypedObject> for SimpleIDQuery {
 }
 
 #[allow(unused)]
-pub const RESULT_OBJECT_ID: UUID = [
-    1, 147, 161, 246, 34, 158, 127, 249, 138, 17, 211, 212, 89, 233, 236, 156,
-];
+pub const RESULT_OBJECT_ID: Uuid = uuid!("0193a7c0-be9b-72fa-b216-fb91814cba4f");
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ResultObject {
     pub result: Result<(), ()>,
 }
 impl UUIDTyped for ResultObject {
-    fn get_type_uuid(&self) -> UUID {
+    fn get_type_uuid(&self) -> Uuid {
         RESULT_OBJECT_ID
     }
 }

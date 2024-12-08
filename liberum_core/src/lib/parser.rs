@@ -3,6 +3,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use strum_macros::Display;
 use tracing::debug;
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Display)]
 pub enum ObjectEnum {
@@ -17,7 +18,7 @@ pub enum ObjectEnum {
 }
 impl UUIDTyped for ObjectEnum {
     // TODO couldn't we do this better? Is it possible to force a member of an enum to implement a trait??
-    fn get_type_uuid(&self) -> UUID {
+    fn get_type_uuid(&self) -> Uuid {
         match self {
             ObjectEnum::Group(group_object) => group_object.get_type_uuid(),
             ObjectEnum::Signed(signed_object) => signed_object.get_type_uuid(),

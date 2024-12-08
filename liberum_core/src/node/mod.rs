@@ -13,7 +13,6 @@ use liberum_core::proto::{self, TypedObject};
 use liberum_core::str_to_file_id;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
-use std::any::TypeId;
 use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::fmt;
@@ -308,7 +307,7 @@ impl Node {
             return Err(anyhow!("Could not find provider for file {id_str}.").into());
         }
 
-        let k = 20;
+        let k: i32 = 20;
         let mut successes = 0;
         for peer in &peers {
             let (send, recv) = oneshot::channel();
@@ -327,7 +326,7 @@ impl Node {
                 match obj {
                     Ok(ResultObject { result: Ok(_) }) => {
                         successes += 1;
-                        if successes >= 20 {
+                        if successes >= k {
                             break;
                         }
                     }
