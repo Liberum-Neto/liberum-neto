@@ -14,17 +14,17 @@ pub type ObjectId = Hash;
 pub type Content = Vec<u8>;
 pub type UUID = [u8; 16];
 
-pub trait Object {
-    fn get_uuid(&self) -> UUID;
+pub trait UUIDTyped {
+    fn get_type_uuid(&self) -> UUID;
 }
 
 impl<T> From<T> for TypedObject
 where
-    T: Object + Serialize,
+    T: UUIDTyped + Serialize,
 {
     fn from(value: T) -> Self {
         TypedObject {
-            uuid: value.get_uuid(),
+            uuid: value.get_type_uuid(),
             data: bincode::serialize(&value).unwrap(),
         }
     }
@@ -155,8 +155,8 @@ pub struct SignedObject {
     pub object: TypedObject,
     pub signature: Signature,
 }
-impl Object for SignedObject {
-    fn get_uuid(&self) -> UUID {
+impl UUIDTyped for SignedObject {
+    fn get_type_uuid(&self) -> UUID {
         SIGNED_OBJECT_ID
     }
 }
@@ -170,8 +170,8 @@ pub struct GroupObject {
     pub group: GroupId,
     pub object: SignedObject,
 }
-impl Object for GroupObject {
-    fn get_uuid(&self) -> UUID {
+impl UUIDTyped for GroupObject {
+    fn get_type_uuid(&self) -> UUID {
         GROUP_OBJECT_ID
     }
 }
@@ -185,8 +185,8 @@ pub struct PlainFileObject {
     pub name: String,
     pub content: Content,
 }
-impl Object for PlainFileObject {
-    fn get_uuid(&self) -> UUID {
+impl UUIDTyped for PlainFileObject {
+    fn get_type_uuid(&self) -> UUID {
         PLAIN_FILE_OBJECT_ID
     }
 }
@@ -212,8 +212,8 @@ impl TypedObject {
         }
     }
 }
-impl Object for EmptyObject {
-    fn get_uuid(&self) -> UUID {
+impl UUIDTyped for EmptyObject {
+    fn get_type_uuid(&self) -> UUID {
         EMPTY_OBJECT_ID
     }
 }
@@ -225,8 +225,8 @@ pub const QUERY_OBJECT_ID: UUID = [
 pub struct QueryObject {
     pub query_object: TypedObject,
 }
-impl Object for QueryObject {
-    fn get_uuid(&self) -> UUID {
+impl UUIDTyped for QueryObject {
+    fn get_type_uuid(&self) -> UUID {
         QUERY_OBJECT_ID
     }
 }
@@ -245,8 +245,8 @@ pub const SIMPLE_ID_QUERY_ID: UUID = [
 pub struct SimpleIDQuery {
     pub id: ObjectId,
 }
-impl Object for SimpleIDQuery {
-    fn get_uuid(&self) -> UUID {
+impl UUIDTyped for SimpleIDQuery {
+    fn get_type_uuid(&self) -> UUID {
         SIMPLE_ID_QUERY_ID
     }
 }
@@ -272,8 +272,8 @@ pub const RESULT_OBJECT_ID: UUID = [
 pub struct ResultObject {
     pub result: Result<(), ()>,
 }
-impl Object for ResultObject {
-    fn get_uuid(&self) -> UUID {
+impl UUIDTyped for ResultObject {
+    fn get_type_uuid(&self) -> UUID {
         RESULT_OBJECT_ID
     }
 }
