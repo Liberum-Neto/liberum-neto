@@ -15,9 +15,3 @@ pub struct TypedObjectInfo {
     pub id: String,
     pub type_id: Uuid,
 }
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TypedObjectInfo {
-    pub id: String,
-    pub type_id: Uuid,
-}
