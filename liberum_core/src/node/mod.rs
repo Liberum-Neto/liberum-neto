@@ -7,6 +7,9 @@ use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::{BootstrapNode, NodeConfig};
+use liberum_core::parser;
+use liberum_core::proto::{self, TypedObject};
+use liberum_core::proto::{PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
@@ -51,12 +54,13 @@ impl Actor for Node {
     }
 
     async fn on_stop(
-        self,
+        &mut self,
         _: kameo::actor::WeakActorRef<Self>,
         _: kameo::error::ActorStopReason,
     ) -> std::result::Result<(), kameo::error::BoxError> {
         Ok(self
             .swarm_sender
+            .as_ref()
             .unwrap()
             .send(SwarmRunnerMessage::Kill)
             .await?)
@@ -89,16 +93,19 @@ impl Node {
     /// Message called on the node from the daemon to get the list of providers
     /// of an id. Changes the ID from string to libp2p format and just passes it to the swarm.
     #[message]
-    pub async fn get_providers(&mut self, id: String) -> Result<HashSet<PeerId>> {
+    pub async fn get_providers(&mut self, obj_id_str: String) -> Result<HashSet<PeerId>> {
         debug!(node = self.name, "Node got GetProviders");
-        let id = str_to_file_id(&id)?;
+        let obj_id_kad = str_to_file_id(&obj_id_str)?;
+        let obj_id = proto::Hash {
+            bytes: obj_id_kad.to_vec().as_slice().try_into()?,
+        };
         let (send, recv) = oneshot::channel();
 
         self.swarm_sender
             .as_mut()
             .unwrap()
             .send(SwarmRunnerMessage::GetProviders {
-                id,
+                obj_id: obj_id,
                 response_sender: send,
             })
             .await?;
@@ -116,33 +123,30 @@ impl Node {
     /// the ID of the file using which it can be found.
     #[message]
     pub async fn provide_file(&mut self, path: PathBuf) -> Result<String> {
-        let id = liberum_core::get_file_id(&path)
-            .await
-            .map_err(|e| error!(err = e.to_string(), "Failed to hash file"))
-            .unwrap();
-
         let (resp_send, resp_recv) = oneshot::channel();
+
+        let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
+        let obj_id = proto::Hash::try_from(&object)?;
 
         self.swarm_sender
             .as_mut()
             .unwrap()
-            .send(SwarmRunnerMessage::ProvideFile {
-                id: id.clone(),
-                path,
+            .send(SwarmRunnerMessage::ProvideObject {
+                object,
+                obj_id: obj_id.clone(),
                 response_sender: resp_send,
             })
             .await?;
 
         resp_recv.await??;
-        let id_str = liberum_core::file_id_to_str(id);
+        let obj_id_str = obj_id.to_string();
 
-        Ok(id_str)
+        Ok(obj_id_str)
     }
 
     #[message]
-    pub async fn download_file(&mut self, id: String) -> Result<Vec<u8>> {
-        let id_str = id;
-        let id = liberum_core::str_to_file_id(&id_str)?;
+    pub async fn download_file(&mut self, obj_id_str: String) -> Result<proto::PlainFileObject> {
+        let obj_id = proto::Hash::try_from(&obj_id_str)?;
 
         // first get the providers of the file
         // Maybe getting the providers could be reused from GetProviders node message handler??
@@ -152,34 +156,38 @@ impl Node {
             .as_mut()
             .unwrap()
             .send(SwarmRunnerMessage::GetProviders {
-                id: id.clone(),
+                obj_id: obj_id.clone(),
                 response_sender: resp_send,
             })
             .await?;
 
         let providers = resp_recv.await?;
         if providers.is_empty() {
-            return Err(anyhow!("Could not find provider for file {id_str}.").into());
+            return Err(anyhow!("Could not find provider for file {obj_id_str}.").into());
         }
-
+        debug!(
+            node = self.name,
+            obj_id = obj_id_str,
+            "Found providers: {providers:?}"
+        );
         for peer in &providers {
             debug!(
                 node = self.name,
-                peer = peer.to_base58(),
-                id = id_str,
+                peer_id = peer.to_base58(),
+                obj_id = obj_id_str,
                 "Trying to download from peer"
             );
 
-            let (file_sender, file_receiver) = oneshot::channel();
-            let result =
-                self.swarm_sender
-                    .as_mut()
-                    .unwrap()
-                    .send(SwarmRunnerMessage::DownloadFile {
-                        id: id.clone(),
-                        peer: peer.clone(),
-                        response_sender: file_sender,
-                    });
+            let (obj_sender, obj_receiver) = oneshot::channel();
+            let result = self
+                .swarm_sender
+                .as_mut()
+                .unwrap()
+                .send(SwarmRunnerMessage::GetObject {
+                    obj_id: obj_id.clone(),
+                    peer_id: peer.clone(),
+                    response_sender: obj_sender,
+                });
 
             if let Err(e) = result.await {
                 error!(
@@ -190,7 +198,7 @@ impl Node {
                 continue;
             }
 
-            match file_receiver.await {
+            match obj_receiver.await {
                 Err(e) => {
                     debug!(
                         node = self.name,
@@ -210,17 +218,23 @@ impl Node {
                     continue;
                 }
 
-                Ok(Ok(file)) => {
-                    let hash = bs58::encode(blake3::hash(&file).as_bytes()).into_string();
-                    if hash != id_str {
+                Ok(Ok(obj)) => {
+                    let calculated_obj_id = proto::Hash::try_from(&obj)?;
+                    if obj_id != calculated_obj_id {
                         debug!(
                             node = self.name,
                             from = format!("{peer}"),
-                            "Received wrong file! {hash} != {id_str}"
+                            data = format!("{:?}", &obj.data),
+                            "Received wrong file! {} != {obj_id_str}",
+                            calculated_obj_id.to_string()
                         );
                         continue;
                     }
-                    return Ok(file);
+                    match parser::parse_typed(obj).await {
+                        Ok(parser::ObjectEnum::PlainFile(file)) => return Ok(file),
+                        Err(e) => return Err(e),
+                        Ok(_) => return Err(anyhow!("Received object was not a file!")),
+                    }
                 }
             }
         }
@@ -256,46 +270,136 @@ impl Node {
 
     #[message]
     pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
-        let id = liberum_core::get_file_id(&path).await.inspect_err(|e| {
-            error!(
-                err = e.to_string(),
-                path = format!("{path:?}"),
-                "Failed to hash file"
-            );
-        })?;
-
-        let (send, recv) = oneshot::channel();
-
         // The file has to be read to the memory to be published. There is no other way without
         // a new behaviour kademlia could talk to, which would provide streams of data.
         // (Maybe could be implemented on the existing request_response if it would be generalised more?)
-        let data = tokio::fs::read(&path).await.inspect_err(|e| {
-            error!(node = self.name, err = e.to_string(), "Failed to read file");
-        })?;
+        let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
+        let obj_id = proto::Hash::try_from(&object)?;
+        let obj_id_str = bs58::encode(&obj_id.bytes).into_string();
 
-        let record = libp2p::kad::Record {
-            key: id.clone(),
-            value: data,
-            publisher: Some(PeerId::from(self.keypair.public())),
-            expires: None,
-        };
-
+        let (resp_send, resp_recv) = oneshot::channel();
         self.swarm_sender
             .as_mut()
             .unwrap()
-            .send(SwarmRunnerMessage::PublishFile {
-                record,
-                response_sender: send,
+            .send(SwarmRunnerMessage::GetClosestPeers {
+                obj_id: obj_id.clone(),
+                response_sender: resp_send,
             })
             .await?;
 
-        let id_str = liberum_core::file_id_to_str(id);
-
-        match recv.await {
-            Ok(Ok(_)) => Ok(id_str),
-            Ok(Err(e)) => Err(e.into()),
-            Err(e) => Err(e.into()),
+        let peers = resp_recv.await?;
+        if peers.is_empty() {
+            return Err(anyhow!("Could not find provider for file {obj_id_str}.").into());
         }
+
+        let kad_k_parameter: i32 = 20;
+        let mut successes = 0;
+        for peer in &peers {
+            let (send, recv) = oneshot::channel();
+            self.swarm_sender
+                .as_mut()
+                .unwrap()
+                .send(SwarmRunnerMessage::SendObject {
+                    object: object.clone(),
+                    obj_id: obj_id.clone(),
+                    peer_id: peer.clone(),
+                    response_sender: send,
+                })
+                .await?;
+
+            if let Ok(obj) = recv.await {
+                match obj {
+                    Ok(ResultObject { result: Ok(_) }) => {
+                        successes += 1;
+                        if successes >= kad_k_parameter {
+                            break;
+                        }
+                    }
+                    _ => {
+                        continue;
+                    }
+                }
+            }
+            if successes >= 1 {
+                return Ok(obj_id_str);
+            }
+        }
+        Err(anyhow!("Could not publish file"))
+    }
+
+    #[message]
+    pub async fn provide_object(&mut self, object: proto::TypedObject) -> Result<String> {
+        let obj_id = proto::Hash::try_from(&object)?;
+        let obj_id_str = obj_id.to_string();
+
+        let (resp_send, _) = oneshot::channel();
+        let _ = self
+            .swarm_sender
+            .as_mut()
+            .unwrap()
+            .send(SwarmRunnerMessage::ProvideObject {
+                object,
+                obj_id: obj_id,
+                response_sender: resp_send,
+            })
+            .await?;
+
+        Ok(obj_id_str)
+    }
+
+    #[message]
+    pub(crate) fn get_object_from_vault(&mut self, key: proto::Hash) -> Option<proto::TypedObject> {
+        let path = PathBuf::from("FILE_SHARE_SAVED_FILES")
+            .join(self.name.clone())
+            .join(key.to_string());
+        match std::fs::read(&path) {
+            Ok(data) => {
+                let r = TypedObject::try_from(&data);
+                match r {
+                    Ok(obj) => Some(obj),
+                    Err(e) => {
+                        error!(
+                            node = self.name,
+                            key = bs58::encode(&key.bytes).into_string(),
+                            err = format!("{e:?}"),
+                            path = format!("{path:?}"),
+                            "Failed to deserialize TypedObject"
+                        );
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                error!(
+                    node = self.name,
+                    key = bs58::encode(&key.bytes).into_string(),
+                    err = format!("{e:?}"),
+                    path = format!("{path:?}"),
+                    "Failed to read file"
+                );
+                None
+            }
+        }
+    }
+
+    #[message]
+    pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {
+        let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.name.clone());
+        std::fs::create_dir_all(&dir).ok();
+        let obj_id = proto::Hash::try_from(&obj)?;
+
+        let path = dir.join(obj_id.to_string());
+
+        if let Err(e) = std::fs::write(path.clone(), obj.data) {
+            error!(
+                node = self.name,
+                path = format!("{path:?}"),
+                err = format!("{e:?}"),
+                "Failed to save file"
+            );
+            return Err(e.into());
+        }
+        Ok(())
     }
 }
 

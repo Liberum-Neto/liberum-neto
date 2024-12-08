@@ -1,4 +1,7 @@
-use super::behaviour::file_share;
+use liberum_core::proto::ResultObject;
+use liberum_core::proto::{self, TypedObject};
+
+use super::behaviour::object_sender;
 use super::SwarmContext;
 use anyhow::anyhow;
 use anyhow::Result;
@@ -7,8 +10,8 @@ use libp2p::PeerId;
 use libp2p::{kad, Multiaddr};
 use std::collections::hash_map;
 use std::collections::HashSet;
-use std::path::PathBuf;
 use tokio::sync::oneshot;
+use tracing::error;
 use tracing::{debug, info};
 pub enum SwarmRunnerError {}
 
@@ -34,24 +37,24 @@ pub enum SwarmRunnerMessage {
     /// Get up to `k` providers for the given key. May return an empty set if
     /// no provider was found.
     GetProviders {
-        id: kad::RecordKey,
+        obj_id: proto::Hash,
         response_sender: oneshot::Sender<HashSet<PeerId>>,
     },
     /// Start providing a file in the network. Only the node that sent this message
     /// will be a provider for the file. The fact of providing the file will be
     /// announced to up to `k` network members close to the provided ID.
-    ProvideFile {
-        id: kad::RecordKey,
-        path: PathBuf,
+    ProvideObject {
+        object: TypedObject,
+        obj_id: proto::Hash,
         response_sender: oneshot::Sender<Result<()>>,
     },
     /// Download a file from the given node. This requires first finding a provider
     /// using ``GetProviders`` and then sending a request to the provider.
     /// Ok if the file was downloaded successfully, Err otherwise.
-    DownloadFile {
-        id: kad::RecordKey,
-        peer: PeerId,
-        response_sender: oneshot::Sender<Result<Vec<u8>>>,
+    GetObject {
+        obj_id: proto::Hash,
+        peer_id: PeerId,
+        response_sender: oneshot::Sender<Result<TypedObject>>,
     },
     /// Publish a file in the network. This will ask up to `k` nodes near the
     /// published ID to store the file. The nodes will announce to be providers
@@ -59,9 +62,17 @@ pub enum SwarmRunnerMessage {
     /// Ok if the Quorum of One provider was reached, Err otherwise.
     ///
     /// The current node will not be a provider of the file as a result. (TODO: Do we want this?)
-    PublishFile {
-        record: kad::Record,
-        response_sender: oneshot::Sender<Result<()>>,
+    SendObject {
+        object: TypedObject,
+        obj_id: proto::Hash,
+        peer_id: PeerId,
+        response_sender: oneshot::Sender<Result<ResultObject>>,
+    },
+    /// Get the `k` closest peers to the given key. The response will contain
+    /// up to `k` peers that are closest to the given key.
+    GetClosestPeers {
+        obj_id: proto::Hash,
+        response_sender: oneshot::Sender<HashSet<PeerId>>,
     },
 }
 
@@ -99,8 +110,10 @@ impl SwarmContext {
             } => {
                 let dial_opts = DialOpts::from(peer_addr.clone());
 
-                if let hash_map::Entry::Vacant(entry) =
-                    self.behaviour.pending_dial.entry(dial_opts.connection_id())
+                if let hash_map::Entry::Vacant(entry) = self
+                    .behaviour
+                    .pending_inner_dial
+                    .entry(dial_opts.connection_id())
                 {
                     match self.swarm.dial(dial_opts) {
                         Ok(()) => {
@@ -120,109 +133,173 @@ impl SwarmContext {
             SwarmRunnerMessage::Kill => Ok(true),
 
             // Start providing a file in the network
-            SwarmRunnerMessage::ProvideFile {
-                id,
-                path,
+            SwarmRunnerMessage::ProvideObject {
+                object,
+                obj_id,
                 response_sender,
             } => {
-                if self.behaviour.providing.contains_key(&id) {
-                    info!(
-                        node = self.node_snapshot.name,
-                        id = format!("{id:?}"),
-                        "File is already being provided"
-                    );
-                    return Ok(false);
-                }
-                // Add the file to the providing list
-                self.behaviour.providing.insert(
-                    id.clone(),
-                    file_share::SharedResource::File { path: path.clone() },
-                );
-                // Strat a query to be providing the file ID in kademlia
-                let qid = self
-                    .swarm
-                    .behaviour_mut()
-                    .kademlia
-                    .start_providing(id.clone())?;
-                self.behaviour
-                    .pending_start_providing
-                    .insert(qid, response_sender);
+                self.provide_object(object, obj_id, response_sender).await;
                 Ok(false)
             }
 
             // Get providers for a file ID
             SwarmRunnerMessage::GetProviders {
-                id,
+                obj_id,
                 response_sender,
             } => {
-                let query_id = self.swarm.behaviour_mut().kademlia.get_providers(id);
+                let query_id = self
+                    .swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .get_providers(kad::RecordKey::new(&obj_id.bytes));
                 self.behaviour
-                    .pending_get_providers
+                    .pending_inner_get_providers
                     .insert(query_id, response_sender);
                 Ok(false)
             }
 
             // Download a file from a given peer
-            SwarmRunnerMessage::DownloadFile {
-                id,
-                peer,
+            SwarmRunnerMessage::GetObject {
+                obj_id,
+                peer_id,
                 response_sender,
             } => {
-                println!(
-                    "Sending a file_share request for id {} to peer {}",
-                    bs58::encode(id.clone()).into_string(),
-                    peer.to_base58()
+                debug!(
+                    "Sending a get object request for obj_id {} to peer {}",
+                    bs58::encode(kad::RecordKey::new(&obj_id.bytes)).into_string(),
+                    peer_id.to_base58()
                 );
 
                 // If the local peer
-                if &peer == self.swarm.local_peer_id() {
+                if &peer_id == self.swarm.local_peer_id() {
+                    debug!(
+                        peer = peer_id.to_base58(),
+                        local = self.swarm.local_peer_id().to_base58(),
+                        "Local peer requested object"
+                    );
                     // Should be implemented using a VAULT
-                    let file = self.behaviour.providing.get(&id);
-                    if let Some(file) = file {
-                        match file {
-                            file_share::SharedResource::File { path } => {
-                                if let Ok(data) = tokio::fs::read(path).await {
-                                    let _ = response_sender.send(Ok(data));
-                                    return Ok(false);
-                                }
-                            }
-                        }
+                    let object = self.get_object_from_vault(obj_id.clone());
+                    if let Some(object) = object {
+                        let _ = response_sender.send(Ok(object));
+                        return Ok(false);
+                    } else {
+                        let _ = response_sender.send(Err(anyhow!("Object not found")));
+                        return Ok(false);
                     }
                 } else {
                     // Send a request to the peer
-                    let qid = self
-                        .swarm
-                        .behaviour_mut()
-                        .file_share
-                        .send_request(&peer, file_share::FileRequest { id: id.to_vec() });
+                    let query_id = self.swarm.behaviour_mut().object_sender.send_request(
+                        &peer_id,
+                        object_sender::ObjectSendRequest {
+                            object: proto::QueryObject {
+                                query_object: proto::SimpleIDQuery { id: obj_id.clone() }.into(),
+                            }
+                            .into(),
+                            object_id: obj_id,
+                        },
+                    );
 
                     self.behaviour
-                        .pending_download_file
-                        .insert(qid, response_sender);
+                        .pending_inner_get_object
+                        .insert(query_id, response_sender);
                 }
                 Ok(false)
             }
-
-            SwarmRunnerMessage::PublishFile {
-                record,
+            SwarmRunnerMessage::GetClosestPeers {
+                obj_id,
                 response_sender,
             } => {
-                debug!("Publishing file {:?}", record.key);
-
-                //self.swarm.behaviour_mut().kademlia.start_providing(record.key.clone())?;
-                //self.put_record_into_vault(record.clone());
-
-                let qid = self
+                let query_id = self
                     .swarm
                     .behaviour_mut()
                     .kademlia
-                    .put_record(record, kad::Quorum::One)?; // at least one other node MUST store to consider it successful
-
+                    .get_closest_peers(obj_id.bytes.to_vec());
                 self.behaviour
-                    .pending_publish_file
-                    .insert(qid, response_sender);
+                    .pending_inner_get_closest_peers
+                    .insert(query_id, response_sender);
                 Ok(false)
             }
+            SwarmRunnerMessage::SendObject {
+                object,
+                obj_id,
+                peer_id,
+                response_sender,
+            } => {
+                debug!("Sending Object {:?}", object);
+
+                let calculated_obj_id = proto::Hash::try_from(&object).unwrap();
+
+                if calculated_obj_id != obj_id {
+                    debug!(
+                        node = self.node_snapshot.name,
+                        calculated_obj_id = calculated_obj_id.to_string(),
+                        obj_id = obj_id.to_string(),
+                        "Object ID does not match the hash of the object"
+                    );
+                    let _ = response_sender.send(Err(anyhow!(
+                        "Object ID does not match the hash of the object"
+                    )));
+                    return Ok(false);
+                }
+
+                let request_id = self.swarm.behaviour_mut().object_sender.send_request(
+                    &peer_id,
+                    object_sender::ObjectSendRequest {
+                        object,
+                        object_id: obj_id,
+                    },
+                );
+
+                self.behaviour
+                    .pending_inner_send_object
+                    .insert(request_id, response_sender);
+                Ok(false)
+            }
+        }
+    }
+
+    pub(crate) async fn provide_object(
+        &mut self,
+        object: TypedObject,
+        obj_id: proto::Hash,
+        response_sender: oneshot::Sender<Result<()>>,
+    ) {
+        let calculated_obj_id = proto::Hash::try_from(&object).unwrap();
+        if obj_id != calculated_obj_id {
+            error!(
+                received_id = bs58::encode(&obj_id.bytes).into_string(),
+                computed_id = bs58::encode(&calculated_obj_id.bytes).into_string(),
+                "ids don't match"
+            );
+            let _ = response_sender.send(Err(anyhow!("IDs dont match")));
+            return;
+        }
+        let obj_id_kad = kad::RecordKey::new(&calculated_obj_id.bytes);
+        if self.behaviour.providing.contains_key(&calculated_obj_id) {
+            info!(
+                node = self.node_snapshot.name,
+                obj_id = obj_id.to_string(),
+                "File is already being provided"
+            );
+            return;
+        }
+
+        // Add the file to the providing list TODO VAULT
+        self.behaviour
+            .providing
+            .insert(calculated_obj_id, object.clone());
+
+        if let Ok(_) = self.put_object_into_vault(object).await {
+            // Strat a query to be providing the file ID in kademlia
+            let query_id = self
+                .swarm
+                .behaviour_mut()
+                .kademlia
+                .start_providing(obj_id_kad.clone())
+                .unwrap();
+            self.behaviour
+                .pending_inner_start_providing
+                .insert(query_id, response_sender);
         }
     }
 }

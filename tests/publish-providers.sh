@@ -12,11 +12,10 @@ N2="test_n2"
 N2_SEED=2
 FILE_NAME="$PWD/test-file.txt"
 FILE_CONTENT="Hello, World!"
-BLAKE3_HASH="7cLWjV2o1VsqwkAnyDWK3UemS2psCBHjj865Dovpu4p1"
 
 echo "Publish and get providers file test:"
 
-run daemon
+# run daemon
 killall liberum_core &> /dev/null
 $CORE_BIN --daemon &> /dev/null &
 sleep 0.1; # the socket file is created asynchronously and may not be ready yet :))))
@@ -40,12 +39,12 @@ sleep 0.1
 
 # create and provide file
 echo "${FILE_CONTENT}" > "$FILE_NAME"
-$CLI_BIN -d publish-file $N1 "$FILE_NAME" &> /dev/null
+FILE_HASH=$($CLI_BIN publish-file $N1 "$FILE_NAME" 2> /dev/null)
 
 # download file
-PROVIDERS_RESULT=$($CLI_BIN -d get-providers $N2 "${BLAKE3_HASH}" 2> /dev/null)
+PROVIDERS_RESULT=$($CLI_BIN -d get-providers $N2 "${FILE_HASH}" 2> /dev/null)
 should_not_be_equal "$PROVIDERS_RESULT" ""
-RESULT1=$($CLI_BIN -d download-file $N2 "${BLAKE3_HASH}" 2> /dev/null)
+RESULT1=$($CLI_BIN -d download-file $N2 "${FILE_HASH}" 2> /dev/null)
 should_contain "$RESULT1" "${FILE_CONTENT}"
 
 # cleanup

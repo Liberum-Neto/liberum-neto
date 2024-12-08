@@ -1,16 +1,20 @@
-pub mod file_share;
 pub mod kademlia;
+pub mod object_sender;
 use anyhow::Result;
+use liberum_core::proto::*;
+use libp2p::request_response::ResponseChannel;
 use std::collections::{HashMap, HashSet};
 
-use file_share::*;
 use libp2p::{
     kad,
     request_response::{self, OutboundRequestId},
     swarm::{ConnectionId, NetworkBehaviour},
     PeerId,
 };
+use object_sender::*;
 use tokio::sync::oneshot;
+
+use liberum_core::proto::{self, TypedObject};
 
 use super::SwarmContext;
 
@@ -20,7 +24,7 @@ use super::SwarmContext;
 #[derive(NetworkBehaviour)]
 pub struct LiberumNetoBehavior {
     pub kademlia: kad::Behaviour<kad::store::MemoryStore>,
-    pub file_share: request_response::cbor::Behaviour<FileRequest, FileResponse>,
+    pub object_sender: request_response::cbor::Behaviour<ObjectSendRequest, ObjectResponse>,
 }
 
 /// Data required to handle events from the behaviours. Mostly
@@ -28,23 +32,37 @@ pub struct LiberumNetoBehavior {
 pub struct BehaviourContext {
     /// A hashmap of resources that are provided by the node. Should be replaced with
     /// an implementation of VAULT
-    pub providing: HashMap<kad::RecordKey, SharedResource>,
-    pub pending_start_providing: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
-    pub pending_publish_file: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
-    pub pending_get_providers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
-    pub pending_download_file: HashMap<OutboundRequestId, oneshot::Sender<Result<Vec<u8>>>>,
-    pub pending_dial: HashMap<ConnectionId, oneshot::Sender<Result<()>>>,
+    pub providing: HashMap<proto::Hash, TypedObject>, // TODO VAULT sHOULD REPLACE THIS
+    pub pending_inner_start_providing: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
+    pub pending_inner_send_object:
+        HashMap<OutboundRequestId, oneshot::Sender<Result<ResultObject>>>,
+    pub pending_inner_get_providers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
+    pub pending_inner_get_object: HashMap<OutboundRequestId, oneshot::Sender<Result<TypedObject>>>,
+    pub pending_inner_dial: HashMap<ConnectionId, oneshot::Sender<Result<()>>>,
+    pub pending_inner_get_closest_peers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
+    pub pending_outer_start_providing:
+        HashMap<kad::QueryId, (proto::Hash, ResponseChannel<ObjectResponse>)>,
+    pub pending_outer_get_object: HashMap<
+        proto::Hash,
+        (
+            request_response::InboundRequestId,
+            request_response::ResponseChannel<ObjectResponse>,
+        ),
+    >,
 }
 
 impl BehaviourContext {
     pub fn new() -> Self {
         BehaviourContext {
             providing: HashMap::new(),
-            pending_start_providing: HashMap::new(),
-            pending_publish_file: HashMap::new(),
-            pending_get_providers: HashMap::new(),
-            pending_download_file: HashMap::new(),
-            pending_dial: HashMap::new(),
+            pending_inner_start_providing: HashMap::new(),
+            pending_outer_start_providing: HashMap::new(),
+            pending_inner_send_object: HashMap::new(),
+            pending_inner_get_providers: HashMap::new(),
+            pending_inner_get_object: HashMap::new(),
+            pending_inner_dial: HashMap::new(),
+            pending_inner_get_closest_peers: HashMap::new(),
+            pending_outer_get_object: HashMap::new(),
         }
     }
 }
@@ -53,10 +71,10 @@ impl SwarmContext {
     pub(crate) async fn handle_behaviour_event(&mut self, event: LiberumNetoBehaviorEvent) {
         match event {
             LiberumNetoBehaviorEvent::Kademlia(e) => {
-                self.handle_kademlia(e);
+                self.handle_kademlia(e).await;
             }
-            LiberumNetoBehaviorEvent::FileShare(e) => {
-                self.handle_file_share(e).await;
+            LiberumNetoBehaviorEvent::ObjectSender(e) => {
+                self.handle_object_sender(e).await;
             }
         }
     }

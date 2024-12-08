@@ -5,11 +5,10 @@ source "$SCRIPT_DIR"/lib/asserts.sh
 CORE_BIN=$1
 CLI_BIN=$2
 
-NODE_COUNT=10
+NODE_COUNT=50
 
 FILE_NAME="$PWD/test-file.txt"
 FILE_CONTENT="Hello, World!"
-BLAKE3_HASH="7cLWjV2o1VsqwkAnyDWK3UemS2psCBHjj865Dovpu4p1"
 
 NODE_ADDR_PREFIX="/ip6/::1/udp/"
 NODE_ADDR_SUFFIX="/quic-v1"
@@ -55,11 +54,11 @@ sleep 0.5
 
 # create and provide file
 echo "${FILE_CONTENT}" > "$FILE_NAME"
-$CLI_BIN -d publish-file ${N_NAMES[0]} "$FILE_NAME" 2> /dev/null
+FILE_ID=$($CLI_BIN publish-file ${N_NAMES[0]} "$FILE_NAME" 2> /dev/null)
 
 init_asserts
 
-RESULT=$($CLI_BIN -d download-file ${N_NAMES[$(($NODE_COUNT - 1))]} "${BLAKE3_HASH}" 2> /dev/null)
+RESULT=$($CLI_BIN -d download-file ${N_NAMES[$(($NODE_COUNT - 1))]} "${FILE_ID}" 2> /dev/null)
 should_be_equal "$RESULT" "$FILE_CONTENT"
 
 
