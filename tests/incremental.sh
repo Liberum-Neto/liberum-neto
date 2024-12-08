@@ -31,11 +31,7 @@ printf "${BLUE}Skipping test logs for creating $NODE_COUNT nodes...${NC}\n"
 for (( i = 1; i <= $INIT_COUNT; i++ )); do
     {
     N="test_n$i"
-<<<<<<< HEAD
     N_ADDR="${NODE_ADDR_PREFIX}$(($i + 22136))${NODE_ADDR_SUFFIX}"
-=======
-    N_ADDR="${NODE_ADDR_PREFIX}$(($i + 52136))${NODE_ADDR_SUFFIX}"
->>>>>>> e0ad7e2 (Very much fun)
 
     $CLI_BIN -d new-node $N --id-seed $i &> /dev/null
     $CLI_BIN -d config-node $N add-external-addr $N_ADDR &> /dev/null
@@ -65,17 +61,10 @@ init_asserts
 COUNT_PASS=0
 COUNT_FAIL=0
 set +x
-<<<<<<< HEAD
 for (( i = $INIT_COUNT+1; i <= $((INIT_COUNT + NODE_COUNT)); i++ )); do
     {
     N="test_n$i"
     N_ADDR="${NODE_ADDR_PREFIX}$(($i + 23136))${NODE_ADDR_SUFFIX}"
-=======
-for (( i = 1; i <= $NODE_COUNT; i++ )); do
-    {
-    N="test_n$i"
-    N_ADDR="${NODE_ADDR_PREFIX}$(($i + 52136))${NODE_ADDR_SUFFIX}"
->>>>>>> e0ad7e2 (Very much fun)
 
     $CLI_BIN -d new-node $N --id-seed $i &> /dev/null
     $CLI_BIN -d config-node $N add-external-addr $N_ADDR &> /dev/null
@@ -89,12 +78,8 @@ for (( i = 1; i <= $NODE_COUNT; i++ )); do
     N_IDS+=("$ID")
     N_ADDRESSES+=("$N_ADDR")
 
-<<<<<<< HEAD
     sleep 0.1
 
-=======
-    sleep 0.5
->>>>>>> e0ad7e2 (Very much fun)
     RESULT=$($CLI_BIN -d download-file ${N} "${FILE_ID}" 2> /dev/null)
     if [[ "$RESULT" == "$FILE_CONTENT" ]]; then
         COUNT_PASS=$((COUNT_PASS+1))
