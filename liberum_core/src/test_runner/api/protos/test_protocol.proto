@@ -27,39 +27,68 @@ message TestScenario{
     int64 TestInstanceId = 1;
     repeated TestPartScenario parts = 2;
     repeated NodeDefinition nodes = 3;
-}
+    repeated FileContent files = 4;
 
-message NodeDefinition {
-    uint64 NodeId = 1;
-    string Name = 2;
-    enum NodeDefinitionLevel {
-        None = 0;
-        Hash = 1;
-        Address = 2;
+    message NodeDefinition {
+        uint64 NodeId = 1;
+        string Name = 2;
+        enum NodeDefinitionLevel {
+            None = 0;
+            NeedHash = 1;
+            NeedAddress = 2;
+        }
+        NodeDefinitionLevel visibility = 3;
+        optional string Address = 4;
     }
-    NodeDefinitionLevel visibility = 3;
-}
 
-message TestPartScenario{
-    sint64 PartId  = 2;
-    oneof part{
-        TestPartSimple simple = 1;
+    message FileContent {
+        bytes Object = 1;
+        string Hash = 2;
+    }
+
+    message TestPartScenario{
+        sint64 PartId  = 2;
+        oneof part{
+            TestPartSimple simple = 1;
+        }
+    
+        message TestPartSimple{
+            repeated Action actions = 1;
+        }
     }
 }
 
-message TestPartSimple{
-    repeated Action actions = 1;
-}
+
+
+
+
+
 
 message Action {
     uint64 ActionId = 1;
-    // oneof data{
+    uint64 NodeId  = 6;
+    string NodeName = 7;
+    oneof details{
+     DialNode dial = 2;
+     PublishObject publish_object = 3;
+    //  PublishMeta publishMeta = 4; //
+     GetObject get_object = 5;
+    }
 
+
+    message DialNode {
+        uint64 DialedNodeId = 1;
+    }
+    message PublishObject {
+        string Hash = 2;
+    }
+    // message PublishMeta {
+    //     bytes Object = 1;
     // }
-    // optional DialNode dial = 2;
-    // optional PublishObject publish = 3;
-    // optional PublishMeta publishMeta = 4;
-    // optional GetObject GetObject = 5;
+    message GetObject {
+        string ObjectHash = 1;
+    }
+
 }
 
 
@@ -69,6 +98,7 @@ message NodesCreated{
 
 message NodeInstance{
     uint64 NodeId = 1;
+    string NodeName = 4;
     string NodeHash = 2;
     optional string NodeAdress = 3;
 }
@@ -84,13 +114,32 @@ message TestPartResult{
 
 message ActionResoult{
     uint64 ActionSourceId = 1;
-    uint64 ActionStartTime = 2;
-    uint64 ActionStopTime = 3;
+    string ActionStartTime = 2;
+    string ActionStopTime = 3;
+    bool IsSuccess = 4;
+    optional string Error = 9;
+
+    oneof details{
+        DialNodeResult dial = 5;
+        PublishObjectResult publish_object = 6;
+       //  PublishMeta publishMeta = 4; //
+        GetObjectResult get_object = 8;
+       }
 
     // optional DialNodeResoult dial = 2;
     // optional PublishObjectResoult publish = 3;
     // optional PublishMetaResoult publishMeta = 4;
     // optional GetObjectResoult getObject = 5; 
+
+    message DialNodeResult {
+    }
+    message PublishObjectResult {
+    }
+    // message PublishMeta {
+    //     bytes Object = 1;
+    // }
+    message GetObjectResult {
+    }
 }
 
 message ACK{

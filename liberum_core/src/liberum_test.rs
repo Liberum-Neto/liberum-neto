@@ -1,10 +1,15 @@
-use std::{collections::HashMap, usize};
+use core::error;
+use std::{collections::HashMap, fs::File, io::Write, iter::zip, panic, path::{Path, PathBuf}, str::FromStr, sync::Arc, usize};
 
 use connection::AppContext;
-use liberum_core::{DaemonError, DaemonRequest, DaemonResponse};
+use liberum_core::{node_config::NodeConfig, DaemonError, DaemonRequest, DaemonResponse};
+use libp2p::Multiaddr;
 use node::store::NodeStore;
 
-use test_protocol::{callable_nodes::CallableNode, identity_server_client::IdentityServerClient, Action, ActionResoult, Identity, NodesCreated, TestPartResult, TestScenario};
+use crate::test_protocol::test_scenario::test_part_scenario::Part::Simple;
+use crate::test_protocol::test_scenario::node_definition::NodeDefinitionLevel;
+
+use test_protocol::{action_resoult::{Details, DialNodeResult, GetObjectResult, PublishObjectResult}, callable_nodes::{CallableNode}, identity_server_client::IdentityServerClient, Action, ActionResoult, Identity, NodeInstance, NodesCreated, TestPartResult, TestScenario};
 use tracing::error;
 pub mod connection;
 pub mod node;
@@ -18,7 +23,8 @@ pub mod test_protocol {
 
 struct TestContext{
     scenario: TestScenario,
-    callable_nodes: HashMap<u64,CallableNode>
+    callable_nodes: HashMap<u64,CallableNode>,
+    app_context: AppContext,
 }
 
 
@@ -35,19 +41,27 @@ pub(crate) async fn run_test(url: String, host_id: String) -> Result<(),Box<dyn 
 
     let diallable_nodes = client.test_ready(new_nodes).await?.into_inner();
 
-    let mut test_context = TestContext{ scenario: test_scenario, callable_nodes: HashMap::new() };
+    let mut test_context = TestContext{ scenario: test_scenario, callable_nodes: HashMap::new(), app_context };
 
+    
     for node in diallable_nodes.nodes {
         test_context.callable_nodes.insert(node.node_id, node);
     }
+
+    for file in test_context.scenario.files {
+        File::create(&PathBuf::from(file.hash).as_path())?.write(&file.object);
+    }
+
 
     let (result_tx,result_rx)  = tokio::sync::mpsc::channel::<TestPartResult>(128);
 
     let mut part_stream = client.test_partake(tokio_stream::wrappers::ReceiverStream::new(result_rx)).await?.into_inner();
     
+    let ctx = Arc::new(test_context);
+
     while let Some(descriptor) = part_stream.message().await? {
         
-        let part  = &test_context.scenario.parts[descriptor.part_id as usize];
+        let part  = &ctx.scenario.parts[descriptor.part_id as usize];
 
         let mut actions_tasks = Vec::new();
         let mut action_result = Vec::new();
@@ -55,9 +69,9 @@ pub(crate) async fn run_test(url: String, host_id: String) -> Result<(),Box<dyn 
 
         if let Some(scenario) = &part.part{
             match scenario {
-                test_protocol::test_part_scenario::Part::Simple(test_part_simple) => {
+                Simple(test_part_simple) => {
                     for ele in &test_part_simple.actions {
-                        actions_tasks.push(tokio::spawn(handle_simple_action(ele.clone())));
+                        actions_tasks.push(tokio::spawn(handle_simple_action(ele.clone(),ctx.clone())));
                     }
 
                     for handle in actions_tasks {
@@ -80,9 +94,48 @@ pub(crate) async fn run_test(url: String, host_id: String) -> Result<(),Box<dyn 
     Ok(())
 }
 
-async fn handle_simple_action(action: Action) -> ActionResoult{
+async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionResoult{
 
-    let _ = action;
+    let mut result = ActionResoult{action_source_id: action.action_id,action_start_time: chrono::Utc::now().to_rfc3339(),..Default::default()};
+
+    match action.details {
+        Some(details) => {
+            let request = match details {
+                test_protocol::action::Details::Dial(dial_node) => DaemonRequest::Dial { node_name: action.node_name, peer_id: ctx.callable_nodes.get(&dial_node.dialed_node_id).unwrap().node_hash.to_string(), addr: ctx.callable_nodes.get(&dial_node.dialed_node_id).unwrap().node_address().to_string() },
+                test_protocol::action::Details::PublishObject(publish_object) => DaemonRequest::PublishFile { node_name: action.node_name, path: PathBuf::from(publish_object.hash.to_string()) },
+                test_protocol::action::Details::GetObject(get_object) => DaemonRequest::DownloadFile { node_name: action.node_name, id: get_object.object_hash },
+            };
+
+            let daemon_request = daemon_request(request,ctx.app_context.clone()).await;
+            result.action_stop_time = chrono::Utc::now().to_rfc3339();
+            
+            match daemon_request {
+                Ok(response) => {
+                    result.is_success = true;
+                    result.details = Some(match response {
+                        // DaemonResponse::FileProvided { id } => todo!(),
+                        // DaemonResponse::Providers { ids } => todo!(),
+                        DaemonResponse::FileDownloaded { data:_ } => Details::GetObject(GetObjectResult{}),
+                        DaemonResponse::Dialed => Details::Dial(DialNodeResult{}),
+                        DaemonResponse::FilePublished { id:_ } => Details::PublishObject(PublishObjectResult{}),
+                        _ => panic!()
+                    })
+                },
+                Err(error) => {
+                    match error {
+                        DaemonError::Other(err) => result.error = Some(err),
+                        _ => panic!()
+                    }
+                },
+            }
+                
+            
+
+        },
+        None => {},
+    }
+
+
     return ActionResoult{..Default::default()};
 }
 
@@ -90,21 +143,77 @@ async fn daemon_request(request: DaemonRequest, app_context: AppContext) -> Resu
     connection::handle_message(request, &app_context).await
 }
 
-async fn handle_create_nodes<'a>(test_scenario: &TestScenario, app_context: AppContext) -> NodesCreated {
+async fn run_few_and_collect(requests: Vec<(u64,DaemonRequest)>, app_context: AppContext) -> Result<Vec<(u64, DaemonResponse)>, Box<dyn error::Error>>{
+    let mut tasks = Vec::with_capacity(requests.len());
+
+    for request in &requests {
+        tasks.push(tokio::spawn(daemon_request(request.1.clone(), app_context.clone())));
+    }
+
+    let mut results = Vec::with_capacity(tasks.len());
+    for request in zip(tasks,&requests) {
+        results.push((request.1.0, request.0.await??));
+    }
+    Ok(results)
+}
+
+async fn handle_create_nodes(test_scenario: &TestScenario, app_context: AppContext) -> NodesCreated {
     
-    let mut create_node_tasks = Vec::new();
+    let mut create_node_requests = Vec::new();
 
     for node in &test_scenario.nodes {
-        create_node_tasks.push(
-            tokio::spawn( daemon_request(liberum_core::DaemonRequest::NewNode { node_name: node.name.clone(), id_seed: None }, app_context.clone()) ));
+        create_node_requests.push( (node.node_id,
+            liberum_core::DaemonRequest::NewNode { node_name: node.name.clone(), id_seed: None }));
     }
 
-    for task in  create_node_tasks {
-        let _ = task.await.unwrap();
+    run_few_and_collect(create_node_requests, app_context.clone()).await.unwrap();
+
+    // load hashes
+
+    let mut hash_requests = Vec::new();
+    let mut dialable_nodes = HashMap::new();
+
+    for node in &test_scenario.nodes {
+        if node.visibility() == NodeDefinitionLevel::NeedHash || node.visibility() == NodeDefinitionLevel::NeedAddress {
+            hash_requests.push((node.node_id, DaemonRequest::GetPeerId { node_name: node.name.clone() }));
+            dialable_nodes.insert(node.node_id,NodeInstance{node_id: node.node_id,node_hash:"".to_owned(),node_adress: None,node_name: node.name.to_string()});
+        }
     }
+
+    for response in  run_few_and_collect(hash_requests, app_context.clone()).await.unwrap(){
+        match response {
+            (node_id, DaemonResponse::PeerId { id: hash }) => dialable_nodes.get_mut(&node_id).unwrap().node_hash = hash,
+            _ => panic!()
+        }
+    };
+
+    // load address
+
+    let mut address_requests = Vec::new();
+
+    for node in &test_scenario.nodes {
+        if node.visibility() == NodeDefinitionLevel::NeedAddress {
+            let request = DaemonRequest::OverwriteNodeConfig { node_name: node.name.clone(), new_cfg: NodeConfig{external_addresses: vec![Multiaddr::from_str(node.address()).unwrap()],bootstrap_nodes: Vec::new()}};
+            
+            address_requests.push((node.node_id, request));
+            dialable_nodes.get_mut(&node.node_id).unwrap().node_adress = node.address.clone()  ;
+        }
+    }
+    run_few_and_collect(address_requests, app_context.clone()).await.unwrap();
+    
+    // start nodes
+
+    let mut start_requests = Vec::new();
+
+    for node in &test_scenario.nodes {
+        let request = DaemonRequest::StartNode { node_name: node.name.clone() };
+        start_requests.push((node.node_id, request));
+    }
+    run_few_and_collect(start_requests, app_context.clone()).await.unwrap();
+
 
     return NodesCreated{
-     ..Default::default()
+        nodes: dialable_nodes.values().cloned().collect()
     }
 }
 
