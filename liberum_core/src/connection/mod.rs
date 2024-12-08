@@ -9,6 +9,7 @@ use crate::node::store::LoadNode;
 use crate::node::store::NodeStore;
 use crate::node::DialPeer;
 use crate::node::DownloadFile;
+use crate::node::GetAddresses;
 use crate::node::GetProviders;
 use crate::node::GetPublishedObjects;
 use crate::node::NodeSnapshot;
@@ -279,9 +280,33 @@ async fn handle_list_nodes(context: &AppContext) -> DaemonResult {
             .await
             .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-        let node_ext_addrs = node
+        let config_ext_addrs = node
             .config
             .external_addresses
+            .into_iter()
+            .map(|addr| addr.to_string())
+            .collect::<Vec<String>>();
+
+        let running_ext_addrs = match is_running {
+            true => {
+                let node = context
+                    .node_manager
+                    .ask(GetNode {
+                        name: name.to_string(),
+                    })
+                    .send()
+                    .await
+                    .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+                node.ask(GetAddresses)
+                    .send()
+                    .await
+                    .map_err(|e| DaemonError::Other(e.to_string()))?
+            }
+            false => Vec::new(),
+        };
+
+        let running_ext_addrs = running_ext_addrs
             .into_iter()
             .map(|addr| addr.to_string())
             .collect::<Vec<String>>();
@@ -289,7 +314,8 @@ async fn handle_list_nodes(context: &AppContext) -> DaemonResult {
         let node_info = NodeInfo {
             name: name.to_string(),
             is_running,
-            addresses: node_ext_addrs,
+            config_addresses: config_ext_addrs,
+            running_addresses: running_ext_addrs,
         };
 
         node_infos.push(node_info);
