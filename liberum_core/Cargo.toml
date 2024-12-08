@@ -35,3 +35,10 @@ blake3 = "1.5.4"
 bs58 = "0.5.1"
 strum = "0.26"
 strum_macros = "0.26"
+futures-util = "0.3.31"
+pretty_assertions = "1.4.1"
+rand = "0.8.5"
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+tokio-rusqlite = "0.6.0"
+tokio-stream = "0.1.16"
+uuid = { version = "1.11.0", features = ["v4"] }

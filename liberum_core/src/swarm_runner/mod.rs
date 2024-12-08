@@ -1,6 +1,7 @@
 pub mod behaviour;
 pub mod messages;
 
+use crate::liberum_vault::Vault;
 use crate::node::NodeSnapshot;
 use crate::node::{self, Node};
 use anyhow::anyhow;
@@ -14,11 +15,13 @@ use libp2p::request_response::ProtocolSupport;
 use libp2p::{identity, kad, Multiaddr, StreamProtocol, SwarmBuilder};
 use libp2p::{kad::store::MemoryStore, request_response, swarm::SwarmEvent, Swarm};
 use messages::*;
+use std::path::Path;
 use std::str::FromStr;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::warn;
 use tracing::{debug, error, info};
+
 const KAD_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/kad/1.0.0");
 //const FILE_SHARE_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/file-share/1.0.0");
 const OBJECT_SENDER_PROTO_NAME: StreamProtocol =
@@ -40,6 +43,7 @@ pub struct SwarmContext {
     _node_actor: ActorRef<Node>,
     node_snapshot: NodeSnapshot,
     behaviour: BehaviourContext,
+    vault: ActorRef<Vault>,
 }
 
 /// Prepares the sender to send messages to the swarm
@@ -107,6 +111,7 @@ async fn run_swarm_main(
         node_snapshot,
         swarm: swarm,
         behaviour: BehaviourContext::new(),
+        vault: kameo::spawn(Vault::new(Path::new("test")).await.unwrap()),
     };
 
     let swarm_default_addr_ip6 =

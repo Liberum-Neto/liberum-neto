@@ -1,4 +1,5 @@
 pub mod connection;
+pub mod liberum_vault;
 pub mod node;
 pub mod swarm_runner;
 

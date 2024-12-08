@@ -1,3 +1,5 @@
+pub mod fragment;
+
 use std::cmp;
 use std::iter::once;
 use std::iter::successors;
@@ -29,8 +31,8 @@ use tokio_util::bytes::Bytes;
 use tokio_util::io::ReaderStream;
 use tracing::debug;
 
-use crate::fragment::key::Key;
-use crate::fragment::FragmentInfo;
+use fragment::key::Key;
+use fragment::FragmentInfo;
 
 pub struct Vault {
     db: Connection,
@@ -57,7 +59,7 @@ impl Actor for Vault {
 #[messages]
 impl Vault {
     #[message]
-    async fn store_fragment(&self, key: Option<Key>, mut data: FragmentData) -> Result<Key> {
+    pub async fn store_fragment(&self, key: Option<Key>, mut data: FragmentData) -> Result<Key> {
         let uid = uuid::Uuid::new_v4();
         let random_fragment_path = Self::temp_dir_path(&self.vault_dir_path).join(uid.to_string());
         let mut fragment_file = File::create(&random_fragment_path).await?;
@@ -99,7 +101,7 @@ impl Vault {
     }
 
     #[message]
-    async fn store_object(&self, hash: Hash, object: ObjectEnum) -> Result<()> {
+    pub async fn store_object(&self, hash: Hash, object: ObjectEnum) -> Result<()> {
         let key: Key = hash.bytes.into();
 
         match object {
@@ -114,7 +116,7 @@ impl Vault {
     }
 
     #[message]
-    async fn load_object(&self, hash: Hash) -> Result<Option<ObjectEnum>> {
+    pub async fn load_object(&self, hash: Hash) -> Result<Option<ObjectEnum>> {
         let key: Key = hash.bytes.into();
 
         self.load_typed_object(key)
