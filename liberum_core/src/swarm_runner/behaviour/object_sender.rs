@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 use liberum_core::parser::{self, ObjectEnum};
 use liberum_core::proto::{self, PlainFileObject, QueryObject, TypedObject, UUIDTyped};
-use libp2p::quic;
 use libp2p::{
     kad,
     request_response::{self, InboundRequestId, OutboundRequestId, ResponseChannel},
@@ -83,6 +82,7 @@ impl SwarmContext {
         let id = proto::Hash::try_from(&request.object);
         if let Err(e) = id {
             error!(
+                node = self.node_snapshot.name,
                 received_id = request.object_id.to_string(),
                 err = format!("{e}"),
                 "Can't hash received object to verify hash"
@@ -94,6 +94,7 @@ impl SwarmContext {
 
         if request.object_id != id {
             error!(
+                node = self.node_snapshot.name,
                 received_id = request.object_id.to_string(),
                 id = id.to_string(),
                 "File Request ID does not match actual ID!"
@@ -102,7 +103,11 @@ impl SwarmContext {
 
         let obj = parser::parse_typed(request.object.clone()).await;
         if let Err(e) = obj {
-            error!(err = format!("{e}"), "Error parsing request object");
+            error!(
+                node = self.node_snapshot.name,
+                err = format!("{e}"),
+                "Error parsing request object"
+            );
             self.respond_err(request, response_channel);
             return;
         }
@@ -147,7 +152,7 @@ impl SwarmContext {
                     }
                 }
                 Err(e) => {
-                    let _ = sender.send(Err(anyhow!("Failed to parse result object")));
+                    let _ = sender.send(Err(anyhow!("Failed to parse result object").context(e)));
                 }
             }
         }
@@ -177,7 +182,11 @@ impl SwarmContext {
     ) {
         let r = self.put_object_into_vault(obj.into()).await;
         if let Err(e) = r {
-            error!("Failed to put object into vault");
+            error!(
+                node = self.node_snapshot.name,
+                err = format!("{e}"),
+                "Failed to put object into vault"
+            );
             self.respond_err(request, response_channel);
             return;
         }
@@ -189,7 +198,11 @@ impl SwarmContext {
             .start_providing(kad::RecordKey::from(id.bytes.to_vec()));
 
         if let Err(e) = qid {
-            error!(err = format!("{e}"), "Failed to start providing");
+            error!(
+                node = self.node_snapshot.name,
+                err = format!("{e}"),
+                "Failed to start providing"
+            );
             self.respond_err(request, response_channel);
             return;
         }
@@ -210,7 +223,11 @@ impl SwarmContext {
     ) {
         let query = parser::parse_typed(query.query_object).await;
         if let Err(e) = query {
-            debug!(err = format!("{e}"), "query_object couldn't get parsed");
+            debug!(
+                node = self.node_snapshot.name,
+                err = format!("{e}"),
+                "query_object couldn't get parsed"
+            );
             self.respond_err(request, response_channel);
             return;
         }
@@ -219,7 +236,10 @@ impl SwarmContext {
         let query = match query {
             parser::ObjectEnum::SimpleIDQuery(query) => parser::ObjectEnum::SimpleIDQuery(query),
             _ => {
-                error!("query_object TypedObject is not SimpleIDQuery {query}");
+                error!(
+                    node = self.node_snapshot.name,
+                    "query_object TypedObject is not SimpleIDQuery {query}"
+                );
                 return;
             }
         };
@@ -228,25 +248,34 @@ impl SwarmContext {
             parser::ObjectEnum::SimpleIDQuery(query) => {
                 let obj = self.get_object_from_vault(query.id.clone());
                 if let None = obj {
-                    error!("Failed to get asked object from vault");
+                    error!(
+                        node = self.node_snapshot.name,
+                        "Failed to get asked object from vault"
+                    );
                     self.respond_err(request, response_channel);
                     return;
                 }
                 let obj = obj.expect("To not be err, as it was checked earlier");
 
-                let id = proto::Hash::try_from(&obj);
-                if let Err(e) = id {
-                    error!("Failed to calculate hash of object from vault");
+                let calculated_obj_id = proto::Hash::try_from(&obj);
+                if let Err(e) = calculated_obj_id {
+                    error!(
+                        err = format!("{e}"),
+                        node = self.node_snapshot.name,
+                        "Failed to calculate hash of object from vault"
+                    );
                     self.respond_err(request, response_channel);
                     return;
                 }
-                let id = id.expect("Not to be err as it was checked earlier");
+                let calculated_obj_id =
+                    calculated_obj_id.expect("Not to be err as it was checked earlier");
 
-                if query.id != id {
+                if query.id != calculated_obj_id {
                     error!(
-                        received_id = bs58::encode(&query.id.bytes).into_string(),
-                        computed_id = bs58::encode(&id.bytes).into_string(),
-                        "ids dont match"
+                        received_obj_id = bs58::encode(&query.id.bytes).into_string(),
+                        calculated_obj_id = bs58::encode(&calculated_obj_id.bytes).into_string(),
+                        node = self.node_snapshot.name,
+                        "Id of object from vault does not match requested & provided ID"
                     )
                 }
 
@@ -254,13 +283,15 @@ impl SwarmContext {
                     response_channel,
                     ObjectResponse {
                         object: obj,
-                        object_id: id,
+                        object_id: calculated_obj_id,
                     },
                 );
             }
             _ => {
-                // TODO TODO This arm matches, but shouldn't
-                error!("Query object TypedObject was not a SimpleQueryID {}", query);
+                error!(
+                    node = self.node_snapshot.name,
+                    "Query object TypedObject was not a SimpleQueryID {}", query
+                );
                 let _ = self.swarm.behaviour_mut().object_sender.send_response(
                     response_channel,
                     ObjectResponse {
