@@ -20,6 +20,7 @@ use codec::AsymmetricMessageCodec;
 use futures::prelude::*;
 use tokio_util::codec::Decoder;
 
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -168,6 +169,9 @@ pub fn str_to_file_id(s: &str) -> Result<libp2p::kad::RecordKey> {
 
 pub fn str_to_file_id_bytes(s: &str) -> Result<[u8; 32]> {
     let k: Vec<u8> = bs58::decode(s).into_vec()?;
+    if k.len() != 32 {
+        return Err(anyhow!("\"{s}\" is not a valid base58 ID."));
+    }
     let mut id = [0u8; 32];
     id.copy_from_slice(&k);
     Ok(id)
