@@ -264,10 +264,10 @@ impl SwarmContext {
 
 /// Utility related to the Kademlia behaviour
 impl SwarmContext {
-    pub fn get_object_from_vault(&mut self, key: proto::Hash) -> Option<proto::TypedObject> {
+    pub fn get_object_from_vault(&mut self, obj_id: proto::Hash) -> Option<proto::TypedObject> {
         let path = PathBuf::from("FILE_SHARE_SAVED_FILES")
             .join(self.node_snapshot.name.clone())
-            .join(key.to_string());
+            .join(obj_id.to_string());
 
         match std::fs::read(&path) {
             Ok(data) => {
@@ -278,7 +278,7 @@ impl SwarmContext {
             Err(e) => {
                 error!(
                     node = self.node_snapshot.name,
-                    key = bs58::encode(&key.bytes).into_string(),
+                    obj_id = bs58::encode(&obj_id.bytes).into_string(),
                     err = format!("{e:?}"),
                     path = format!("{path:?}"),
                     "Failed to read file"
@@ -290,11 +290,11 @@ impl SwarmContext {
     pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {
         let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.node_snapshot.name.clone());
         std::fs::create_dir_all(&dir).ok();
-        let id = proto::Hash::try_from(&obj).unwrap();
+        let obj_id: proto::Hash = proto::Hash::try_from(&obj).unwrap();
         let data = bincode::serialize(&obj).unwrap();
         debug!("Putting file to vault: {:?}", data);
 
-        let path = dir.join(id.to_string());
+        let path = dir.join(obj_id.to_string());
 
         if let Err(e) = std::fs::write(path.clone(), data) {
             error!(
@@ -308,10 +308,10 @@ impl SwarmContext {
         Ok(())
     }
 
-    pub(crate) fn print_providers(&mut self, key: &RecordKey) {
+    pub(crate) fn print_providers(&mut self, obj_id_kad: &RecordKey) {
         debug!(
             node = self.node_snapshot.name,
-            record = bs58::encode(key.to_vec()).into_string(),
+            obj_id_kad = bs58::encode(obj_id_kad.to_vec()).into_string(),
             "Providers:"
         );
         for p in self
@@ -319,12 +319,12 @@ impl SwarmContext {
             .behaviour_mut()
             .kademlia
             .store_mut()
-            .providers(key)
+            .providers(obj_id_kad)
             .iter()
         {
             debug!(
                 node = self.node_snapshot.name,
-                provider = p.provider.to_base58(),
+                provider_id = p.provider.to_base58(),
                 "Provider"
             );
         }
