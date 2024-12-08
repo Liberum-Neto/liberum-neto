@@ -47,6 +47,12 @@ impl TryFrom<&[u8]> for Hash {
     type Error = Error;
 
     fn try_from(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() != 32 {
+            return Err(anyhow!(
+                "Hash has 32 bytes, tried to convert from {} bytes",
+                bytes.len()
+            ));
+        }
         Ok(Hash {
             bytes: bytes[..32].try_into()?,
         })
@@ -56,6 +62,12 @@ impl TryFrom<&[u8; 32]> for Hash {
     type Error = Error;
 
     fn try_from(bytes: &[u8; 32]) -> Result<Self> {
+        if bytes.len() != 32 {
+            return Err(anyhow!(
+                "Hash has 32 bytes, tried to convert from {} bytes",
+                bytes.len()
+            ));
+        }
         Ok(Hash {
             bytes: bytes[..32].try_into()?,
         })
