@@ -285,7 +285,7 @@ impl SwarmContext {
             .for_each(|k| {
                 k.iter().for_each(|e| {
                     i += 1;
-                    //debug!("neighbour: {:?}: {:?}", e.node.key, e.node.value);
+                    debug!("neighbour: {:?}: {:?}", e.node.key, e.node.value);
                 });
             });
         error!(node = self.node_snapshot.name, "Neighbour count: {i}")
