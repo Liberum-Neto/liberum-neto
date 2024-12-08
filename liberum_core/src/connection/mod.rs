@@ -10,6 +10,7 @@ use crate::node::store::NodeStore;
 use crate::node::DialPeer;
 use crate::node::DownloadFile;
 use crate::node::GetProviders;
+use crate::node::GetPublishedFiles;
 use crate::node::NodeSnapshot;
 use crate::node::ProvideFile;
 use crate::node::PublishFile;
@@ -122,6 +123,9 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         } => handle_dial(node_name, peer_id, addr, context).await,
         DaemonRequest::PublishFile { node_name, path } => {
             handle_publish_file(node_name, path, context).await
+        }
+        DaemonRequest::GetPublishedFiles { node_name } => {
+            handle_get_published_files(node_name, context).await
         }
     }
 }
@@ -414,4 +418,31 @@ async fn handle_publish_file(
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
     Ok(DaemonResponse::FilePublished { id: resp_id })
+}
+
+async fn handle_get_published_files(node_name: String, context: &AppContext) -> DaemonResult {
+    let node = context
+        .node_manager
+        .ask(GetNode {
+            name: node_name.to_string(),
+        })
+        .send()
+        .await
+        .inspect_err(|e| {
+            debug!(
+                err = e.to_string(),
+                node_name = node_name,
+                "Failed to get node"
+            )
+        })
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    let file_infos = node
+        .ask(GetPublishedFiles)
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to get published files list"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    DaemonResult::Ok(DaemonResponse::PublishedFilesList { files: file_infos })
 }
