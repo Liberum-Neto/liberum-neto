@@ -36,10 +36,11 @@ pub struct BehaviourContext {
     pub pending_inner_start_providing: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
     pub pending_inner_send_object:
         HashMap<OutboundRequestId, oneshot::Sender<Result<ResultObject>>>,
-    pub pending_inner_get_providers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
+    pub pending_inner_get_providers:
+        HashMap<kad::QueryId, (Vec<PeerId>, oneshot::Sender<Vec<PeerId>>)>,
     pub pending_inner_get_object: HashMap<OutboundRequestId, oneshot::Sender<Result<TypedObject>>>,
     pub pending_inner_dial: HashMap<ConnectionId, oneshot::Sender<Result<()>>>,
-    pub pending_inner_get_closest_peers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
+    pub pending_inner_get_closest_peers: HashMap<kad::QueryId, oneshot::Sender<Vec<PeerId>>>,
     pub pending_outer_start_providing:
         HashMap<kad::QueryId, (proto::Hash, ResponseChannel<ObjectResponse>)>,
     pub pending_outer_get_object: HashMap<
