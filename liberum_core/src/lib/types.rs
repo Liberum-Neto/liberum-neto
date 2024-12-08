@@ -5,7 +5,8 @@ use uuid::Uuid;
 pub struct NodeInfo {
     pub name: String,
     pub is_running: bool,
-    pub addresses: Vec<String>,
+    pub config_addresses: Vec<String>,
+    pub running_addresses: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

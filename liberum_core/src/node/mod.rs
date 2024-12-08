@@ -251,6 +251,22 @@ impl Node {
     }
 
     #[message]
+    pub async fn get_addresses(&mut self) -> Result<Vec<Multiaddr>> {
+        let (send, recv) = oneshot::channel();
+
+        self.swarm_sender
+            .as_mut()
+            .unwrap()
+            .send(SwarmRunnerMessage::GetAddresses {
+                response_sender: send,
+            })
+            .await?;
+
+        let addrs = recv.await??;
+        Ok(addrs)
+    }
+
+    #[message]
     pub async fn dial_peer(&mut self, peer_id: String, peer_addr: String) -> Result<()> {
         let (send, recv) = oneshot::channel();
         let peer_id = PeerId::from_str(&peer_id)?;

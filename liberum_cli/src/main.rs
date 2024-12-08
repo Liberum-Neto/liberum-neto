@@ -153,7 +153,8 @@ struct GetPublishedObjects {
 struct NodeInfoRow {
     pub name: String,
     pub is_running: bool,
-    pub first_address: String,
+    pub first_cfg_address: String,
+    pub first_run_address: String,
 }
 
 #[derive(Tabled)]
@@ -641,8 +642,13 @@ impl From<&NodeInfo> for NodeInfoRow {
         Self {
             name: value.name.to_string(),
             is_running: value.is_running,
-            first_address: value
-                .addresses
+            first_cfg_address: value
+                .config_addresses
+                .first()
+                .unwrap_or(&"N/A".to_string())
+                .to_string(),
+            first_run_address: value
+                .running_addresses
                 .first()
                 .unwrap_or(&"N/A".to_string())
                 .to_string(),
