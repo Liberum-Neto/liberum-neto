@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -13,4 +15,10 @@ pub struct NodeInfo {
 pub struct TypedObjectInfo {
     pub id: String,
     pub type_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FileInfo {
+    pub id: String,
+    pub path: PathBuf,
 }
