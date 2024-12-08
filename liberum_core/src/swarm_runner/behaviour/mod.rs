@@ -35,10 +35,10 @@ pub struct BehaviourContext {
     pub providing: HashMap<proto::Hash, TypedObject>, // TODO VAULT sHOULD REPLACE THIS
     pub pending_start_providing: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
     pub pending_send_object: HashMap<OutboundRequestId, oneshot::Sender<Result<ResultObject>>>,
-    pub pending_get_providers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
+    pub pending_get_providers: HashMap<kad::QueryId, (Vec<PeerId>, oneshot::Sender<Vec<PeerId>>)>,
     pub pending_get_object: HashMap<OutboundRequestId, oneshot::Sender<Result<TypedObject>>>,
     pub pending_dial: HashMap<ConnectionId, oneshot::Sender<Result<()>>>,
-    pub pending_get_closest_peers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
+    pub pending_get_closest_peers: HashMap<kad::QueryId, oneshot::Sender<Vec<PeerId>>>,
     pub pending_object_start_providing:
         HashMap<kad::QueryId, (proto::Hash, ResponseChannel<ObjectResponse>)>,
     pub pending_object_requests: HashMap<

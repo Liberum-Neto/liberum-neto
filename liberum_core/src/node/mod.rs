@@ -94,7 +94,7 @@ impl Node {
     /// Message called on the node from the daemon to get the list of providers
     /// of an id. Changes the ID from string to libp2p format and just passes it to the swarm.
     #[message]
-    pub async fn get_providers(&mut self, id: String) -> Result<HashSet<PeerId>> {
+    pub async fn get_providers(&mut self, id: String) -> Result<Vec<PeerId>> {
         debug!(node = self.name, "Node got GetProviders");
         let id_key = str_to_file_id(&id)?;
         let id = proto::Hash {
@@ -311,7 +311,7 @@ impl Node {
 
         let peers = resp_recv.await?;
         if peers.is_empty() {
-            return Err(anyhow!("Could not find provider for file {id_str}.").into());
+            return Err(anyhow!("Could not find closest peers for file {id_str}.").into());
         }
 
         let k = 20;
@@ -342,14 +342,14 @@ impl Node {
                     }
                 }
             }
-            if successes >= 1 {
-                debug!(
-                    node = self.name,
-                    obj_id = id_str,
-                    "Published object to {successes} other nodes"
-                );
-                return Ok(id_str);
-            }
+        }
+        if successes >= 1 {
+            debug!(
+                node = self.name,
+                obj_id = id_str,
+                "Published object to {successes} other nodes"
+            );
+            return Ok(id_str);
         }
         Err(anyhow!("Could not publish file"))
     }

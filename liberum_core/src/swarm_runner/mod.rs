@@ -166,7 +166,7 @@ async fn run_swarm_main(
         .kademlia
         .bootstrap()
         .inspect_err(|e| {
-            info!(err = e.to_string(), "Could not bootstrap the swarm");
+            warn!(err = e.to_string(), "Could not bootstrap the swarm");
         })
         .ok();
 
@@ -274,7 +274,7 @@ impl SwarmContext {
             .for_each(|k| {
                 k.iter().for_each(|e| {
                     i += 1;
-                    //debug!("neighbour: {:?}: {:?}", e.node.key, e.node.value);
+                    debug!("neighbour: {:?}: {:?}", e.node.key, e.node.value);
                 });
             });
         error!(node = self.node_snapshot.name, "Neighbour count: {i}")

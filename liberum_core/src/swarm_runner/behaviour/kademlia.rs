@@ -149,7 +149,7 @@ impl SwarmContext {
                         .iter()
                         .map(|p| p.peer_id.clone())
                         .collect();
-                    let _ = sender.send(HashSet::from_iter(peers)).inspect_err(|e| {
+                    let _ = sender.send(peers).inspect_err(|e| {
                         debug!(
                             node = self.node_snapshot.name,
                             qid = format!("{id}"),
@@ -179,8 +179,30 @@ impl SwarmContext {
     ) {
         match result {
             Ok(GetProvidersOk::FoundProviders { key: _, providers }) => {
+                debug!(
+                    "get providers pending:{}, last step?: {}",
+                    _stats.num_pending(),
+                    _step.last
+                );
+                debug!(
+                    node = self.node_snapshot.name,
+                    "some providers found {}",
+                    providers.len()
+                );
+                if providers.len() == 0 {
+                    return;
+                }
                 if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
-                    let _ = sender.send(providers).inspect_err(|e| {
+                    let mut nodes = sender.0;
+
+                    nodes.append(&mut providers.into_iter().collect());
+                    if !_step.last {
+                        self.behaviour
+                            .pending_get_providers
+                            .insert(id, (nodes, sender.1));
+                        return;
+                    }
+                    let _ = sender.1.send(nodes).inspect_err(|e| {
                         debug!(
                             node = self.node_snapshot.name,
                             qid = format!("{id}"),
@@ -204,7 +226,7 @@ impl SwarmContext {
                     "Get providers didn't find any new records"
                 );
                 if let Some(sender) = self.behaviour.pending_get_providers.remove(&id) {
-                    let _ = sender.send(HashSet::new()).inspect_err(|e| {
+                    let _ = sender.1.send(sender.0).inspect_err(|e| {
                         debug!(
                             qid = format!("{id}"),
                             err = format!("{e:?}"),
@@ -258,7 +280,12 @@ impl SwarmContext {
         _num_closer_peers: usize,
         _num_provider_peers: usize,
     ) {
-        debug!(node = self.node_snapshot.name, "Kad Received GetProvider")
+        debug!(
+            node = self.node_snapshot.name,
+            closer = _num_closer_peers,
+            providers = _num_provider_peers,
+            "Kad Received GetProvider"
+        )
     }
 }
 
