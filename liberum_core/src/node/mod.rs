@@ -8,6 +8,7 @@ use kameo::messages;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::{BootstrapNode, NodeConfig};
 use liberum_core::str_to_file_id;
+use liberum_core::types::FileInfo;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use std::borrow::Borrow;
@@ -31,6 +32,7 @@ pub struct Node {
     // all of the methods:
     pub self_actor_ref: Option<ActorRef<Self>>,
     swarm_sender: Option<mpsc::Sender<SwarmRunnerMessage>>,
+    published_files: Vec<FileInfo>,
 }
 
 const DIAL_TIMEOUT: Duration = Duration::from_secs(10);
@@ -292,10 +294,22 @@ impl Node {
         let id_str = liberum_core::file_id_to_str(id);
 
         match recv.await {
-            Ok(Ok(_)) => Ok(id_str),
+            Ok(Ok(_)) => {
+                self.published_files.push(FileInfo {
+                    id: id_str.clone(),
+                    path,
+                });
+
+                Ok(id_str)
+            }
             Ok(Err(e)) => Err(e.into()),
             Err(e) => Err(e.into()),
         }
+    }
+
+    #[message]
+    pub async fn get_published_files(&mut self) -> Vec<FileInfo> {
+        self.published_files.clone()
     }
 }
 
@@ -411,6 +425,7 @@ impl NodeBuilder {
             external_addresses: self.external_addresses,
             self_actor_ref: self.self_actor_ref,
             swarm_sender: self.swarm_sender,
+            published_files: Vec::new(),
         };
 
         Ok(node)
