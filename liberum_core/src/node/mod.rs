@@ -126,7 +126,7 @@ impl Node {
         let (resp_send, resp_recv) = oneshot::channel();
 
         let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
-        let obj_id = proto::Hash::try_from(&object).unwrap();
+        let obj_id = proto::Hash::try_from(&object)?;
 
         self.swarm_sender
             .as_mut()
@@ -146,7 +146,7 @@ impl Node {
 
     #[message]
     pub async fn download_file(&mut self, obj_id_str: String) -> Result<proto::PlainFileObject> {
-        let obj_id = proto::Hash::try_from(&obj_id_str).unwrap();
+        let obj_id = proto::Hash::try_from(&obj_id_str)?;
 
         // first get the providers of the file
         // Maybe getting the providers could be reused from GetProviders node message handler??
@@ -219,7 +219,7 @@ impl Node {
                 }
 
                 Ok(Ok(obj)) => {
-                    let calculated_obj_id = proto::Hash::try_from(&obj).unwrap();
+                    let calculated_obj_id = proto::Hash::try_from(&obj)?;
                     if obj_id != calculated_obj_id {
                         debug!(
                             node = self.name,
@@ -274,7 +274,7 @@ impl Node {
         // a new behaviour kademlia could talk to, which would provide streams of data.
         // (Maybe could be implemented on the existing request_response if it would be generalised more?)
         let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
-        let obj_id = proto::Hash::try_from(&object).unwrap();
+        let obj_id = proto::Hash::try_from(&object)?;
         let obj_id_str = bs58::encode(&obj_id.bytes).into_string();
 
         let (resp_send, resp_recv) = oneshot::channel();
@@ -329,7 +329,7 @@ impl Node {
 
     #[message]
     pub async fn provide_object(&mut self, object: proto::TypedObject) -> Result<String> {
-        let obj_id = proto::Hash::try_from(&object).unwrap();
+        let obj_id = proto::Hash::try_from(&object)?;
         let obj_id_str = obj_id.to_string();
 
         let (resp_send, _) = oneshot::channel();
@@ -353,7 +353,22 @@ impl Node {
             .join(self.name.clone())
             .join(key.to_string());
         match std::fs::read(&path) {
-            Ok(data) => Some(TypedObject::try_from(&data).unwrap()),
+            Ok(data) => {
+                let r = TypedObject::try_from(&data);
+                match r {
+                    Ok(obj) => Some(obj),
+                    Err(e) => {
+                        error!(
+                            node = self.name,
+                            key = bs58::encode(&key.bytes).into_string(),
+                            err = format!("{e:?}"),
+                            path = format!("{path:?}"),
+                            "Failed to deserialize TypedObject"
+                        );
+                        None
+                    }
+                }
+            }
             Err(e) => {
                 error!(
                     node = self.name,
@@ -371,7 +386,7 @@ impl Node {
     pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {
         let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.name.clone());
         std::fs::create_dir_all(&dir).ok();
-        let obj_id = proto::Hash::try_from(&obj).unwrap();
+        let obj_id = proto::Hash::try_from(&obj)?;
 
         let path = dir.join(obj_id.to_string());
 
