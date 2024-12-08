@@ -35,7 +35,7 @@ const DEFAULT_MULTIADDR_STR_IP4: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 
 /// The context of the swarm which holds all the data required to handle swarm events
 /// and messages to the swarm runner
-pub struct SwarmContext {
+struct SwarmContext {
     swarm: Swarm<LiberumNetoBehavior>,
     _node_actor: ActorRef<Node>,
     node_snapshot: NodeSnapshot,
