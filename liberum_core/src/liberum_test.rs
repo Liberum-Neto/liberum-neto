@@ -5,12 +5,13 @@ use connection::AppContext;
 use liberum_core::{node_config::NodeConfig, DaemonError, DaemonRequest, DaemonResponse};
 use libp2p::Multiaddr;
 use node::store::NodeStore;
+use tonic::{metadata::MetadataValue, service::Interceptor, transport::{Channel, Uri}, Code};
 
 use crate::test_protocol::test_scenario::test_part_scenario::Part::Simple;
 use crate::test_protocol::test_scenario::node_definition::NodeDefinitionLevel;
 
 use test_protocol::{action_resoult::{Details, DialNodeResult, GetObjectResult, PublishObjectResult}, callable_nodes::CallableNode, identity_server_client::IdentityServerClient, Action, ActionResoult, Identity, NodeInstance, NodesCreated, TestPartResult, TestScenario};
-use tracing::error;
+use tracing::{error, info};
 pub mod connection;
 pub mod node;
 pub mod swarm_runner;
@@ -27,13 +28,32 @@ struct TestContext{
     app_context: AppContext,
 }
 
+struct HostHeaderInterceptor{
+    pub host_id: String,
+}
+
+impl Interceptor for HostHeaderInterceptor {
+    fn call(&mut self, request: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+        let token = MetadataValue::from_str(&self.host_id).map_err(|_| tonic::Status::new(Code::InvalidArgument,"Invalid tocken"))?;
+        
+        let mut req = request;
+        req.metadata_mut().insert("host-id", token);
+        return Ok(req)
+    }
+}
+
 
 #[tokio::main]
 pub(crate) async fn run_test(url: String, host_id: String) -> Result<(),Box<dyn core::error::Error>>{
 
     let app_context = connection::AppContext::new(kameo::spawn(NodeStore::with_custom_nodes_dir(std::env::temp_dir().as_path()).await?));
+    // let mut client = IdentityServerClient::connect(url).await?;
+    let channel = Channel::builder(Uri::from_str(&url)?).connect().await.unwrap();
 
-    let mut client = IdentityServerClient::connect(url).await?;
+    let interceptor = HostHeaderInterceptor{host_id:host_id.clone()};
+
+    let mut client = IdentityServerClient::with_interceptor(channel, interceptor);
+
     
     let test_scenario = client.identify(Identity{host_id:host_id}).await?.into_inner();
     
@@ -175,17 +195,10 @@ async fn handle_create_nodes(test_scenario: &TestScenario, app_context: AppConte
 
     for node in &test_scenario.nodes {
         if node.visibility() == NodeDefinitionLevel::NeedHash || node.visibility() == NodeDefinitionLevel::NeedAddress {
-            hash_requests.push((node.node_id, DaemonRequest::GetPeerId { node_name: node.name.clone() }));
             dialable_nodes.insert(node.node_id,NodeInstance{node_id: node.node_id,node_hash:"".to_owned(),node_adress: None,node_name: node.name.to_string()});
         }
     }
 
-    for response in  run_few_and_collect(hash_requests, app_context.clone()).await.unwrap(){
-        match response {
-            (node_id, DaemonResponse::PeerId { id: hash }) => dialable_nodes.get_mut(&node_id).unwrap().node_hash = hash,
-            _ => panic!()
-        }
-    };
 
     // load address
 
@@ -211,6 +224,20 @@ async fn handle_create_nodes(test_scenario: &TestScenario, app_context: AppConte
     }
     run_few_and_collect(start_requests, app_context.clone()).await.unwrap();
 
+    //load hash after start
+
+    for node in &test_scenario.nodes {
+        if node.visibility() == NodeDefinitionLevel::NeedHash || node.visibility() == NodeDefinitionLevel::NeedAddress {
+            hash_requests.push((node.node_id, DaemonRequest::GetPeerId { node_name: node.name.clone() }));
+        }
+    }
+
+    for response in  run_few_and_collect(hash_requests, app_context.clone()).await.unwrap(){
+        match response {
+            (node_id, DaemonResponse::PeerId { id: hash }) => dialable_nodes.get_mut(&node_id).unwrap().node_hash = hash,
+            _ => panic!()
+        }
+    };
 
     return NodesCreated{
         nodes: dialable_nodes.values().cloned().collect()
@@ -239,7 +266,11 @@ fn main() -> Result<(),()> {
         let url = args[2].clone();
         let host_id = args[3].clone();
         match run_test(url,host_id)  {
-            Ok(_) => {},
+            Ok(_) => {
+                info!(
+                    "Exited normaly"
+                )
+            },
             Err(err) =>         error!(
                 err,
                 "error"
