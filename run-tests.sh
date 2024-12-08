@@ -14,10 +14,9 @@ else
 fi
 
 # build dependencies
-cargo build -p liberum_core
-cargo build -p liberum_cli
-CLI_BIN="./target/debug/liberum_cli"
-CORE_BIN="./target/debug/liberum_core"
+cargo build --release
+CLI_BIN="./target/release/liberum_cli"
+CORE_BIN="./target/release/liberum_core"
 
 
 for test_file in ${TO_RUN[@]}; do
