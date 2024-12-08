@@ -14,10 +14,10 @@ use liberum_core::proto::{PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
 use liberum_core::types::TypedObjectInfo;
 use liberum_core::{parser, DaemonResponse};
-use liberum_core::types::FileInfo;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use std::borrow::Borrow;
+use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -512,10 +512,6 @@ impl Node {
             deleted_count,
             failed_count,
         })
-    }
-    #[message]
-    pub async fn get_published_files(&mut self) -> Vec<FileInfo> {
-        self.published_files.clone()
     }
 }
 
