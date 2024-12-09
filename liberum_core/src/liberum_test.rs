@@ -1,13 +1,13 @@
 use core::error;
 use std::{
-    collections::HashMap, fs::File, io::Write, iter::zip, panic, path::PathBuf, str::FromStr,
-    sync::Arc, usize,
+    collections::HashMap, fs::File, io::Write, iter::zip, panic, path::PathBuf, str::FromStr, sync::Arc, time::Duration, usize
 };
 
 use connection::AppContext;
 use liberum_core::{node_config::NodeConfig, DaemonError, DaemonRequest, DaemonResponse};
 use libp2p::Multiaddr;
 use node::store::NodeStore;
+use tokio::time::sleep;
 use tonic::{
     metadata::MetadataValue,
     service::Interceptor,
@@ -82,7 +82,7 @@ pub(crate) async fn run_test(
         .into_inner();
 
     let new_nodes = handle_create_nodes(&test_scenario, app_context.clone()).await;
-
+    sleep(Duration::from_secs(1)).await;
     let diallable_nodes = client.test_ready(new_nodes).await?.into_inner();
 
     let mut test_context = TestContext {
@@ -147,7 +147,7 @@ async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionRe
 
     match action.details {
         Some(details) => {
-            let request = match details {
+            let request = match &details {
                 test_protocol::action::Details::Dial(dial_node) => DaemonRequest::Dial {
                     node_name: action.node_name,
                     peer_id: ctx
@@ -172,7 +172,7 @@ async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionRe
                 test_protocol::action::Details::GetObject(get_object) => {
                     DaemonRequest::DownloadFile {
                         node_name: action.node_name,
-                        id: get_object.object_hash,
+                        id: get_object.object_hash.clone(),
                     }
                 }
             };
@@ -197,7 +197,14 @@ async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionRe
                     })
                 }
                 Err(error) => match error {
-                    DaemonError::Other(err) => result.error = Some(err),
+                    DaemonError::Other(err) => {
+                        result.error = Some(err);
+                        result.details = Some(match &details {
+                            test_protocol::action::Details::Dial(_) => Details::Dial(DialNodeResult {  }),
+                            test_protocol::action::Details::PublishObject(_) => Details::PublishObject(PublishObjectResult{}),
+                            test_protocol::action::Details::GetObject(_) => Details::GetObject(GetObjectResult {  }),
+                        });
+                    }
                     _ => panic!(),
                 },
             }
@@ -205,9 +212,7 @@ async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionRe
         None => {}
     }
 
-    return ActionResoult {
-        ..Default::default()
-    };
+    return result;
 }
 
 async fn daemon_request(
