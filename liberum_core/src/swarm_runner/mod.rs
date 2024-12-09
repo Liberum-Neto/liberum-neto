@@ -3,6 +3,7 @@ pub mod messages;
 
 use crate::node::NodeSnapshot;
 use crate::node::{self, Node};
+use crate::vault::Vault;
 use anyhow::anyhow;
 use anyhow::Result;
 use behaviour::*;
@@ -38,20 +39,28 @@ const DEFAULT_MULTIADDR_STR_IP4: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 struct SwarmContext {
     swarm: Swarm<LiberumNetoBehavior>,
     _node_actor: ActorRef<Node>,
+    vault_ref: ActorRef<Vault>,
     node_snapshot: NodeSnapshot,
     behaviour: BehaviourContext,
 }
 
 /// Prepares the sender to send messages to the swarm
-pub async fn run_swarm(node_ref: ActorRef<Node>) -> mpsc::Sender<SwarmRunnerMessage> {
+pub async fn run_swarm(
+    node_ref: ActorRef<Node>,
+    vault_ref: ActorRef<Vault>,
+) -> mpsc::Sender<SwarmRunnerMessage> {
     let (sender, receiver) = mpsc::channel::<SwarmRunnerMessage>(16);
-    tokio::spawn(run_swarm_task(node_ref, receiver));
+    tokio::spawn(run_swarm_task(node_ref, vault_ref, receiver));
     sender
 }
 
 /// Task that runs the swarm and handles errors which can't be propagated outside of a task
-async fn run_swarm_task(node_ref: ActorRef<Node>, receiver: mpsc::Receiver<SwarmRunnerMessage>) {
-    if let Err(e) = run_swarm_main(node_ref.clone(), receiver).await {
+async fn run_swarm_task(
+    node_ref: ActorRef<Node>,
+    vault_ref: ActorRef<Vault>,
+    receiver: mpsc::Receiver<SwarmRunnerMessage>,
+) {
+    if let Err(e) = run_swarm_main(node_ref.clone(), vault_ref, receiver).await {
         error!(err = format!("{e:?}"), "Swarm run error");
         node_ref.ask(node::SwarmDied).send().await.unwrap();
     }
@@ -60,6 +69,7 @@ async fn run_swarm_task(node_ref: ActorRef<Node>, receiver: mpsc::Receiver<Swarm
 /// The main function that runs the swarm
 async fn run_swarm_main(
     node_ref: ActorRef<Node>,
+    vault_ref: ActorRef<Vault>,
     mut receiver: mpsc::Receiver<SwarmRunnerMessage>,
 ) -> Result<()> {
     // It must be guaranteed not to ever fail. Swarm can't start without this data.
@@ -105,6 +115,7 @@ async fn run_swarm_main(
     let mut context = SwarmContext {
         _node_actor: node_ref,
         node_snapshot,
+        vault_ref,
         swarm: swarm,
         behaviour: BehaviourContext::new(),
     };
