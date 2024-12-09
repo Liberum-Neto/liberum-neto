@@ -464,14 +464,14 @@ impl Vault {
             path = fragment_dir_path.display().to_string(),
             "ensuring fragment dir"
         );
-        tokio::fs::create_dir(fragment_dir_path).await?;
+        tokio::fs::create_dir_all(fragment_dir_path).await?;
 
         let temp_dir_path = Self::temp_dir_path(vault_dir_path);
         debug!(
             path = temp_dir_path.display().to_string(),
             "ensuring temp dir"
         );
-        tokio::fs::create_dir(temp_dir_path).await?;
+        tokio::fs::create_dir_all(temp_dir_path).await?;
 
         Ok(())
     }
