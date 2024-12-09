@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use crate::node;
 use crate::node::manager::GetNode;
 use crate::node::manager::IsNodeRunning;
@@ -27,6 +26,7 @@ use liberum_core::DaemonRequest;
 use liberum_core::DaemonResponse;
 use liberum_core::DaemonResult;
 use libp2p::identity::Keypair;
+use std::path::PathBuf;
 use tokio::net::UnixListener;
 use tokio_util::codec::Decoder;
 use tokio_util::codec::Framed;
@@ -48,10 +48,11 @@ impl AppContext {
     }
 }
 
-pub async fn create_app_context_for_test() -> Result<AppContext,anyhow::Error>{
-    Ok(AppContext::new(kameo::spawn(NodeStore::with_custom_nodes_dir(std::env::temp_dir().as_path()).await?)))
+pub async fn create_app_context_for_test() -> Result<AppContext, anyhow::Error> {
+    Ok(AppContext::new(kameo::spawn(
+        NodeStore::with_custom_nodes_dir(std::env::temp_dir().as_path()).await?,
+    )))
 }
-
 
 pub async fn listen(listener: UnixListener) -> Result<()> {
     info!("Server listening on {:?}", listener);

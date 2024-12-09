@@ -2896,6 +2896,7 @@ dependencies = [
  "blake3",
  "bs58",
  "bytes",
+ "chrono",
  "daemonize",
  "futures",
  "futures-util",
