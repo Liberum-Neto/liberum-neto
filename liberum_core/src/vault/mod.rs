@@ -568,6 +568,7 @@ mod tests {
 
         file.write_all(&[65; 4096]).await.unwrap();
         file.write_all(&[66; 2048]).await.unwrap();
+        file.flush().await.unwrap();
 
         let mut fragments = Vault::fragment(&file_path).await.unwrap();
 
