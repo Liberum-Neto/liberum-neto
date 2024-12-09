@@ -1,3 +1,5 @@
+pub mod fragment;
+
 use std::cmp;
 use std::iter::once;
 use std::iter::successors;
@@ -8,6 +10,8 @@ use std::str::FromStr;
 use anyhow::anyhow;
 use anyhow::bail;
 use anyhow::Result;
+use fragment::key::Key;
+use fragment::FragmentInfo;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use kameo::mailbox::bounded::BoundedMailbox;
@@ -29,9 +33,7 @@ use tokio_rusqlite::Connection;
 use tokio_util::bytes::Bytes;
 use tokio_util::io::ReaderStream;
 use tracing::debug;
-
-use crate::fragment::key::Key;
-use crate::fragment::FragmentInfo;
+use uuid::Uuid;
 
 pub struct Vault {
     db: Connection,
@@ -59,7 +61,7 @@ impl Actor for Vault {
 impl Vault {
     #[message]
     async fn store_fragment(&self, key: Option<Key>, mut data: FragmentData) -> Result<Key> {
-        let uid = uuid::Uuid::new_v4();
+        let uid = Uuid::new_v4();
         let random_fragment_path = Self::temp_dir_path(&self.vault_dir_path).join(uid.to_string());
         let mut fragment_file = File::create(&random_fragment_path).await?;
         let mut hasher = blake3::Hasher::new();

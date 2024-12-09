@@ -2635,23 +2635,6 @@ dependencies = [
 
 [[package]]
 name = "kameo"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94449a0728ce1ec7345496588007bec699c4b52c525159ede8830a6fc14dd4fa"
-dependencies = [
- "dyn-clone",
- "futures",
- "itertools",
- "kameo_macros 0.12.2",
- "once_cell",
- "serde",
- "tokio",
- "tokio-stream",
- "tracing",
-]
-
-[[package]]
-name = "kameo"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62237a96597618543798a36ec723eb75c5ac301e2690243fd600be1f5eb3dd2d"
@@ -2659,25 +2642,12 @@ dependencies = [
  "dyn-clone",
  "futures",
  "itertools",
- "kameo_macros 0.13.0",
+ "kameo_macros",
  "once_cell",
  "serde",
  "tokio",
  "tokio-stream",
  "tracing",
-]
-
-[[package]]
-name = "kameo_macros"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddec4971b183c643aa91d83f85effe39c7d27b2914a54b06a979cd87b13a79b7"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "syn 2.0.89",
- "uuid",
 ]
 
 [[package]]
@@ -2748,10 +2718,13 @@ dependencies = [
  "daemonize",
  "futures",
  "homedir",
- "kameo 0.13.0",
+ "kameo",
  "libp2p",
  "nix 0.29.0",
  "postcard",
+ "pretty_assertions",
+ "rand 0.8.5",
+ "rusqlite",
  "serde",
  "serde_json",
  "serde_with",
@@ -2760,6 +2733,8 @@ dependencies = [
  "tempdir",
  "thiserror 2.0.3",
  "tokio",
+ "tokio-rusqlite",
+ "tokio-stream",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
@@ -2775,34 +2750,11 @@ dependencies = [
  "eframe",
  "egui",
  "egui_file",
- "kameo 0.13.0",
+ "kameo",
  "liberum_core",
  "tokio",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "liberum_vault"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "blake3",
- "bs58",
- "futures",
- "futures-util",
- "kameo 0.12.2",
- "liberum_core",
- "pretty_assertions",
- "rand 0.8.5",
- "rusqlite",
- "tempdir",
- "tokio",
- "tokio-rusqlite",
- "tokio-stream",
- "tokio-util",
- "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -3168,7 +3120,6 @@ version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e99fb7a497b1e3339bc746195567ed8d3e24945ecd636e3619d20b9de9e9149"
 dependencies = [
- "cc",
  "pkg-config",
  "vcpkg",
 ]
@@ -5227,9 +5178,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-stream"
-version = "0.1.16"
+version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f4e6ce100d0eb49a2734f8c0812bcd324cf357d21810932c5df6b96ef2b86f1"
+checksum = "eca58d7bba4a75707817a2c44174253f9236b2d5fbd055602e9d5c07c139a047"
 dependencies = [
  "futures-core",
  "pin-project-lite",
