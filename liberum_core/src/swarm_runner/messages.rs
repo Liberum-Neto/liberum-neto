@@ -178,7 +178,7 @@ impl SwarmContext {
                         "Local peer requested object"
                     );
                     // Should be implemented using a VAULT
-                    let object = self.get_object_from_vault(obj_id.clone());
+                    let object = self.get_object_from_vault(obj_id.clone()).await;
                     if let Some(object) = object {
                         let _ = response_sender.send(Ok(object));
                         return Ok(false);

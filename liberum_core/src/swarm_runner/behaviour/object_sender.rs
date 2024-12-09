@@ -246,7 +246,7 @@ impl SwarmContext {
 
         match query {
             parser::ObjectEnum::SimpleIDQuery(query) => {
-                let obj = self.get_object_from_vault(query.id.clone());
+                let obj = self.get_object_from_vault(query.id.clone()).await;
                 if let None = obj {
                     error!(
                         node = self.node_snapshot.name,

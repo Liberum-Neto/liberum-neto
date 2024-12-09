@@ -1,6 +1,10 @@
-use crate::swarm_runner::{object_sender, SwarmContext};
+use crate::{
+    swarm_runner::{object_sender, SwarmContext},
+    vault::{LoadObject, StoreObject},
+};
 use anyhow::Result;
-use liberum_core::proto;
+use kameo::request::MessageSend;
+use liberum_core::{parser::ObjectEnum, proto};
 use libp2p::{
     kad::{
         store::RecordStore, AddProviderError, AddProviderOk, Event, GetClosestPeersResult,
@@ -9,7 +13,7 @@ use libp2p::{
     },
     PeerId,
 };
-use std::{collections::HashSet, path::PathBuf};
+use std::collections::HashSet;
 
 use tracing::{debug, error, info, warn};
 
@@ -264,47 +268,39 @@ impl SwarmContext {
 
 /// Utility related to the Kademlia behaviour
 impl SwarmContext {
-    pub fn get_object_from_vault(&mut self, obj_id: proto::Hash) -> Option<proto::TypedObject> {
-        let path = PathBuf::from("FILE_SHARE_SAVED_FILES")
-            .join(self.node_snapshot.name.clone())
-            .join(obj_id.to_string());
+    pub async fn get_object_from_vault(
+        &mut self,
+        obj_id: proto::Hash,
+    ) -> Option<proto::TypedObject> {
+        let obj = self
+            .vault_ref
+            .ask(LoadObject {
+                hash: obj_id.clone(),
+            })
+            .send()
+            .await
+            .unwrap();
 
-        match std::fs::read(&path) {
-            Ok(data) => {
-                debug!("Getting object from vault: {:?}", data);
-                let obj = proto::TypedObject::try_from(&data).unwrap();
-                Some(obj)
-            }
-            Err(e) => {
-                error!(
-                    node = self.node_snapshot.name,
-                    obj_id = bs58::encode(&obj_id.bytes).into_string(),
-                    err = format!("{e:?}"),
-                    path = format!("{path:?}"),
-                    "Failed to read file"
-                );
-                None
-            }
+        match obj {
+            Some(obj) => match obj {
+                ObjectEnum::Typed(typed) => Some(typed),
+                _ => None,
+            },
+            None => None,
         }
     }
+
     pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {
-        let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.node_snapshot.name.clone());
-        std::fs::create_dir_all(&dir).ok();
         let obj_id: proto::Hash = proto::Hash::try_from(&obj).unwrap();
-        let data = bincode::serialize(&obj).unwrap();
-        debug!("Putting file to vault: {:?}", data);
 
-        let path = dir.join(obj_id.to_string());
+        self.vault_ref
+            .ask(StoreObject {
+                hash: obj_id,
+                object: ObjectEnum::Typed(obj),
+            })
+            .send()
+            .await?;
 
-        if let Err(e) = std::fs::write(path.clone(), data) {
-            error!(
-                node = self.node_snapshot.name,
-                path = format!("{path:?}"),
-                err = format!("{e:?}"),
-                "Failed to save file"
-            );
-            return Err(e.into());
-        }
         Ok(())
     }
 

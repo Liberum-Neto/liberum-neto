@@ -102,7 +102,7 @@ impl Vault {
     }
 
     #[message]
-    async fn store_object(&self, hash: Hash, object: ObjectEnum) -> Result<()> {
+    pub async fn store_object(&self, hash: Hash, object: ObjectEnum) -> Result<()> {
         let key: Key = hash.bytes.into();
 
         match object {
@@ -117,7 +117,7 @@ impl Vault {
     }
 
     #[message]
-    async fn load_object(&self, hash: Hash) -> Result<Option<ObjectEnum>> {
+    pub async fn load_object(&self, hash: Hash) -> Result<Option<ObjectEnum>> {
         let key: Key = hash.bytes.into();
 
         self.load_typed_object(key)
