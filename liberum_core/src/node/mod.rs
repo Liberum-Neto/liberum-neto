@@ -14,7 +14,6 @@ use liberum_core::proto::{self, TypedObject};
 use liberum_core::proto::{PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
 use liberum_core::types::TypedObjectInfo;
-use liberum_core::types::FileInfo;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use std::borrow::Borrow;
@@ -37,7 +36,7 @@ pub struct Node {
     // all of the methods:
     pub self_actor_ref: Option<ActorRef<Self>>,
     swarm_sender: Option<mpsc::Sender<SwarmRunnerMessage>>,
-    published_files: Vec<FileInfo>,
+    published_objects: Vec<TypedObjectInfo>,
 }
 
 const DIAL_TIMEOUT: Duration = Duration::from_secs(10);
@@ -353,6 +352,11 @@ impl Node {
                 obj_id = obj_id_str,
                 "Published object to {successes} other nodes"
             );
+            self.published_objects.push(TypedObjectInfo {
+                id: obj_id.to_string(),
+                type_id: PlainFileObject::UUID,
+            });
+
             return Ok(obj_id_str);
         }
         Err(anyhow!("Could not publish file"))
@@ -381,11 +385,6 @@ impl Node {
     #[message]
     pub async fn get_published_objects(&mut self) -> Result<Vec<TypedObjectInfo>> {
         Ok(self.vault_ref.ask(ListTypedObjects).send().await?)
-    }
-
-    #[message]
-    pub async fn get_published_files(&mut self) -> Vec<FileInfo> {
-        self.published_files.clone()
     }
 }
 
@@ -499,7 +498,7 @@ impl NodeBuilder {
             vault_ref: self.vault_ref.ok_or(anyhow!("vault ref is required"))?,
             self_actor_ref: self.self_actor_ref,
             swarm_sender: self.swarm_sender,
-            published_files: Vec::new(),
+            published_objects: Vec::new(),
         };
 
         Ok(node)
