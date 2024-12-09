@@ -2,10 +2,11 @@ pub mod manager;
 pub mod store;
 
 use crate::swarm_runner;
-use crate::vault::Vault;
+use crate::vault::{ListTypedObjects, Vault};
 use anyhow::{anyhow, Result};
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
+use kameo::request::MessageSend;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::NodeConfig;
 use liberum_core::parser;
@@ -36,7 +37,6 @@ pub struct Node {
     // all of the methods:
     pub self_actor_ref: Option<ActorRef<Self>>,
     swarm_sender: Option<mpsc::Sender<SwarmRunnerMessage>>,
-    published_objects: Vec<TypedObjectInfo>,
 }
 
 const DIAL_TIMEOUT: Duration = Duration::from_secs(10);
@@ -324,11 +324,6 @@ impl Node {
                 }
             }
             if successes >= 1 {
-                self.published_objects.push(TypedObjectInfo {
-                    id: obj_id.to_string(),
-                    type_id: PlainFileObject::UUID,
-                });
-
                 return Ok(obj_id_str);
             }
         }
@@ -356,8 +351,8 @@ impl Node {
     }
 
     #[message]
-    pub async fn get_published_objects(&mut self) -> Vec<TypedObjectInfo> {
-        self.published_objects.clone()
+    pub async fn get_published_objects(&mut self) -> Result<Vec<TypedObjectInfo>> {
+        Ok(self.vault_ref.ask(ListTypedObjects).send().await?)
     }
 }
 
@@ -471,7 +466,6 @@ impl NodeBuilder {
             vault_ref: self.vault_ref.ok_or(anyhow!("vault ref is required"))?,
             self_actor_ref: self.self_actor_ref,
             swarm_sender: self.swarm_sender,
-            published_objects: Vec::new(),
         };
 
         Ok(node)
