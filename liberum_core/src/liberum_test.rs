@@ -29,6 +29,7 @@ pub mod connection;
 pub mod node;
 pub mod swarm_runner;
 pub mod test_runner;
+pub mod vault;
 
 pub mod test_protocol {
     tonic::include_proto!("test_protocol");
