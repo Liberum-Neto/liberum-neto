@@ -9,11 +9,11 @@ use kameo::messages;
 use kameo::request::MessageSend;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::NodeConfig;
-use liberum_core::parser;
 use liberum_core::proto::{self, TypedObject};
 use liberum_core::proto::{PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
 use liberum_core::types::TypedObjectInfo;
+use liberum_core::{parser, DaemonQueryStats};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use std::borrow::Borrow;
@@ -95,7 +95,10 @@ impl Node {
     /// Message called on the node from the daemon to get the list of providers
     /// of an id. Changes the ID from string to libp2p format and just passes it to the swarm.
     #[message]
-    pub async fn get_providers(&mut self, obj_id_str: String) -> Result<Vec<PeerId>> {
+    pub async fn get_providers(
+        &mut self,
+        obj_id_str: String,
+    ) -> Result<(Vec<PeerId>, Option<DaemonQueryStats>)> {
         debug!(node = self.name, "Node got GetProviders");
         let obj_id_kad = str_to_file_id(&obj_id_str)?;
         let obj_id = proto::Hash {
@@ -113,7 +116,7 @@ impl Node {
             .await?;
 
         if let Ok(received) = recv.await {
-            debug!(node = self.name, "Got providers: {received:?}");
+            debug!(node = self.name, "Got providers: {:?}", received.0);
             return Ok(received);
         }
 
@@ -147,7 +150,10 @@ impl Node {
     }
 
     #[message]
-    pub async fn download_file(&mut self, obj_id_str: String) -> Result<proto::PlainFileObject> {
+    pub async fn download_file(
+        &mut self,
+        obj_id_str: String,
+    ) -> Result<(proto::PlainFileObject, Option<DaemonQueryStats>)> {
         let obj_id = proto::Hash::try_from(&obj_id_str)?;
 
         // first get the providers of the file
@@ -163,7 +169,8 @@ impl Node {
             })
             .await?;
 
-        let providers = resp_recv.await?;
+        let resp = resp_recv.await?;
+        let (providers, stats) = resp;
         if providers.is_empty() {
             return Err(anyhow!("Could not find provider for file {obj_id_str}.").into());
         }
@@ -233,7 +240,7 @@ impl Node {
                         continue;
                     }
                     match parser::parse_typed(obj).await {
-                        Ok(parser::ObjectEnum::PlainFile(file)) => return Ok(file),
+                        Ok(parser::ObjectEnum::PlainFile(file)) => return Ok((file, stats)),
                         Err(e) => {
                             debug!("{e}");
                             continue;

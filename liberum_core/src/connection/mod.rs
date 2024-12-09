@@ -395,7 +395,8 @@ async fn handle_get_providers(node_name: String, id: String, context: &AppContex
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
     Ok(DaemonResponse::Providers {
-        ids: resp.iter().map(|r| r.to_base58()).collect(),
+        ids: resp.0.iter().map(|r| r.to_base58()).collect(),
+        stats: resp.1,
     })
 }
 
@@ -411,14 +412,17 @@ async fn handle_download_file(node_name: String, id: String, context: &AppContex
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    let file = node
+    let resp = node
         .ask(DownloadFile { obj_id_str: id })
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    Ok(DaemonResponse::FileDownloaded { data: file })
+    Ok(DaemonResponse::FileDownloaded {
+        data: resp.0,
+        stats: resp.1,
+    })
 }
 
 async fn handle_dial(

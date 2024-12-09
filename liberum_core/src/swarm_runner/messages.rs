@@ -1,5 +1,6 @@
 use liberum_core::proto::ResultObject;
 use liberum_core::proto::{self, TypedObject};
+use liberum_core::DaemonQueryStats;
 
 use super::behaviour::object_sender;
 use super::SwarmContext;
@@ -37,7 +38,7 @@ pub enum SwarmRunnerMessage {
     /// no provider was found.
     GetProviders {
         obj_id: proto::Hash,
-        response_sender: oneshot::Sender<Vec<PeerId>>,
+        response_sender: oneshot::Sender<(Vec<PeerId>, Option<DaemonQueryStats>)>,
     },
     /// Start providing a file in the network. Only the node that sent this message
     /// will be a provider for the file. The fact of providing the file will be

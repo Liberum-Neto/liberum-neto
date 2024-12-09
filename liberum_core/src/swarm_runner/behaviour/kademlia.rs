@@ -1,10 +1,12 @@
+use std::time::Duration;
+
 use crate::{
     swarm_runner::{object_sender, SwarmContext},
     vault::{LoadObject, StoreObject},
 };
 use anyhow::Result;
 use kameo::request::MessageSend;
-use liberum_core::{parser::ObjectEnum, proto};
+use liberum_core::{parser::ObjectEnum, proto, DaemonQueryStats};
 use libp2p::{
     kad::{
         store::RecordStore, AddProviderError, AddProviderOk, Event, GetClosestPeersResult,
@@ -180,6 +182,15 @@ impl SwarmContext {
         _stats: QueryStats,
         _step: ProgressStep,
     ) {
+        let query_stats = if let Some(d) = _stats.duration() {
+            Some(DaemonQueryStats {
+                query_duration: d,
+                total_requests: _stats.num_requests(),
+            })
+        } else {
+            None
+        };
+
         match result {
             Ok(GetProvidersOk::FoundProviders { key: _, providers }) => {
                 debug!(
@@ -205,7 +216,8 @@ impl SwarmContext {
                             .insert(id, (nodes, sender.1));
                         return;
                     }
-                    let _ = sender.1.send(nodes).inspect_err(|e| {
+
+                    let _ = sender.1.send((nodes, query_stats)).inspect_err(|e| {
                         debug!(
                             node = self.node_snapshot.name,
                             qid = format!("{id}"),
@@ -229,7 +241,7 @@ impl SwarmContext {
                     "Get providers didn't find any new records"
                 );
                 if let Some(sender) = self.behaviour.pending_inner_get_providers.remove(&id) {
-                    let _ = sender.1.send(sender.0).inspect_err(|e| {
+                    let _ = sender.1.send((sender.0, query_stats)).inspect_err(|e| {
                         debug!(
                             qid = format!("{id}"),
                             err = format!("{e:?}"),

@@ -186,7 +186,7 @@ async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionRe
                     result.details = Some(match response {
                         // DaemonResponse::FileProvided { id } => todo!(),
                         // DaemonResponse::Providers { ids } => todo!(),
-                        DaemonResponse::FileDownloaded { data: _ } => {
+                        DaemonResponse::FileDownloaded { data: _, stats: _ } => {
                             Details::GetObject(GetObjectResult {})
                         }
                         DaemonResponse::Dialed => Details::Dial(DialNodeResult {}),

@@ -532,7 +532,7 @@ async fn handle_download_file(
         .ok_or(anyhow!("Daemon returned no response"))?;
 
     match response {
-        Ok(DaemonResponse::FileDownloaded { data }) => {
+        Ok(DaemonResponse::FileDownloaded { data, .. }) => {
             println!("{}", String::from_utf8(data.content)?);
         }
         Err(DaemonError::Other(_)) => {
@@ -563,7 +563,7 @@ async fn handle_get_providers(
         .await
         .ok_or(anyhow!("Daemon returned no response"))?;
     match response {
-        Ok(DaemonResponse::Providers { ids }) => {
+        Ok(DaemonResponse::Providers { ids, .. }) => {
             for provider in ids {
                 println!("{provider}");
             }

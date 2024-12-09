@@ -7,7 +7,10 @@ pub mod types;
 use libp2p::futures::StreamExt;
 use node_config::NodeConfig;
 use proto::*;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use tokio::fs::File;
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
@@ -79,6 +82,12 @@ pub enum DaemonRequest {
 /// Messages that are sent from the daemon as a reponse
 /// An enum of enums - categorizes the responses
 pub type DaemonResult = Result<DaemonResponse, DaemonError>;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DaemonQueryStats {
+    pub query_duration: Duration,
+    pub total_requests: u32,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum DaemonResponse {
