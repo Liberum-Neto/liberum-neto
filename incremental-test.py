@@ -7,14 +7,13 @@ import random
 import socketserver
 import pickle
 
-
-with open("sukcesy.pkl", "rb") as f:
-    RESULTS = pickle.load(f)
-with open("czasy.pkl", "rb") as f:
-    FIND_TIMES = pickle.load(f)
-FIND_TIMES.sort()
-print(FIND_TIMES[-10:])
-exit(0)
+# with open("sukcesy.pkl", "rb") as f:
+#     RESULTS = pickle.load(f)
+# with open("czasy.pkl", "rb") as f:
+#     FIND_TIMES = pickle.load(f)
+# FIND_TIMES.sort()
+# print(FIND_TIMES[-10:])
+# exit(0)
 
 def find_free_port():
     with socketserver.TCPServer(("localhost", 0), None) as s:
@@ -23,8 +22,8 @@ def find_free_port():
 CORE_BIN = "./target/release/liberum_core"
 CLI_BIN = "./target/release/liberum_cli"
 INIT_COUNT = 20
-NODE_COUNT = 1000
-MEASURE_EVERY=10
+NODE_COUNT = 50
+MEASURE_EVERY=1
 DOWNLOAD_EVERY=1
 DOWNLOAD_PERCENT=100
 FILE_NAME = os.path.dirname(os.path.realpath(__file__)) + "/test-file.txt"
@@ -44,12 +43,6 @@ N_IDS=[]
 N_ADDRESSES=[]
 
 N = "test_n0"
-N_ADDR = NODE_ADDR_PREFIX + str(52136) + NODE_ADDR_SUFFIX
-
-subprocess.run([CLI_BIN, "-d", "new-node", N, "--id-seed", "0"])
-subprocess.run([CLI_BIN, "-d", "config-node", N, "add-external-addr", N_ADDR])
-
-subprocess.run([CLI_BIN, "-d", "start-node", N])
 N_ADDR = NODE_ADDR_PREFIX + find_free_port() + NODE_ADDR_SUFFIX
 
 subprocess.run([CLI_BIN, "new-node", N, "--id-seed", "0"])
@@ -77,22 +70,6 @@ with open(FILE_NAME, mode="w") as f:
 
 RESULTS=[]
 FIND_TIMES=[]
-for i in range (1, NODE_COUNT) :
-    N = "test_n" + str(i)
-    N_ADDR = NODE_ADDR_PREFIX + str(i + 52136) + NODE_ADDR_SUFFIX
-
-    subprocess.run([CLI_BIN, "-d", "new-node", N, "--id-seed", str(i)])
-    subprocess.run([CLI_BIN, "-d", "config-node", N, "add-external-addr", N_ADDR])
-    if i > 0:
-        subprocess.run([CLI_BIN, "config-node", N, "add-bootstrap-node", N_IDS[i-1], N_ADDRESSES[i-1]])
-
-    subprocess.run([CLI_BIN, "-d", "start-node", N])
-
-    ID = subprocess.run([CLI_BIN, "-d", "get-peer-id", N], stdout=subprocess.PIPE).stdout.decode().strip()
-    N_NAMES.append(N)
-    N_IDS.append(ID)
-    N_ADDRESSES.append(N_ADDR)
-    time.sleep(0.01)
 for i in range (1, NODE_COUNT+1) :
     N = "test_n" + str(i)
 
@@ -123,24 +100,18 @@ for i in range (1, NODE_COUNT+1) :
             find_tiems_temp = [i+INIT_COUNT, 0]
             measurements=0
             for j in range(1, i):
-                if j % DOWNLOAD_EVERY == 0 and random.random()*100 > DOWNLOAD_PERCENT:
                 if j % DOWNLOAD_EVERY == 0 and random.random()*100 <= DOWNLOAD_PERCENT:
                     measurements+=1
                     t0 = time.time()
                     RESULT=subprocess.run([CLI_BIN, "-d", "download-file", N_NAMES[j], FILE_ID], stdout=subprocess.PIPE).stdout.decode().strip()
                     t = time.time()-t0
                     cmp = FILE_CONTENT == RESULT
-                    results_temp[1].append((j,cmp))
-                    find_tiems_temp[1] += t
-                if find_tiems_temp[1] > AVG_CLI_TIME_NORMALIZATION:
-                    find_tiems_temp[1] = (find_tiems_temp[1] / measurements) * 1000.0 - AVG_CLI_TIME_NORMALIZATION
                     if not cmp:
                         print(FILE_CONTENT, RESULT)
                     results_temp[1].append((j,cmp))
                     find_tiems_temp[1] += t
-            if find_tiems_temp[1] > 0:
-                find_tiems_temp[1] = (find_tiems_temp[1] / measurements) * 1000.0 - AVG_CLI_TIME_NORMALIZATION
             if measurements > 0:
+                find_tiems_temp[1] = (find_tiems_temp[1] / measurements) * 1000.0 - AVG_CLI_TIME_NORMALIZATION
                 RESULTS.append(results_temp)
                 FIND_TIMES.append(find_tiems_temp)
 
