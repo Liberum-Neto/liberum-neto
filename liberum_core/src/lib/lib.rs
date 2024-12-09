@@ -13,7 +13,7 @@ use tokio::net::UnixStream;
 use tokio::sync::mpsc;
 use tokio_util::io::ReaderStream;
 use tracing::{debug, error};
-use types::{FileInfo, NodeInfo};
+use types::{NodeInfo, TypedObjectInfo};
 
 use anyhow::Result;
 use codec::AsymmetricMessageCodec;
@@ -68,7 +68,7 @@ pub enum DaemonRequest {
         node_name: String,
         path: PathBuf,
     },
-    GetPublishedFiles {
+    GetPublishedObjects {
         node_name: String,
     },
 }
@@ -91,7 +91,7 @@ pub enum DaemonResponse {
     PeerId { id: String },
     Dialed,
     FilePublished { id: String },
-    PublishedFilesList { files: Vec<FileInfo> },
+    PublishedObjectsList { object_infos: Vec<TypedObjectInfo> },
 }
 
 /// Errors that can be returned by the daemon

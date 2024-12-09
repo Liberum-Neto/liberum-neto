@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
 use liberum_core::node_config::NodeConfig;
-use liberum_core::types::{FileInfo, NodeInfo};
+use liberum_core::types::{NodeInfo, TypedObjectInfo};
 use liberum_core::{node_config::BootstrapNode, DaemonError, DaemonRequest, DaemonResponse};
 use libp2p::Multiaddr;
 use std::path::Path;
@@ -43,7 +43,7 @@ enum Command {
     GetPeerID(GetPeerID),
     Dial(Dial),
     PublishFile(PublishFile),
-    GetPublishedFiles(GetPublishedFiles),
+    GetPublishedObjects(GetPublishedObjects),
 }
 
 #[derive(Parser)]
@@ -144,7 +144,7 @@ struct PublishFile {
 }
 
 #[derive(Parser)]
-struct GetPublishedFiles {
+struct GetPublishedObjects {
     #[arg()]
     node_name: String,
 }
@@ -157,9 +157,9 @@ struct NodeInfoRow {
 }
 
 #[derive(Tabled)]
-struct FileInfoRow {
+struct TypedObjectInfoRow {
     pub id: String,
-    pub path: String,
+    pub type_id: String,
 }
 
 struct HandlerContext {
@@ -216,7 +216,7 @@ async fn handle_command(
         Command::GetPeerID(cmd) => handle_get_peer_id(cmd, req, res).await,
         Command::Dial(cmd) => handle_dial(cmd, req, res).await,
         Command::PublishFile(cmd) => handle_publish_file(cmd, req, res).await,
-        Command::GetPublishedFiles(cmd) => handle_get_published_files(ctx, cmd, req, res).await,
+        Command::GetPublishedObjects(cmd) => handle_get_published_objects(ctx, cmd, req, res).await,
     }
 }
 
@@ -577,13 +577,13 @@ async fn handle_publish_file(
     }
 }
 
-async fn handle_get_published_files(
+async fn handle_get_published_objects(
     ctx: HandlerContext,
-    cmd: GetPublishedFiles,
+    cmd: GetPublishedObjects,
     req: RequestSender,
     mut res: ReseponseReceiver,
 ) -> Result<()> {
-    req.send(DaemonRequest::GetPublishedFiles {
+    req.send(DaemonRequest::GetPublishedObjects {
         node_name: cmd.node_name,
     })
     .await
@@ -594,11 +594,13 @@ async fn handle_get_published_files(
         .await
         .ok_or(anyhow!("Daemon returned no response"))?;
     match resp {
-        Ok(DaemonResponse::PublishedFilesList { files }) => {
+        Ok(DaemonResponse::PublishedObjectsList {
+            object_infos: files,
+        }) => {
             let file_info_rows = files
                 .iter()
                 .map(|info| info.into())
-                .collect::<Vec<FileInfoRow>>();
+                .collect::<Vec<TypedObjectInfoRow>>();
             let mut table = Table::new(file_info_rows);
 
             if ctx.machine_readable {
@@ -648,11 +650,11 @@ impl From<&NodeInfo> for NodeInfoRow {
     }
 }
 
-impl From<&FileInfo> for FileInfoRow {
-    fn from(value: &FileInfo) -> Self {
+impl From<&TypedObjectInfo> for TypedObjectInfoRow {
+    fn from(value: &TypedObjectInfo) -> Self {
         Self {
             id: value.id.clone(),
-            path: value.path.as_os_str().to_str().unwrap_or("-").to_string(),
+            type_id: value.type_id.to_string(),
         }
     }
 }
