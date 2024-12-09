@@ -242,7 +242,7 @@ impl Vault {
                 hash1 INTEGER NOT NULL,
                 hash2 INTEGER NOT NULL,
                 hash3 INTEGER NOT NULL,
-                uuid TEXT,
+                type_id TEXT,
                 data BLOB,
                 PRIMARY KEY (hash0, hash1, hash2, hash3)
             )
@@ -364,7 +364,7 @@ impl Vault {
 
     async fn load_typed_object(&self, key: Key) -> Result<Option<TypedObject>> {
         const SELECT_TYPED_OBJECT_QUERY: &str = "
-            SELECT uuid, data
+            SELECT type_id, data
             FROM typed_object
             WHERE hash0 = ?1 AND hash1 = ?2 AND hash2 = ?3 AND hash3 = ?4
         ";
@@ -402,7 +402,7 @@ impl Vault {
         const SELECT_TYPED_OBJECT_QUERY: &str =
             "SELECT COUNT(*) FROM typed_object WHERE hash0 = ?1 AND hash1 = ?2 AND hash2 = ?3 AND hash3 = ?4";
         const INSERT_TYPED_OBJECT_QUERY: &str =
-            "INSERT INTO typed_object (hash0, hash1, hash2, hash3, uuid, data)
+            "INSERT INTO typed_object (hash0, hash1, hash2, hash3, type_id, data)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 
         let hash_as_u64 = key.as_u64_slice_be();
