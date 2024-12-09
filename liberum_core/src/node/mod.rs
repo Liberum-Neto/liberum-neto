@@ -6,7 +6,7 @@ use anyhow::{anyhow, Result};
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
 use kameo::{actor::ActorRef, message::Message, Actor};
-use liberum_core::node_config::{BootstrapNode, NodeConfig};
+use liberum_core::node_config::NodeConfig;
 use liberum_core::parser;
 use liberum_core::proto::{self, TypedObject};
 use liberum_core::proto::{PlainFileObject, ResultObject};
@@ -27,9 +27,8 @@ use tracing::{debug, error};
 pub struct Node {
     pub name: String,
     pub keypair: Keypair,
-    pub bootstrap_nodes: Vec<BootstrapNode>,
+    pub config: NodeConfig,
     pub manager_ref: ActorRef<NodeManager>,
-    pub external_addresses: Vec<Multiaddr>,
     // These fields are mandatory, but may be set only after spawning the node, so unwrapping them should be safe from
     // all of the methods:
     pub self_actor_ref: Option<ActorRef<Self>>,
@@ -421,7 +420,7 @@ impl fmt::Debug for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Node")
             .field("name", &self.name)
-            .field("boostrap_nodes", &self.bootstrap_nodes)
+            .field("boostrap_nodes", &self.config.bootstrap_nodes)
             .finish()
     }
 }
@@ -443,8 +442,7 @@ impl Message<GetSnapshot> for Node {
 pub struct NodeBuilder {
     name: Option<String>,
     keypair: Option<Keypair>,
-    bootstrap_nodes: Vec<BootstrapNode>,
-    external_addresses: Vec<Multiaddr>,
+    config: Option<NodeConfig>,
     manager_ref: Option<ActorRef<NodeManager>>,
     self_actor_ref: Option<ActorRef<Node>>,
     swarm_sender: Option<Sender<SwarmRunnerMessage>>,
@@ -455,8 +453,7 @@ impl Default for NodeBuilder {
         Self {
             name: None,
             keypair: None,
-            bootstrap_nodes: vec![],
-            external_addresses: vec![],
+            config: None,
             manager_ref: None,
             self_actor_ref: None,
             swarm_sender: None,
@@ -476,8 +473,7 @@ impl NodeBuilder {
     }
 
     pub fn config(mut self, config: NodeConfig) -> Self {
-        self.bootstrap_nodes = config.bootstrap_nodes;
-        self.external_addresses = config.external_addresses;
+        self.config = Some(config);
         self
     }
 
@@ -486,21 +482,10 @@ impl NodeBuilder {
         self
     }
 
-    pub fn bootstrap_nodes(mut self, bootstrap_nodes: Vec<BootstrapNode>) -> Self {
-        self.bootstrap_nodes = bootstrap_nodes;
-        self
-    }
-
-    pub fn external_addresses(mut self, external_addresses: Vec<Multiaddr>) -> Self {
-        self.external_addresses = external_addresses;
-        self
-    }
-
     pub fn from_snapshot(mut self, snapshot: &NodeSnapshot) -> Self {
         self.name = Some(snapshot.name.clone());
         self.keypair = Some(snapshot.keypair.clone());
-        self.bootstrap_nodes = snapshot.bootstrap_nodes.clone();
-        self.external_addresses = snapshot.external_addresses.clone();
+        self.config = Some(snapshot.config.clone());
         self
     }
 
@@ -508,11 +493,10 @@ impl NodeBuilder {
         let node = Node {
             name: self.name.ok_or(anyhow!("node name is required"))?,
             keypair: self.keypair.ok_or(anyhow!("keypair is required"))?,
-            bootstrap_nodes: self.bootstrap_nodes,
+            config: self.config.ok_or(anyhow!("config is required"))?,
             manager_ref: self
                 .manager_ref
                 .ok_or(anyhow!("node manager ref is required"))?,
-            external_addresses: self.external_addresses,
             self_actor_ref: self.self_actor_ref,
             swarm_sender: self.swarm_sender,
         };
@@ -524,8 +508,7 @@ impl NodeBuilder {
         let snapshot = NodeSnapshot {
             name: self.name.ok_or(anyhow!("node name is required"))?,
             keypair: self.keypair.ok_or(anyhow!("keypair is required"))?,
-            bootstrap_nodes: self.bootstrap_nodes,
-            external_addresses: self.external_addresses,
+            config: self.config.unwrap_or(NodeConfig::default()),
         };
 
         Ok(snapshot)
@@ -535,8 +518,7 @@ impl NodeBuilder {
 pub struct NodeSnapshot {
     pub name: String,
     pub keypair: Keypair,
-    pub bootstrap_nodes: Vec<BootstrapNode>,
-    pub external_addresses: Vec<Multiaddr>,
+    pub config: NodeConfig,
 }
 
 impl NodeSnapshot {
@@ -550,17 +532,13 @@ impl From<&Node> for NodeSnapshot {
         Self {
             name: value.name.clone(),
             keypair: value.keypair.clone(),
-            bootstrap_nodes: value.bootstrap_nodes.clone(),
-            external_addresses: value.external_addresses.clone(),
+            config: value.config.clone(),
         }
     }
 }
 
 impl Into<NodeConfig> for &NodeSnapshot {
     fn into(self) -> NodeConfig {
-        NodeConfig::new(
-            self.bootstrap_nodes.clone(),
-            self.external_addresses.clone(),
-        )
+        self.config.clone()
     }
 }

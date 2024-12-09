@@ -11,6 +11,15 @@ pub struct NodeConfig {
     pub external_addresses: Vec<Multiaddr>,
 }
 
+impl Default for NodeConfig {
+    fn default() -> Self {
+        Self {
+            bootstrap_nodes: vec![],
+            external_addresses: vec![],
+        }
+    }
+}
+
 impl NodeConfig {
     pub fn new(bootstrap_nodes: Vec<BootstrapNode>, external_addresses: Vec<Multiaddr>) -> Self {
         Self {

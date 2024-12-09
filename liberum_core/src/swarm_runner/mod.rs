@@ -129,13 +129,13 @@ async fn run_swarm_main(
     let default_addr = vec![swarm_default_addr_ip6, swarm_default_addr_ip4];
 
     // Add the external addresses to the swarm
-    if context.node_snapshot.external_addresses.is_empty() {
+    if context.node_snapshot.config.external_addresses.is_empty() {
         for addr in default_addr {
             context.swarm.add_external_address(addr.clone());
             context.swarm.listen_on(addr.clone())?;
         }
     } else {
-        for addr in &context.node_snapshot.external_addresses {
+        for addr in &context.node_snapshot.config.external_addresses {
             context.swarm.add_external_address(addr.clone());
             context.swarm.listen_on(addr.clone())?;
         }
@@ -152,7 +152,7 @@ async fn run_swarm_main(
     debug!(node_name = context.node_snapshot.name, "Starting a swarm!");
 
     // Bootstrap using the bootstrap nodes from the node data
-    for node in &context.node_snapshot.bootstrap_nodes {
+    for node in &context.node_snapshot.config.bootstrap_nodes {
         context
             .swarm
             .behaviour_mut()
