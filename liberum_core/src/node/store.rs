@@ -177,7 +177,7 @@ impl NodeStore {
 
     #[message]
     pub async fn get_node_vault(&self, name: String) -> Result<Vault> {
-        Vault::new(&self.resolve_node_dir_path(&name)).await
+        Vault::new_on_disk(&self.resolve_node_dir_path(&name)).await
     }
 }
 

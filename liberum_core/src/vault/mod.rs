@@ -37,7 +37,8 @@ use uuid::Uuid;
 
 pub struct Vault {
     db: Connection,
-    vault_dir_path: PathBuf,
+    // None will cause Vault to store data in memory
+    vault_dir_path: Option<PathBuf>,
 }
 
 type FragmentData = BoxStream<'static, Result<Bytes, io::Error>>;
@@ -62,7 +63,9 @@ impl Vault {
     #[message]
     async fn store_fragment(&self, key: Option<Key>, mut data: FragmentData) -> Result<Key> {
         let uid = Uuid::new_v4();
-        let random_fragment_path = Self::temp_dir_path(&self.vault_dir_path).join(uid.to_string());
+        // TODO: Storing fragments in memory not supported
+        let random_fragment_path =
+            Self::temp_dir_path(self.vault_dir_path.as_ref().unwrap()).join(uid.to_string());
         let mut fragment_file = File::create(&random_fragment_path).await?;
         let mut hasher = blake3::Hasher::new();
         let mut fragment_size = 0;
@@ -88,7 +91,9 @@ impl Vault {
         }
 
         let key_string = bs58::encode(&key_bytes).into_string();
-        let valid_fragment_path = Self::fragment_dir_path(&self.vault_dir_path).join(key_string);
+        // TODO: Storing fragments in memory not supported
+        let valid_fragment_path =
+            Self::fragment_dir_path(self.vault_dir_path.as_ref().unwrap()).join(key_string);
         tokio::fs::rename(random_fragment_path, &valid_fragment_path).await?;
 
         let fragment_info = FragmentInfo::new(
@@ -144,7 +149,7 @@ impl Vault {
     const TEMP_DIR_NAME: &'static str = "temp";
     const MIN_FRAGMENT_SIZE: u64 = 4096;
 
-    pub async fn new(vault_dir_path: &Path) -> Result<Vault> {
+    pub async fn new_on_disk(vault_dir_path: &Path) -> Result<Vault> {
         Self::ensure_dirs(vault_dir_path).await?;
 
         let db_path = Self::default_db_path(vault_dir_path);
@@ -152,7 +157,16 @@ impl Vault {
 
         Ok(Vault {
             db,
-            vault_dir_path: vault_dir_path.to_path_buf(),
+            vault_dir_path: Some(vault_dir_path.to_path_buf()),
+        })
+    }
+
+    pub async fn new_in_memory() -> Result<Vault> {
+        let db = Connection::open_in_memory().await?;
+
+        Ok(Vault {
+            db,
+            vault_dir_path: None,
         })
     }
 
@@ -348,6 +362,7 @@ impl Vault {
             .map_err(|e| anyhow!(e))
     }
 
+    // TODO: Loading fragments from in memory not supported
     async fn load_fragment(&self, key: Key) -> Result<Option<FragmentData>> {
         let fragment_info = self.load_fragment_info(key.clone()).await?;
 
@@ -551,7 +566,7 @@ mod tests {
         // vec![524288, 262144, 131072, 32768, 4096, 4096]
         assert_eq!(fragments.len(), 6);
 
-        let vault = Vault::new(vault_dir_path).await.unwrap();
+        let vault = Vault::new_on_disk(vault_dir_path).await.unwrap();
         let vault = kameo::spawn(vault);
         let mut stored_keys = Vec::new();
 
@@ -618,7 +633,7 @@ mod tests {
     async fn typed_object_load_store_test() {
         let tmp_dir = TempDir::new("liberum_tests").unwrap();
         let vault_dir_path = tmp_dir.path();
-        let vault = Vault::new(vault_dir_path).await.unwrap();
+        let vault = Vault::new_on_disk(vault_dir_path).await.unwrap();
         let vault = kameo::spawn(vault);
         let some_uuid = Uuid::new_v4();
 
