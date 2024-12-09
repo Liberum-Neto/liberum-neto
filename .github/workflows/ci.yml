@@ -12,6 +12,8 @@ jobs:
     name: Build and check formatting
     runs-on: ubuntu-latest
     steps:
+    - run: sudo apt-get -qqy update > /dev/null
+    - run: sudo apt-get install -qqy protobuf-compiler > /dev/null
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --quiet
