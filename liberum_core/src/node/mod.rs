@@ -37,7 +37,7 @@ pub struct Node {
     // all of the methods:
     pub self_actor_ref: Option<ActorRef<Self>>,
     swarm_sender: Option<mpsc::Sender<SwarmRunnerMessage>>,
-    published_files: Vec<FileInfo>,
+    published_objects: Vec<TypedObjectInfo>,
 }
 
 const DIAL_TIMEOUT: Duration = Duration::from_secs(10);
@@ -380,6 +380,11 @@ impl Node {
                 obj_id = obj_id_str,
                 "Published object to {successes} other nodes"
             );
+            self.published_objects.push(TypedObjectInfo {
+                id: obj_id.to_string(),
+                type_id: PlainFileObject::UUID,
+            });
+
             return Ok(obj_id_str);
         }
         Err(anyhow!("Could not publish file"))
@@ -630,7 +635,7 @@ impl NodeBuilder {
             vault_ref: self.vault_ref.ok_or(anyhow!("vault ref is required"))?,
             self_actor_ref: self.self_actor_ref,
             swarm_sender: self.swarm_sender,
-            published_files: Vec::new(),
+            published_objects: Vec::new(),
         };
 
         Ok(node)

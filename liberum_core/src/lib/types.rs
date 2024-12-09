@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -19,7 +17,7 @@ pub struct TypedObjectInfo {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct FileInfo {
+pub struct TypedObjectInfo {
     pub id: String,
-    pub path: PathBuf,
+    pub type_id: Uuid,
 }
