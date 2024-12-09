@@ -276,6 +276,7 @@ async fn handle_list_nodes(context: &AppContext) -> DaemonResult {
             .map_err(|e| DaemonError::Other(e.to_string()))?;
 
         let node_ext_addrs = node
+            .config
             .external_addresses
             .into_iter()
             .map(|addr| addr.to_string())

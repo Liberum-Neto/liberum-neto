@@ -74,8 +74,7 @@ impl NodeStore {
         let node_snapshot = NodeSnapshot::builder()
             .name(name)
             .keypair(keypair)
-            .bootstrap_nodes(config.bootstrap_nodes)
-            .external_addresses(config.external_addresses)
+            .config(config)
             .build_snapshot()
             // This can't fail
             .unwrap();
