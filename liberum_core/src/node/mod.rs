@@ -12,7 +12,7 @@ use liberum_core::parser;
 use liberum_core::proto::{self, TypedObject};
 use liberum_core::proto::{PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
-use liberum_core::types::FileInfo;
+use liberum_core::types::TypedObjectInfo;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use std::borrow::Borrow;
@@ -36,7 +36,7 @@ pub struct Node {
     // all of the methods:
     pub self_actor_ref: Option<ActorRef<Self>>,
     swarm_sender: Option<mpsc::Sender<SwarmRunnerMessage>>,
-    published_files: Vec<FileInfo>,
+    published_objects: Vec<TypedObjectInfo>,
 }
 
 const DIAL_TIMEOUT: Duration = Duration::from_secs(10);
@@ -324,9 +324,9 @@ impl Node {
                 }
             }
             if successes >= 1 {
-                self.published_files.push(FileInfo {
+                self.published_objects.push(TypedObjectInfo {
                     id: obj_id.to_string(),
-                    path,
+                    type_id: PlainFileObject::UUID,
                 });
 
                 return Ok(obj_id_str);
@@ -356,63 +356,8 @@ impl Node {
     }
 
     #[message]
-    pub(crate) fn get_object_from_vault(&mut self, key: proto::Hash) -> Option<proto::TypedObject> {
-        let path = PathBuf::from("FILE_SHARE_SAVED_FILES")
-            .join(self.name.clone())
-            .join(key.to_string());
-        match std::fs::read(&path) {
-            Ok(data) => {
-                let r = TypedObject::try_from(&data);
-                match r {
-                    Ok(obj) => Some(obj),
-                    Err(e) => {
-                        error!(
-                            node = self.name,
-                            key = bs58::encode(&key.bytes).into_string(),
-                            err = format!("{e:?}"),
-                            path = format!("{path:?}"),
-                            "Failed to deserialize TypedObject"
-                        );
-                        None
-                    }
-                }
-            }
-            Err(e) => {
-                error!(
-                    node = self.name,
-                    key = bs58::encode(&key.bytes).into_string(),
-                    err = format!("{e:?}"),
-                    path = format!("{path:?}"),
-                    "Failed to read file"
-                );
-                None
-            }
-        }
-    }
-
-    #[message]
-    pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {
-        let dir = PathBuf::from("FILE_SHARE_SAVED_FILES").join(self.name.clone());
-        std::fs::create_dir_all(&dir).ok();
-        let obj_id = proto::Hash::try_from(&obj)?;
-
-        let path = dir.join(obj_id.to_string());
-
-        if let Err(e) = std::fs::write(path.clone(), obj.data) {
-            error!(
-                node = self.name,
-                path = format!("{path:?}"),
-                err = format!("{e:?}"),
-                "Failed to save file"
-            );
-            return Err(e.into());
-        }
-        Ok(())
-    }
-
-    #[message]
-    pub async fn get_published_files(&mut self) -> Vec<FileInfo> {
-        self.published_files.clone()
+    pub async fn get_published_objects(&mut self) -> Vec<TypedObjectInfo> {
+        self.published_objects.clone()
     }
 }
 
@@ -526,7 +471,7 @@ impl NodeBuilder {
             vault_ref: self.vault_ref.ok_or(anyhow!("vault ref is required"))?,
             self_actor_ref: self.self_actor_ref,
             swarm_sender: self.swarm_sender,
-            published_files: Vec::new(),
+            published_objects: Vec::new(),
         };
 
         Ok(node)
