@@ -107,6 +107,9 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         }
         DaemonRequest::StopNode { node_name } => handle_stop_node(node_name, context).await,
         DaemonRequest::ListNodes => handle_list_nodes(context).await,
+        DaemonRequest::GetNodeDetails { node_name } => {
+            handle_get_node_details(&node_name, context).await
+        }
         DaemonRequest::ProvideFile { node_name, path } => {
             handle_provide_file(&node_name, path, context).await
         }
@@ -263,65 +266,86 @@ async fn handle_list_nodes(context: &AppContext) -> DaemonResult {
     let mut node_infos = Vec::new();
 
     for name in all_nodes_names.iter() {
-        let is_running = context
-            .node_manager
-            .ask(IsNodeRunning {
-                name: name.to_string(),
-            })
-            .send()
+        let node_info = get_node_details(&name, context)
             .await
             .map_err(|e| DaemonError::Other(e.to_string()))?;
-
-        let node = node_store
-            .ask(LoadNode {
-                name: name.to_string(),
-            })
-            .send()
-            .await
-            .map_err(|e| DaemonError::Other(e.to_string()))?;
-
-        let config_ext_addrs = node
-            .config
-            .external_addresses
-            .into_iter()
-            .map(|addr| addr.to_string())
-            .collect::<Vec<String>>();
-
-        let running_ext_addrs = match is_running {
-            true => {
-                let node = context
-                    .node_manager
-                    .ask(GetNode {
-                        name: name.to_string(),
-                    })
-                    .send()
-                    .await
-                    .map_err(|e| DaemonError::Other(e.to_string()))?;
-
-                node.ask(GetAddresses)
-                    .send()
-                    .await
-                    .map_err(|e| DaemonError::Other(e.to_string()))?
-            }
-            false => Vec::new(),
-        };
-
-        let running_ext_addrs = running_ext_addrs
-            .into_iter()
-            .map(|addr| addr.to_string())
-            .collect::<Vec<String>>();
-
-        let node_info = NodeInfo {
-            name: name.to_string(),
-            is_running,
-            config_addresses: config_ext_addrs,
-            running_addresses: running_ext_addrs,
-        };
-
         node_infos.push(node_info);
     }
 
     Ok(DaemonResponse::NodeList(node_infos))
+}
+
+async fn handle_get_node_details(node_name: &str, context: &AppContext) -> DaemonResult {
+    let node_info = get_node_details(node_name, context)
+        .await
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+    DaemonResult::Ok(DaemonResponse::NodeDetails(node_info))
+}
+
+async fn get_node_details(node_name: &str, context: &AppContext) -> Result<NodeInfo> {
+    let is_running = context
+        .node_manager
+        .ask(IsNodeRunning {
+            name: node_name.to_string(),
+        })
+        .send()
+        .await
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    let node_store = context
+        .node_manager
+        .ask(node::manager::GetNodeStore)
+        .send()
+        .await
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    let node = node_store
+        .ask(LoadNode {
+            name: node_name.to_string(),
+        })
+        .send()
+        .await
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    let config_ext_addrs = node
+        .config
+        .external_addresses
+        .into_iter()
+        .map(|addr| addr.to_string())
+        .collect::<Vec<String>>();
+
+    let running_ext_addrs = match is_running {
+        true => {
+            let node = context
+                .node_manager
+                .ask(GetNode {
+                    name: node_name.to_string(),
+                })
+                .send()
+                .await
+                .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+            node.ask(GetAddresses)
+                .send()
+                .await
+                .map_err(|e| DaemonError::Other(e.to_string()))?
+        }
+        false => Vec::new(),
+    };
+
+    let running_ext_addrs = running_ext_addrs
+        .into_iter()
+        .map(|addr| addr.to_string())
+        .collect::<Vec<String>>();
+
+    let node_info = NodeInfo {
+        name: node_name.to_string(),
+        is_running,
+        config_addresses: config_ext_addrs,
+        running_addresses: running_ext_addrs,
+    };
+
+    Ok(node_info)
 }
 
 async fn handle_provide_file(node_name: &str, path: PathBuf, context: &AppContext) -> DaemonResult {
