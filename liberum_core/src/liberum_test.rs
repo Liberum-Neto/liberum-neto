@@ -1,6 +1,7 @@
 use core::error;
 use std::{
-    collections::HashMap, fs::File, io::Write, iter::zip, panic, path::PathBuf, str::FromStr, sync::Arc, time::Duration, usize
+    collections::HashMap, fs::File, io::Write, iter::zip, panic, path::PathBuf, str::FromStr,
+    sync::Arc, time::Duration, usize,
 };
 
 use connection::AppContext;
@@ -200,9 +201,15 @@ async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionRe
                     DaemonError::Other(err) => {
                         result.error = Some(err);
                         result.details = Some(match &details {
-                            test_protocol::action::Details::Dial(_) => Details::Dial(DialNodeResult {  }),
-                            test_protocol::action::Details::PublishObject(_) => Details::PublishObject(PublishObjectResult{}),
-                            test_protocol::action::Details::GetObject(_) => Details::GetObject(GetObjectResult {  }),
+                            test_protocol::action::Details::Dial(_) => {
+                                Details::Dial(DialNodeResult {})
+                            }
+                            test_protocol::action::Details::PublishObject(_) => {
+                                Details::PublishObject(PublishObjectResult {})
+                            }
+                            test_protocol::action::Details::GetObject(_) => {
+                                Details::GetObject(GetObjectResult {})
+                            }
                         });
                     }
                     _ => panic!(),

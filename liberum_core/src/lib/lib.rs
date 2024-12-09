@@ -98,13 +98,27 @@ pub enum DaemonResponse {
     NodeStopped,
     NodeList(Vec<NodeInfo>),
     NodeDetails(NodeInfo),
-    FileProvided { id: String },
-    Providers { ids: Vec<String> },
-    FileDownloaded { data: PlainFileObject }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
-    PeerId { id: String },
+    FileProvided {
+        id: String,
+    },
+    Providers {
+        ids: Vec<String>,
+        stats: Option<DaemonQueryStats>,
+    },
+    FileDownloaded {
+        data: PlainFileObject,
+        stats: Option<DaemonQueryStats>,
+    }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
+    PeerId {
+        id: String,
+    },
     Dialed,
-    FilePublished { id: String },
-    PublishedObjectsList { object_infos: Vec<TypedObjectInfo> },
+    FilePublished {
+        id: String,
+    },
+    PublishedObjectsList {
+        object_infos: Vec<TypedObjectInfo>,
+    },
 }
 
 /// Errors that can be returned by the daemon
