@@ -17,7 +17,6 @@ use liberum_core::types::TypedObjectInfo;
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use std::borrow::Borrow;
-use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -96,7 +95,7 @@ impl Node {
     /// Message called on the node from the daemon to get the list of providers
     /// of an id. Changes the ID from string to libp2p format and just passes it to the swarm.
     #[message]
-    pub async fn get_providers(&mut self, obj_id_str: String) -> Result<HashSet<PeerId>> {
+    pub async fn get_providers(&mut self, obj_id_str: String) -> Result<Vec<PeerId>> {
         debug!(node = self.name, "Node got GetProviders");
         let obj_id_kad = str_to_file_id(&obj_id_str)?;
         let obj_id = proto::Hash {
@@ -235,8 +234,14 @@ impl Node {
                     }
                     match parser::parse_typed(obj).await {
                         Ok(parser::ObjectEnum::PlainFile(file)) => return Ok(file),
-                        Err(e) => return Err(e),
-                        Ok(_) => return Err(anyhow!("Received object was not a file!")),
+                        Err(e) => {
+                            debug!("{e}");
+                            continue;
+                        }
+                        Ok(_) => {
+                            debug!("Received object was not a file!");
+                            continue;
+                        }
                     }
                 }
             }
@@ -339,9 +344,14 @@ impl Node {
                     }
                 }
             }
-            if successes >= 1 {
-                return Ok(obj_id_str);
-            }
+        }
+        if successes >= 1 {
+            debug!(
+                node = self.name,
+                obj_id = obj_id_str,
+                "Published object to {successes} other nodes"
+            );
+            return Ok(obj_id_str);
         }
         Err(anyhow!("Could not publish file"))
     }
