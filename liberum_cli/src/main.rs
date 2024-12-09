@@ -36,6 +36,7 @@ enum Command {
     StartNode(StartNode),
     ConfigNode(ConfigNode),
     ListNodes,
+    GetNodeDetails(GetNodeDetails),
     StopNode(StopNode),
     ProvideFile(ProvideFile),
     GetProviders(GetProviders),
@@ -68,6 +69,12 @@ struct ConfigNode {
     name: String,
     #[command(subcommand)]
     subcommand: ConfigNodeCommand,
+}
+
+#[derive(Parser)]
+struct GetNodeDetails {
+    #[arg()]
+    name: String,
 }
 
 #[derive(Parser)]
@@ -210,6 +217,7 @@ async fn handle_command(
         Command::StartNode(cmd) => handle_start_node(cmd, req, res).await,
         Command::ConfigNode(cmd) => handle_config_node(cmd, req, res).await,
         Command::ListNodes => handle_list_nodes(ctx, req, res).await,
+        Command::GetNodeDetails(cmd) => handle_get_node_details(ctx, cmd, req, res).await,
         Command::StopNode(cmd) => handle_stop_node(cmd, req, res).await,
         Command::ProvideFile(cmd) => handle_provide_file(cmd, req, res).await,
         Command::DownloadFile(cmd) => handle_download_file(cmd, req, res).await,
@@ -291,6 +299,45 @@ async fn handle_list_nodes(
                 .map(|info| info.into())
                 .collect::<Vec<NodeInfoRow>>();
             let mut table = Table::new(node_info_rows);
+
+            if ctx.machine_readable {
+                table.with(Style::blank());
+            } else {
+                table.with(Style::modern());
+            }
+
+            let table = table.to_string();
+            println!("{table}");
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_get_node_details(
+    ctx: HandlerContext,
+    cmd: GetNodeDetails,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    req.send(DaemonRequest::GetNodeDetails {
+        node_name: cmd.name,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    let node_infos = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))??;
+
+    match node_infos {
+        DaemonResponse::NodeDetails(details) => {
+            let details_row = vec![NodeInfoRow::from(&details)];
+            let mut table = Table::new(details_row);
 
             if ctx.machine_readable {
                 table.with(Style::blank());
