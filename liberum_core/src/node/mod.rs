@@ -2,6 +2,7 @@ pub mod manager;
 pub mod store;
 
 use crate::swarm_runner;
+use crate::vault::Vault;
 use anyhow::{anyhow, Result};
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
@@ -29,6 +30,7 @@ pub struct Node {
     pub keypair: Keypair,
     pub config: NodeConfig,
     pub manager_ref: ActorRef<NodeManager>,
+    pub vault_ref: ActorRef<Vault>,
     // These fields are mandatory, but may be set only after spawning the node, so unwrapping them should be safe from
     // all of the methods:
     pub self_actor_ref: Option<ActorRef<Self>>,
@@ -408,8 +410,13 @@ impl Node {
     }
 
     async fn start_swarm(&mut self) -> Result<()> {
-        self.swarm_sender =
-            Some(swarm_runner::run_swarm(self.self_actor_ref.as_mut().unwrap().clone()).await);
+        self.swarm_sender = Some(
+            swarm_runner::run_swarm(
+                self.self_actor_ref.as_mut().unwrap().clone(),
+                self.vault_ref.clone(),
+            )
+            .await,
+        );
         debug!(name = self.name, "Node starts");
 
         Ok(())
@@ -444,6 +451,7 @@ pub struct NodeBuilder {
     keypair: Option<Keypair>,
     config: Option<NodeConfig>,
     manager_ref: Option<ActorRef<NodeManager>>,
+    vault_ref: Option<ActorRef<Vault>>,
     self_actor_ref: Option<ActorRef<Node>>,
     swarm_sender: Option<Sender<SwarmRunnerMessage>>,
 }
@@ -455,6 +463,7 @@ impl Default for NodeBuilder {
             keypair: None,
             config: None,
             manager_ref: None,
+            vault_ref: None,
             self_actor_ref: None,
             swarm_sender: None,
         }
@@ -482,6 +491,11 @@ impl NodeBuilder {
         self
     }
 
+    pub fn vault_ref(mut self, vault_ref: ActorRef<Vault>) -> Self {
+        self.vault_ref = Some(vault_ref);
+        self
+    }
+
     pub fn from_snapshot(mut self, snapshot: &NodeSnapshot) -> Self {
         self.name = Some(snapshot.name.clone());
         self.keypair = Some(snapshot.keypair.clone());
@@ -497,6 +511,7 @@ impl NodeBuilder {
             manager_ref: self
                 .manager_ref
                 .ok_or(anyhow!("node manager ref is required"))?,
+            vault_ref: self.vault_ref.ok_or(anyhow!("vault ref is required"))?,
             self_actor_ref: self.self_actor_ref,
             swarm_sender: self.swarm_sender,
         };

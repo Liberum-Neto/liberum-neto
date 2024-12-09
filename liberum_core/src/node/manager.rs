@@ -1,5 +1,5 @@
 use super::{
-    store::{ListNodes, NodeStore, NodeStoreError, StoreNode},
+    store::{GetNodeVault, ListNodes, NodeStore, NodeStoreError, StoreNode},
     GetSnapshot, Node, NodeSnapshot,
 };
 use crate::node::store::LoadNode;
@@ -10,7 +10,7 @@ use kameo::{
     error::{Infallible, SendError},
     mailbox::bounded::BoundedMailbox,
     request::MessageSend,
-    Actor,
+    spawn, Actor,
 };
 use liberum_core::node_config::NodeConfig;
 use std::{
@@ -91,9 +91,17 @@ impl NodeManager {
             .ok_or("expected node manager self ref to be present")
             .map_err(|e| NodeManagerError::OtherError(anyhow!(e)))?;
 
+        let node_vault = self
+            .store
+            .ask(GetNodeVault { name: name.clone() })
+            .send()
+            .await
+            .map_err(|e| NodeManagerError::OtherError(anyhow!(e)))?;
+
         let node = Node::builder()
             .from_snapshot(&node_snapshot)
             .manager_ref(self_ref)
+            .vault_ref(spawn(node_vault))
             .build()
             .map_err(|e| NodeManagerError::OtherError(e))?;
 

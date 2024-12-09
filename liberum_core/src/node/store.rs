@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{debug, error};
 
+use crate::vault::Vault;
+
 use super::NodeSnapshot;
 
 pub struct UpdateNodeConfig {
@@ -171,6 +173,11 @@ impl NodeStore {
         }
 
         Ok(names)
+    }
+
+    #[message]
+    pub async fn get_node_vault(&self, name: String) -> Result<Vault> {
+        Vault::new(&self.resolve_node_dir_path(&name)).await
     }
 }
 
