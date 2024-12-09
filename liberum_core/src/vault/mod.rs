@@ -15,12 +15,14 @@ use fragment::FragmentInfo;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use kameo::mailbox::bounded::BoundedMailbox;
-use kameo::message::{Context, Message};
+use kameo::message::Context;
+use kameo::message::Message;
 use kameo::messages;
 use kameo::Actor;
 use liberum_core::parser::ObjectEnum;
 use liberum_core::proto::Hash;
 use liberum_core::proto::TypedObject;
+use liberum_core::types::TypedObjectInfo;
 use rusqlite::OptionalExtension;
 use tokio::fs::remove_file;
 use tokio::fs::File;
@@ -128,6 +130,48 @@ impl Vault {
         self.load_typed_object(key)
             .await
             .map(|r| r.map(|o| ObjectEnum::Typed(o)))
+    }
+
+    #[message]
+    pub async fn list_typed_objects(&self) -> Result<Vec<TypedObjectInfo>> {
+        const SELECT_TYPED_OBJECT_QUERY: &str = "
+            SELECT hash0, hash1, hash2, hash3, type_id
+            FROM typed_object;
+        ";
+
+        let object_infos = self
+            .db
+            .call(|conn| {
+                let mut stmt = conn.prepare(SELECT_TYPED_OBJECT_QUERY)?;
+                let rows = stmt.query_map([], |row| {
+                    let key_i64s: [i64; 4] = [row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?];
+                    let key_u64s: [u64; 4] = [
+                        key_i64s[0] as u64,
+                        key_i64s[1] as u64,
+                        key_i64s[2] as u64,
+                        key_i64s[3] as u64,
+                    ];
+
+                    let key = Key::from(key_u64s);
+                    let type_id_str: String = row.get(4)?;
+                    let type_id = Uuid::from_str(&type_id_str).expect("type id to be correct");
+
+                    Ok(TypedObjectInfo {
+                        id: key.to_string(),
+                        type_id,
+                    })
+                })?;
+
+                let mut objects = Vec::new();
+                for obj in rows {
+                    objects.push(obj?);
+                }
+
+                Ok(objects)
+            })
+            .await?;
+
+        Ok(object_infos)
     }
 }
 
