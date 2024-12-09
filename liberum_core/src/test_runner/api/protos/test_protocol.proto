@@ -9,6 +9,11 @@ service IdentityServer {
     rpc TestPartake(stream TestPartResult) returns (stream TestPartDescriptor);
 }
 
+message DaemonQueryStats{
+    uint64 QueryDuration_in_nano = 1;
+    uint64 TotalRequest = 2;
+}
+
 
 message Identity {
     string hostId = 1; 
@@ -139,6 +144,7 @@ message ActionResoult{
     //     bytes Object = 1;
     // }
     message GetObjectResult {
+        optional DaemonQueryStats stats = 1;
     }
 }
 

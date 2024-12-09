@@ -23,7 +23,8 @@ use test_protocol::{
     action_resoult::{Details, DialNodeResult, GetObjectResult, PublishObjectResult},
     callable_nodes::CallableNode,
     identity_server_client::IdentityServerClient,
-    Action, ActionResoult, Identity, NodeInstance, NodesCreated, TestPartResult, TestScenario,
+    Action, ActionResoult, DaemonQueryStats, Identity, NodeInstance, NodesCreated, TestPartResult,
+    TestScenario,
 };
 use tracing::{error, info};
 pub mod connection;
@@ -187,8 +188,18 @@ async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionRe
                     result.details = Some(match response {
                         // DaemonResponse::FileProvided { id } => todo!(),
                         // DaemonResponse::Providers { ids } => todo!(),
-                        DaemonResponse::FileDownloaded { data: _, stats: _ } => {
-                            Details::GetObject(GetObjectResult {})
+                        DaemonResponse::FileDownloaded { data: _, stats } => {
+                            if let Some(stats) = stats {
+                                Details::GetObject(GetObjectResult {
+                                    stats: Some(DaemonQueryStats {
+                                        query_duration_in_nano: stats.query_duration.as_nanos()
+                                            as u64,
+                                        total_request: stats.total_requests as u64,
+                                    }),
+                                })
+                            } else {
+                                Details::GetObject(GetObjectResult { stats: None })
+                            }
                         }
                         DaemonResponse::Dialed => Details::Dial(DialNodeResult {}),
                         DaemonResponse::FilePublished { id: _ } => {
@@ -208,7 +219,7 @@ async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionRe
                                 Details::PublishObject(PublishObjectResult {})
                             }
                             test_protocol::action::Details::GetObject(_) => {
-                                Details::GetObject(GetObjectResult {})
+                                Details::GetObject(GetObjectResult { stats: None })
                             }
                         });
                     }
