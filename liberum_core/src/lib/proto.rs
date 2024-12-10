@@ -300,3 +300,24 @@ impl TryFrom<&TypedObject> for ResultObject {
         bincode::deserialize::<ResultObject>(&(value.data)).map_err(|e| anyhow!(e))
     }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PinObject {
+    from: Hash,
+    to: TypedObject,
+}
+impl PinObject {
+    pub const UUID: Uuid = uuid!("fdf23e1d-f966-4605-a399-9198bf5870e5");
+}
+impl UUIDTyped for PinObject {
+    fn get_type_uuid(&self) -> Uuid {
+        PinObject::UUID
+    }
+}
+impl TryFrom<&TypedObject> for PinObject {
+    type Error = Error;
+
+    fn try_from(value: &TypedObject) -> std::result::Result<Self, Self::Error> {
+        bincode::deserialize::<PinObject>(&(value.data)).map_err(|e| anyhow!(e))
+    }
+}
