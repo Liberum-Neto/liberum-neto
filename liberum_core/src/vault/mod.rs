@@ -379,8 +379,8 @@ impl Vault {
                 hash1 INTEGER NOT NULL,
                 hash2 INTEGER NOT NULL,
                 hash3 INTEGER NOT NULL,
-                path VARCHAR(255),
-                size INTEGER,
+                path VARCHAR(255) NOT NULL,
+                size INTEGER NOT NULL,
                 PRIMARY KEY (hash0, hash1, hash2, hash3)
             )
         ";
@@ -395,8 +395,8 @@ impl Vault {
                 hash1 INTEGER NOT NULL,
                 hash2 INTEGER NOT NULL,
                 hash3 INTEGER NOT NULL,
-                type_id TEXT,
-                data BLOB,
+                type_id TEXT NOT NULL,
+                data BLOB NOT NULL,
                 PRIMARY KEY (hash0, hash1, hash2, hash3)
             )
         ";
@@ -411,7 +411,8 @@ impl Vault {
                 hash1 INTEGER NOT NULL,
                 hash2 INTEGER NOT NULL,
                 hash3 INTEGER NOT NULL,
-                type_id TEXT
+                type_id TEXT NOT NULL,
+                PRIMARY KEY (hash0, hash1, hash2, hash3)
             )
         ";
 
