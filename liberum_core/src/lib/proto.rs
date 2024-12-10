@@ -332,8 +332,8 @@ impl UUIDTyped for ResultObject {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PinObject {
-    from: Hash,
-    to: TypedObject,
+    pub from: Hash,
+    pub to: TypedObject,
 }
 impl PinObject {
     pub const UUID: Uuid = uuid!("fdf23e1d-f966-4605-a399-9198bf5870e5");

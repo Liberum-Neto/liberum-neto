@@ -5,6 +5,7 @@ use std::iter::once;
 use std::iter::successors;
 use std::path::Path;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::str::FromStr;
 
 use anyhow::anyhow;
@@ -21,6 +22,7 @@ use kameo::messages;
 use kameo::Actor;
 use liberum_core::parser::ObjectEnum;
 use liberum_core::proto::Hash;
+use liberum_core::proto::PinObject;
 use liberum_core::proto::TypedObject;
 use liberum_core::types::TypedObjectInfo;
 use rusqlite::params;
@@ -121,6 +123,10 @@ impl Vault {
                     .await?;
                 self.store_typed_object(key, typed_object).await?;
             }
+            ObjectEnum::PinObject(pin_object) => {
+                self.store_hash_type_mapping(hash, PinObject::UUID).await?;
+                self.store_pin_object(key, pin_object).await?;
+            }
             _ => return Result::Err(anyhow!("Storing this object type is not supported!")),
         }
 
@@ -145,6 +151,11 @@ impl Vault {
                 .load_typed_object(key)
                 .await
                 .map(|r| r.map(|o| ObjectEnum::Typed(o)))
+                .map_err(|e| anyhow!(e)),
+            PinObject::UUID => self
+                .load_pin_object_by_hash(key)
+                .await
+                .map(|r| r.map(|o| ObjectEnum::PinObject(o)))
                 .map_err(|e| anyhow!(e)),
             _ => Err(anyhow!("Loading this object type is not supported!")),
         };
@@ -293,6 +304,15 @@ impl Vault {
             .await?;
 
         Ok(())
+    }
+
+    #[message]
+    async fn load_pin_objects(
+        &self,
+        from: Option<Hash>,
+        to: Option<Hash>,
+    ) -> Result<Vec<PinObject>> {
+        todo!()
     }
 }
 
@@ -444,6 +464,20 @@ impl Vault {
 
         self.db
             .call(|conn| Ok(conn.execute(CREATE_HASH_TYPE_MAPPING_TABLE_QUERY, ())?))
+            .await?;
+
+        const CREATE_PIN_OBJECT_TABLE_QUERY: &str = "
+            CREATE TABLE IF NOT EXISTS pin_object (
+                hash TEXT NOT NULL PRIMARY KEY,
+                hash_from TEXT NOT NULL UNIQUE,
+                hash_to TEXT NOT NULL UNIQUE, 
+            );
+            CREATE INDEX pin_object_hash_from_idx ON pin_object (hash_from);
+            CREATE INDEX pin_object_hash_to_idx ON pin_object (hash_to)
+        ";
+
+        self.db
+            .call(|conn| Ok(conn.execute(CREATE_PIN_OBJECT_TABLE_QUERY, ())?))
             .await?;
 
         Ok(())
@@ -617,6 +651,34 @@ impl Vault {
             })
             .await
             .map_err(|e| anyhow!(e))
+    }
+
+    async fn store_pin_object(&self, key: Key, object: PinObject) -> Result<()> {
+        const INSERT_PIN_OBJECT_QUERY: &str = "
+            INSERT INTO pin_object (hash, hash_from, hash_to)
+            VALUES (?1, ?2, ?3)
+        ";
+
+        let object_hash_b58str = key.as_base58();
+        let from_hash_b58str = Key::from(object.from.bytes).as_base58();
+        let to_hash: Hash = (&object.to).try_into()?;
+        let to_hash_b58str = Key::from(to_hash.bytes).as_base58();
+
+        self.db
+            .call(move |conn| {
+                conn.execute(
+                    INSERT_PIN_OBJECT_QUERY,
+                    params![object_hash_b58str, from_hash_b58str, to_hash_b58str],
+                )?;
+
+                Ok(())
+            })
+            .await
+            .map_err(|e| anyhow!(e))
+    }
+
+    async fn load_pin_object_by_hash(&self, key: Key) -> Result<Option<PinObject>> {
+        todo!()
     }
 
     async fn ensure_dirs(vault_dir_path: &Path) -> Result<()> {
