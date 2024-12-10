@@ -29,6 +29,7 @@ use liberum_core::DaemonRequest;
 use liberum_core::DaemonResponse;
 use liberum_core::DaemonResult;
 use libp2p::identity::Keypair;
+use libp2p::PeerId;
 use tokio::net::UnixListener;
 use tokio_util::codec::Decoder;
 use tokio_util::codec::Framed;
@@ -346,6 +347,7 @@ async fn get_node_details(node_name: &str, context: &AppContext) -> Result<NodeI
 
     let node_info = NodeInfo {
         name: node_name.to_string(),
+        peer_id: PeerId::from_public_key(&node.keypair.public()).to_string(),
         is_running,
         config_addresses: config_ext_addrs,
         running_addresses: running_ext_addrs,
