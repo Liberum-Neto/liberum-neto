@@ -7,7 +7,10 @@ pub mod types;
 use libp2p::futures::StreamExt;
 use node_config::NodeConfig;
 use proto::*;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use tokio::fs::File;
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
@@ -24,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Messages that can be sent from the UI to the daemon
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum DaemonRequest {
     NewNode {
         node_name: String,
@@ -81,6 +84,12 @@ pub enum DaemonRequest {
 pub type DaemonResult = Result<DaemonResponse, DaemonError>;
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct DaemonQueryStats {
+    pub query_duration: Duration,
+    pub total_requests: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub enum DaemonResponse {
     NodeCreated,
     NodeStarted,
@@ -89,13 +98,27 @@ pub enum DaemonResponse {
     NodeStopped,
     NodeList(Vec<NodeInfo>),
     NodeDetails(NodeInfo),
-    FileProvided { id: String },
-    Providers { ids: Vec<String> },
-    FileDownloaded { data: PlainFileObject }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
-    PeerId { id: String },
+    FileProvided {
+        id: String,
+    },
+    Providers {
+        ids: Vec<String>,
+        stats: Option<DaemonQueryStats>,
+    },
+    FileDownloaded {
+        data: PlainFileObject,
+        stats: Option<DaemonQueryStats>,
+    }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
+    PeerId {
+        id: String,
+    },
     Dialed,
-    FilePublished { id: String },
-    PublishedObjectsList { object_infos: Vec<TypedObjectInfo> },
+    FilePublished {
+        id: String,
+    },
+    PublishedObjectsList {
+        object_infos: Vec<TypedObjectInfo>,
+    },
 }
 
 /// Errors that can be returned by the daemon

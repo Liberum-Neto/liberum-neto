@@ -156,7 +156,7 @@ impl DaemonCom {
             match self.from_daemon_receiver.recv().await {
                 Some(r) => {
                     match r {
-                        Ok(DaemonResponse::FileDownloaded { data }) => return Ok(data.content),
+                        Ok(DaemonResponse::FileDownloaded { data, .. }) => return Ok(data.content),
                         Err(e) => {
                             error!(err = e.to_string(), "Error ocurred while downloading file!");
                             bail!("Error occured while publishing file: {}", e.to_string());

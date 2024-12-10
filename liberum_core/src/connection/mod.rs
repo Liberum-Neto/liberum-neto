@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use crate::node;
 use crate::node::manager::GetNode;
 use crate::node::manager::IsNodeRunning;
@@ -28,6 +26,7 @@ use liberum_core::DaemonRequest;
 use liberum_core::DaemonResponse;
 use liberum_core::DaemonResult;
 use libp2p::identity::Keypair;
+use std::path::PathBuf;
 use tokio::net::UnixListener;
 use tokio_util::codec::Decoder;
 use tokio_util::codec::Framed;
@@ -37,16 +36,22 @@ type SocketFramed =
     Framed<tokio::net::UnixStream, AsymmetricMessageCodec<DaemonResult, DaemonRequest>>;
 
 #[derive(Clone)]
-struct AppContext {
+pub struct AppContext {
     node_manager: ActorRef<NodeManager>,
 }
 
 impl AppContext {
-    fn new(node_store: ActorRef<NodeStore>) -> Self {
+    pub(super) fn new(node_store: ActorRef<NodeStore>) -> Self {
         AppContext {
             node_manager: kameo::spawn(NodeManager::new(node_store.clone())),
         }
     }
+}
+
+pub async fn create_app_context_for_test() -> Result<AppContext, anyhow::Error> {
+    Ok(AppContext::new(kameo::spawn(
+        NodeStore::with_custom_nodes_dir(std::env::temp_dir().as_path()).await?,
+    )))
 }
 
 pub async fn listen(listener: UnixListener) -> Result<()> {
@@ -93,7 +98,7 @@ async fn handle_connection(
 
 /// Used by the core daemon to listen for incoming connections from UI
 /// Only one UI connection is possible at a time
-async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonResult {
+pub async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonResult {
     match message {
         DaemonRequest::NewNode { node_name, id_seed } => {
             handle_new_node(node_name, id_seed, context).await
@@ -390,7 +395,8 @@ async fn handle_get_providers(node_name: String, id: String, context: &AppContex
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
     Ok(DaemonResponse::Providers {
-        ids: resp.iter().map(|r| r.to_base58()).collect(),
+        ids: resp.0.iter().map(|r| r.to_base58()).collect(),
+        stats: resp.1,
     })
 }
 
@@ -406,14 +412,17 @@ async fn handle_download_file(node_name: String, id: String, context: &AppContex
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    let file = node
+    let resp = node
         .ask(DownloadFile { obj_id_str: id })
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    Ok(DaemonResponse::FileDownloaded { data: file })
+    Ok(DaemonResponse::FileDownloaded {
+        data: resp.0,
+        stats: resp.1,
+    })
 }
 
 async fn handle_dial(
