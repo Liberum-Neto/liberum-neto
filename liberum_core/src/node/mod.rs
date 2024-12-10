@@ -10,7 +10,7 @@ use kameo::request::MessageSend;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::NodeConfig;
 use liberum_core::parser;
-use liberum_core::proto::{self, TypedObject};
+use liberum_core::proto::{self, SignedObject, TypedObject};
 use liberum_core::proto::{PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
 use liberum_core::types::TypedObjectInfo;
@@ -232,15 +232,20 @@ impl Node {
                         );
                         continue;
                     }
-                    match parser::parse_typed(obj).await {
-                        Ok(parser::ObjectEnum::PlainFile(file)) => return Ok(file),
-                        Err(e) => {
-                            debug!("{e}");
-                            continue;
-                        }
-                        Ok(_) => {
-                            debug!("Received object was not a file!");
-                            continue;
+
+                    let mut typed = Some(obj);
+                    while let Some(obj) = typed.clone() {
+                        typed = match parser::parse_typed(obj).await {
+                            Ok(parser::ObjectEnum::Signed(signed)) => Some(signed.object),
+                            Ok(parser::ObjectEnum::PlainFile(file)) => return Ok(file),
+                            Err(e) => {
+                                debug!("{e}");
+                                continue;
+                            }
+                            Ok(_) => {
+                                debug!("Received object was not a file!");
+                                continue;
+                            }
                         }
                     }
                 }
@@ -298,6 +303,9 @@ impl Node {
         // a new behaviour kademlia could talk to, which would provide streams of data.
         // (Maybe could be implemented on the existing request_response if it would be generalised more?)
         let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
+        let object: TypedObject = SignedObject::sign_ed25519(object, self.keypair.clone())
+            .unwrap()
+            .into();
         let obj_id = proto::Hash::try_from(&object)?;
         let obj_id_str = bs58::encode(&obj_id.bytes).into_string();
 
