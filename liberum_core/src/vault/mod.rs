@@ -9,13 +9,13 @@ use std::str::FromStr;
 
 use anyhow::anyhow;
 use anyhow::bail;
+use anyhow::Context;
 use anyhow::Result;
 use fragment::key::Key;
 use fragment::FragmentInfo;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use kameo::mailbox::bounded::BoundedMailbox;
-use kameo::message::Context;
 use kameo::message::Message;
 use kameo::messages;
 use kameo::Actor;
@@ -23,6 +23,7 @@ use liberum_core::parser::ObjectEnum;
 use liberum_core::proto::Hash;
 use liberum_core::proto::TypedObject;
 use liberum_core::types::TypedObjectInfo;
+use rusqlite::params;
 use rusqlite::params_from_iter;
 use rusqlite::OptionalExtension;
 use tokio::fs::remove_file;
@@ -116,6 +117,8 @@ impl Vault {
         match object {
             ObjectEnum::Empty(_) => {}
             ObjectEnum::Typed(typed_object) => {
+                self.store_hash_type_mapping(hash, TypedObject::UUID)
+                    .await?;
                 self.store_typed_object(key, typed_object).await?;
             }
             _ => return Result::Err(anyhow!("Storing this object type is not supported!")),
@@ -127,10 +130,26 @@ impl Vault {
     #[message]
     pub async fn load_object(&self, hash: Hash) -> Result<Option<ObjectEnum>> {
         let key: Key = hash.bytes.into();
+        let type_id = self.load_hash_type_mapping(hash).await?;
 
-        self.load_typed_object(key)
-            .await
-            .map(|r| r.map(|o| ObjectEnum::Typed(o)))
+        // No hash-type mapping means effectively that the object does not exist
+        if let None = type_id {
+            return Ok(None);
+        }
+
+        let type_id = type_id.unwrap();
+        println!("{type_id}");
+
+        let load_result = match type_id {
+            TypedObject::UUID => self
+                .load_typed_object(key)
+                .await
+                .map(|r| r.map(|o| ObjectEnum::Typed(o)))
+                .map_err(|e| anyhow!(e)),
+            _ => Err(anyhow!("Loading this object type is not supported!")),
+        };
+
+        load_result
     }
 
     #[message]
@@ -200,6 +219,109 @@ impl Vault {
 
         Ok(())
     }
+
+    #[message]
+    async fn store_hash_type_mapping(&self, hash: Hash, type_id: Uuid) -> Result<()> {
+        const INSERT_HASH_TYPE_MAPPING_QUERY: &str =
+            "INSERT INTO hash_type_mapping (hash0, hash1, hash2, hash3, type_id)
+             VALUES (?1, ?2, ?3, ?4, ?5)";
+
+        let key = Key::from(hash.bytes);
+        let hash_as_u64 = key.as_u64_slice_be();
+        let key_as_i64 = [
+            hash_as_u64[0] as i64,
+            hash_as_u64[1] as i64,
+            hash_as_u64[2] as i64,
+            hash_as_u64[3] as i64,
+        ];
+
+        self.db
+            .call(move |conn| {
+                conn.execute(
+                    INSERT_HASH_TYPE_MAPPING_QUERY,
+                    params![
+                        key_as_i64[0],
+                        key_as_i64[1],
+                        key_as_i64[2],
+                        key_as_i64[3],
+                        type_id.to_string()
+                    ],
+                )?;
+
+                Ok(())
+            })
+            .await
+            .map_err(|e| anyhow!(e))
+    }
+
+    #[message]
+    async fn load_hash_type_mapping(&self, hash: Hash) -> Result<Option<Uuid>> {
+        const SELECT_HASH_TYPE_MAPPING_QUERY: &str =
+            "SELECT type_id FROM hash_type_mapping WHERE hash0 = ?1 AND hash1 = ?2 AND hash2 = ?3 AND hash3 = ?4";
+
+        let type_id_str = self
+            .db
+            .call(move |conn| {
+                let key = Key::from(hash.bytes);
+                let hash_as_u64 = key.as_u64_slice_be();
+                let key_as_i64 = [
+                    hash_as_u64[0] as i64,
+                    hash_as_u64[1] as i64,
+                    hash_as_u64[2] as i64,
+                    hash_as_u64[3] as i64,
+                ];
+
+                let type_id_str = conn
+                    .query_row(
+                        SELECT_HASH_TYPE_MAPPING_QUERY,
+                        params_from_iter(key_as_i64),
+                        |row| {
+                            let type_id_str: String = row.get(0)?;
+                            Ok(type_id_str)
+                        },
+                    )
+                    .optional()?;
+
+                Ok(type_id_str)
+            })
+            .await
+            .map_err(|e| anyhow!(e))?;
+
+        match type_id_str {
+            Some(type_id_str) => {
+                let type_id = Uuid::from_str(&type_id_str)
+                    .context("Could not create UUID from type string")?;
+                Ok(Some(type_id))
+            }
+            None => Ok(None),
+        }
+    }
+
+    #[message]
+    async fn delete_hash_type_mapping(&self, hash: Hash) -> Result<()> {
+        const DELETE_HASH_TYPE_MAPPING_QUERY: &str = "
+            DELETE FROM hash_type_mapping
+            WHERE hash0 = ?1 AND hash1 = ?2 AND hash2 = ?3 AND hash3 = ?4
+        ";
+
+        self.db
+            .call(move |conn| {
+                let key_u64: [u64; 4] = Key::from(hash.bytes).into();
+                let key_i64: [i64; 4] = [
+                    key_u64[0] as i64,
+                    key_u64[1] as i64,
+                    key_u64[2] as i64,
+                    key_u64[3] as i64,
+                ];
+
+                conn.execute(DELETE_HASH_TYPE_MAPPING_QUERY, params_from_iter(key_i64))?;
+
+                Ok(())
+            })
+            .await?;
+
+        Ok(())
+    }
 }
 
 impl Message<LoadFragment> for Vault {
@@ -208,7 +330,7 @@ impl Message<LoadFragment> for Vault {
     fn handle(
         &mut self,
         msg: LoadFragment,
-        _: Context<'_, Self, Self::Reply>,
+        _: kameo::message::Context<'_, Self, Self::Reply>,
     ) -> impl std::future::Future<Output = Self::Reply> + Send {
         async move { self.load_fragment(msg.0).await }
     }
@@ -335,6 +457,20 @@ impl Vault {
 
         self.db
             .call(|conn| Ok(conn.execute(CREATE_TYPED_OBJECT_TABLE_QUERY, ())?))
+            .await?;
+
+        const CREATE_HASH_TYPE_MAPPING_TABLE_QUERY: &str = "
+            CREATE TABLE IF NOT EXISTS hash_type_mapping (
+                hash0 INTEGER NOT NULL,
+                hash1 INTEGER NOT NULL,
+                hash2 INTEGER NOT NULL,
+                hash3 INTEGER NOT NULL,
+                type_id TEXT
+            )
+        ";
+
+        self.db
+            .call(|conn| Ok(conn.execute(CREATE_HASH_TYPE_MAPPING_TABLE_QUERY, ())?))
             .await?;
 
         Ok(())
@@ -583,7 +719,6 @@ mod tests {
     use rand::{rngs::StdRng, Rng, SeedableRng};
     use tempdir::TempDir;
     use tokio::io::AsyncWriteExt;
-    use uuid::Uuid;
 
     use super::*;
 
@@ -707,13 +842,12 @@ mod tests {
         let vault_dir_path = tmp_dir.path();
         let vault = Vault::new_on_disk(vault_dir_path).await.unwrap();
         let vault = kameo::spawn(vault);
-        let some_uuid = Uuid::new_v4();
 
         vault
             .ask(StoreObject {
                 hash: Hash { bytes: [1; 32] },
                 object: ObjectEnum::Typed(TypedObject {
-                    uuid: some_uuid,
+                    uuid: TypedObject::UUID,
                     data: vec![1, 2, 3],
                 }),
             })
@@ -731,7 +865,7 @@ mod tests {
             .unwrap();
 
         if let ObjectEnum::Typed(TypedObject { uuid, data }) = typed_object {
-            assert_eq!(uuid, some_uuid);
+            assert_eq!(uuid, TypedObject::UUID);
             assert_eq!(data, vec![1, 2, 3]);
         } else {
             panic!("Object enum is not TypedObject, but it should be")
@@ -749,7 +883,7 @@ mod tests {
             .ask(StoreObject {
                 hash: Hash { bytes: [1; 32] },
                 object: ObjectEnum::Typed(TypedObject {
-                    uuid: Uuid::new_v4(),
+                    uuid: TypedObject::UUID,
                     data: vec![1, 2, 3],
                 }),
             })
