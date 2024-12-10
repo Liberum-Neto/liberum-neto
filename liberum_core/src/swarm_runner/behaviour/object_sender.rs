@@ -78,6 +78,12 @@ impl SwarmContext {
                 );
                 if let Some(sender) = self.behaviour.pending_inner_get_object.remove(&request_id) {
                     let _ = sender.send(Err(anyhow!("Outbound failure").context(error)));
+                } else if let Some(sender) = self
+                    .behaviour
+                    .pending_outer_delete_object
+                    .remove(&request_id)
+                {
+                    let _ = sender.send(Err(anyhow!("Outbound failure").context(error)));
                 }
             }
             e => debug!(
@@ -103,7 +109,8 @@ impl SwarmContext {
             "received object sender request!"
         );
 
-        let id = proto::Hash::try_from(&request.object);
+        let id: std::result::Result<proto::Hash, anyhow::Error> =
+            proto::Hash::try_from(&request.object);
         if let Err(e) = id {
             error!(
                 node = self.node_snapshot.name,
@@ -361,13 +368,18 @@ impl SwarmContext {
     async fn handle_query_delete_object(
         &mut self,
         delete_object: DeleteObjectQuery,
-        _id: &proto::Hash,
+        id: &proto::Hash,
         request: &ObjectSendRequest,
         _request_id: &InboundRequestId,
         response_channel: ResponseChannel<ObjectResponse>,
     ) -> Option<(TypedObject, ResponseChannel<ObjectResponse>)> {
         let obj = self.get_object_from_vault(delete_object.id.clone()).await;
         if let None = obj {
+            debug!(
+                node = self.node_snapshot.name,
+                obj_id = request.object_id.to_string(),
+                "Received Delete Object Query for file not in vault"
+            );
             self.respond_err(&request, response_channel);
             return None;
         }
@@ -398,7 +410,7 @@ impl SwarmContext {
                             hash: delete_object.id,
                         })
                         .await
-                        .unwrap();
+                        .ok();
                     self.respond_ok(&request, response_channel);
                     return None;
                 } else {

@@ -235,7 +235,7 @@ impl SwarmContext {
                     .get_closest_peers(obj_id.bytes.to_vec());
                 self.behaviour
                     .pending_inner_get_closest_peers
-                    .insert(query_id, response_sender);
+                    .insert(query_id, (Vec::new(), response_sender));
                 Ok(false)
             }
             SwarmRunnerMessage::SendObject {

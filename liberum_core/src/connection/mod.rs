@@ -461,12 +461,13 @@ async fn handle_delete_object(
     context: &AppContext,
 ) -> DaemonResult {
     let node = get_node(&node_name, context).await?;
-    node.ask(DeleteObject {
-        obj_id_str: object_id,
-    })
-    .await
-    .inspect_err(|e| debug!(err = e.to_string(), "Failed to delete object"))
-    .map_err(|e| DaemonError::Other(e.to_string()))?;
+    let result = node
+        .ask(DeleteObject {
+            obj_id_str: object_id,
+        })
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to delete object"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    DaemonResult::Ok(DaemonResponse::ObjectDeleted {})
+    DaemonResult::Ok(result)
 }

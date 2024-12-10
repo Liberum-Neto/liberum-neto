@@ -146,20 +146,32 @@ impl SwarmContext {
     ) {
         match result {
             Ok(closest_peers) => {
-                if let Some(sender) = self.behaviour.pending_inner_get_closest_peers.remove(&id) {
-                    let peers: Vec<PeerId> = closest_peers
+                if let Some(query_ctx) = self.behaviour.pending_inner_get_closest_peers.remove(&id)
+                {
+                    let mut peers: Vec<PeerId> = closest_peers
                         .peers
                         .iter()
                         .map(|p| p.peer_id.clone())
                         .collect();
-                    let _ = sender.send(peers).inspect_err(|e| {
-                        debug!(
-                            node = self.node_snapshot.name,
-                            qid = format!("{id}"),
-                            err = format!("{e:?}"),
-                            "Channel closed"
-                        )
-                    });
+                    let mut already_found = query_ctx.0;
+                    already_found.append(&mut peers);
+
+                    if _step.last {
+                        let _ = query_ctx.1.send(already_found).inspect_err(|e| {
+                            debug!(
+                                node = self.node_snapshot.name,
+                                qid = format!("{id}"),
+                                err = format!("{e:?}"),
+                                "Channel closed"
+                            )
+                        });
+                        return;
+                    }
+
+                    let new_ctx = (already_found, query_ctx.1);
+                    self.behaviour
+                        .pending_inner_get_closest_peers
+                        .insert(id, new_ctx);
                 }
             }
             Err(e) => {

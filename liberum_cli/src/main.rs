@@ -738,8 +738,14 @@ async fn handle_delete_object(
         .await
         .ok_or(anyhow!("Daemon returned no response"))?;
     match resp {
-        Ok(DaemonResponse::ObjectDeleted) => {
-            println!("Success");
+        Ok(DaemonResponse::ObjectDeleted {
+            deleted_myself,
+            deleted_count,
+            failed_count,
+        }) => {
+            println!("Deleted myself: {deleted_myself}");
+            println!("Successful deletes: {deleted_count}");
+            println!("Failed deletes: {failed_count}");
         }
         Err(e) => {
             println!("Error deleting object: {e}");

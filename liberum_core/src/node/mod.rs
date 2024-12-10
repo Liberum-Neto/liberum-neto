@@ -9,14 +9,15 @@ use kameo::messages;
 use kameo::request::MessageSend;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::NodeConfig;
-use liberum_core::parser;
 use liberum_core::proto::{self, SignedObject, TypedObject};
 use liberum_core::proto::{PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
 use liberum_core::types::TypedObjectInfo;
+use liberum_core::{parser, DaemonResponse};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use std::borrow::Borrow;
+use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -113,6 +114,11 @@ impl Node {
             .await?;
 
         if let Ok(received) = recv.await {
+            let received: Vec<PeerId> = received
+                .into_iter()
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
             debug!(node = self.name, "Got providers: {received:?}");
             return Ok(received);
         }
@@ -172,6 +178,11 @@ impl Node {
             obj_id = obj_id_str,
             "Found providers: {providers:?}"
         );
+        let providers: Vec<PeerId> = providers
+            .into_iter()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
         for peer in &providers {
             debug!(
                 node = self.name,
@@ -323,7 +334,16 @@ impl Node {
         if peers.is_empty() {
             return Err(anyhow!("Could not find provider for file {obj_id_str}.").into());
         }
-
+        debug!(
+            node = self.name,
+            "Found {} closest nodes for publishing",
+            peers.len()
+        );
+        let peers: Vec<PeerId> = peers
+            .into_iter()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
         let kad_k_parameter: i32 = 20;
         let mut successes = 0;
         for peer in &peers {
@@ -390,9 +410,11 @@ impl Node {
     }
 
     #[message]
-    pub async fn delete_object(&mut self, obj_id_str: String) -> Result<()> {
+    pub async fn delete_object(&mut self, obj_id_str: String) -> Result<DaemonResponse> {
         let obj_id = proto::Hash::try_from(obj_id_str.as_str())?;
         let (send, recv) = oneshot::channel();
+
+        error!("Get providers");
         self.swarm_sender
             .as_mut()
             .unwrap()
@@ -411,10 +433,23 @@ impl Node {
             );
             return Err(anyhow!("Failed to get providers").context(e));
         }
-        let providers = rec.unwrap();
+        error!("Fouind providers");
+        let providers: Vec<PeerId> = rec
+            .unwrap()
+            .into_iter()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        let mut deleted_count: u32 = 0;
+        let mut failed_count: u32 = 0;
+        let mut deleted_myself = false;
         for peer in &providers {
             if peer == &self.get_peer_id().unwrap() {
-                error!("Deleting file I'm providing myself");
+                debug!(
+                    node = self.name,
+                    obj_id = obj_id_str,
+                    "Deleting object I'm providing myself"
+                );
                 let (send, recv) = oneshot::channel();
                 self.swarm_sender
                     .as_mut()
@@ -431,6 +466,7 @@ impl Node {
                         "Failed to stop providing the object myself"
                     )
                 }
+                deleted_myself = true;
                 continue;
             }
             let (send, recv) = oneshot::channel();
@@ -444,17 +480,38 @@ impl Node {
                 })
                 .await?;
             let rec = recv.await;
-            if let Err(e) = rec {
-                debug!(
-                    node = self.name,
-                    err = format!("{e}"),
-                    asked_node = peer.to_base58(),
-                    "Failed to ask to delete"
-                );
-                continue;
+            match rec {
+                Err(e) => {
+                    debug!(
+                        node = self.name,
+                        err = format!("{e}"),
+                        asked_node = peer.to_base58(),
+                        "Failed to ask to delete"
+                    );
+                    failed_count += 1;
+                }
+                Ok(r) => match r {
+                    Err(e) => {
+                        debug!(
+                            node = self.name,
+                            err = format!("{e}"),
+                            asked_node = peer.to_base58(),
+                            "Failed to ask to send Delete Object Query"
+                        );
+                        failed_count += 1;
+                    }
+                    Ok(r) => match r.result {
+                        Ok(_) => deleted_count += 1,
+                        Err(_) => failed_count += 1,
+                    },
+                },
             }
         }
-        Ok(())
+        Ok(DaemonResponse::ObjectDeleted {
+            deleted_myself,
+            deleted_count,
+            failed_count,
+        })
     }
 }
 
