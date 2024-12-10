@@ -56,6 +56,22 @@ impl SwarmContext {
                         .await
                 }
             },
+            request_response::Event::OutboundFailure {
+                peer,
+                request_id,
+                error,
+            } => {
+                error!(
+                    node = self.node_snapshot.name,
+                    peeer = peer.to_base58(),
+                    request_id = format!("{request_id}"),
+                    err = format!("{error}"),
+                    "Outbound failure"
+                );
+                if let Some(sender) = self.behaviour.pending_inner_get_object.remove(&request_id) {
+                    let _ = sender.send(Err(anyhow!("Outbound failure").context(error)));
+                }
+            }
             e => debug!(
                 node = self.node_snapshot.name,
                 "Received request_response event! {e:?}"
