@@ -678,6 +678,32 @@ impl Vault {
     }
 
     async fn load_pin_object_by_hash(&self, key: Key) -> Result<Option<PinObject>> {
+        const SELECT_PIN_OBJECT_BY_HASH_QUERY: &str = "
+            SELECT hash_from, hash_to FROM pin_object
+            WHERE hash = ?1
+        ";
+
+        let object_hash_str = key.as_base58();
+
+        self.db
+            .call(move |conn| {
+                conn.query_row(
+                    SELECT_PIN_OBJECT_BY_HASH_QUERY,
+                    params![object_hash_str],
+                    |row| {
+                        let hash_from: String = row.get(0)?;
+                        let hash_to: String = row.get(1)?;
+
+                        //let pin_object = PinObject{from: hash_from, }
+
+                        Ok(())
+                    },
+                )?;
+
+                Ok(())
+            })
+            .await?;
+
         todo!()
     }
 
