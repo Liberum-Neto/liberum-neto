@@ -715,7 +715,13 @@ async fn handle_response(
     response_receiver: &mut tokio::sync::mpsc::Receiver<Result<DaemonResponse, DaemonError>>,
 ) -> Result<()> {
     match response_receiver.recv().await {
-        Some(r) => info!(response = format!("{r:?}"), "Daemon responds"),
+        Some(r) => {
+            info!(response = format!("{r:?}"), "Daemon responds");
+
+            if let Err(e) = r {
+                return Err(e.into());
+            }
+        }
         None => {
             error!("Failed to receive response");
         }
