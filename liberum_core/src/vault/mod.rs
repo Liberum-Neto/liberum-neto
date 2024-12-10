@@ -165,14 +165,7 @@ impl Vault {
                 let mut stmt = conn.prepare(SELECT_TYPED_OBJECT_QUERY)?;
                 let rows = stmt.query_map([], |row| {
                     let key_i64s: [i64; 4] = [row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?];
-                    let key_u64s: [u64; 4] = [
-                        key_i64s[0] as u64,
-                        key_i64s[1] as u64,
-                        key_i64s[2] as u64,
-                        key_i64s[3] as u64,
-                    ];
-
-                    let key = Key::from(key_u64s);
+                    let key = Key::from(key_i64s);
                     let type_id_str: String = row.get(4)?;
                     let type_id = Uuid::from_str(&type_id_str).expect("type id to be correct");
 
@@ -226,14 +219,7 @@ impl Vault {
             "INSERT INTO hash_type_mapping (hash0, hash1, hash2, hash3, type_id)
              VALUES (?1, ?2, ?3, ?4, ?5)";
 
-        let key = Key::from(hash.bytes);
-        let hash_as_u64 = key.as_u64_slice_be();
-        let key_as_i64 = [
-            hash_as_u64[0] as i64,
-            hash_as_u64[1] as i64,
-            hash_as_u64[2] as i64,
-            hash_as_u64[3] as i64,
-        ];
+        let key_as_i64: [i64; 4] = Key::from(hash.bytes).into();
 
         self.db
             .call(move |conn| {
@@ -262,15 +248,7 @@ impl Vault {
         let type_id_str = self
             .db
             .call(move |conn| {
-                let key = Key::from(hash.bytes);
-                let hash_as_u64 = key.as_u64_slice_be();
-                let key_as_i64 = [
-                    hash_as_u64[0] as i64,
-                    hash_as_u64[1] as i64,
-                    hash_as_u64[2] as i64,
-                    hash_as_u64[3] as i64,
-                ];
-
+                let key_as_i64: [i64; 4] = Key::from(hash.bytes).into();
                 let type_id_str = conn
                     .query_row(
                         SELECT_HASH_TYPE_MAPPING_QUERY,
@@ -306,15 +284,9 @@ impl Vault {
 
         self.db
             .call(move |conn| {
-                let key_u64: [u64; 4] = Key::from(hash.bytes).into();
-                let key_i64: [i64; 4] = [
-                    key_u64[0] as i64,
-                    key_u64[1] as i64,
-                    key_u64[2] as i64,
-                    key_u64[3] as i64,
-                ];
+                let key_as_i64: [i64; 4] = Key::from(hash.bytes).into();
 
-                conn.execute(DELETE_HASH_TYPE_MAPPING_QUERY, params_from_iter(key_i64))?;
+                conn.execute(DELETE_HASH_TYPE_MAPPING_QUERY, params_from_iter(key_as_i64))?;
 
                 Ok(())
             })
@@ -486,13 +458,7 @@ impl Vault {
         self.db
             .call(move |conn| {
                 let mut stmt = conn.prepare(SELECT_FRAGMENT_QUERY)?;
-                let key_u64_slice = key.as_u64_slice_be();
-                let key_as_i64 = [
-                    key_u64_slice[0] as i64,
-                    key_u64_slice[1] as i64,
-                    key_u64_slice[2] as i64,
-                    key_u64_slice[3] as i64,
-                ];
+                let key_as_i64: [i64; 4] = key.into();
 
                 let fragment = stmt
                     .query_row(key_as_i64, |r| {
@@ -523,18 +489,10 @@ impl Vault {
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ";
 
-        let hash_as_u64 = fragment.hash.as_u64_slice_be();
-
+        let key_as_i64: [i64; 4] = fragment.hash.into();
         let cnt = self
             .db
             .call(move |conn| {
-                let key_as_i64 = [
-                    hash_as_u64[0] as i64,
-                    hash_as_u64[1] as i64,
-                    hash_as_u64[2] as i64,
-                    hash_as_u64[3] as i64,
-                ];
-
                 let cnt = conn.query_row(SELECT_FRAGMENT_QUERY, key_as_i64, |r| {
                     let cnt: usize = r.get(0)?;
 
@@ -554,10 +512,10 @@ impl Vault {
                 conn.execute(
                     INSERT_FRAGMENT_QUERY,
                     (
-                        hash_as_u64[0] as i64,
-                        hash_as_u64[1] as i64,
-                        hash_as_u64[2] as i64,
-                        hash_as_u64[3] as i64,
+                        key_as_i64[0],
+                        key_as_i64[1],
+                        key_as_i64[2],
+                        key_as_i64[3],
                         fragment.path.to_str(),
                         fragment.size,
                     ),
@@ -594,13 +552,7 @@ impl Vault {
         self.db
             .call(move |conn| {
                 let mut stmt = conn.prepare(SELECT_TYPED_OBJECT_QUERY)?;
-                let key_u64_slice = key.as_u64_slice_be();
-                let key_as_i64 = [
-                    key_u64_slice[0] as i64,
-                    key_u64_slice[1] as i64,
-                    key_u64_slice[2] as i64,
-                    key_u64_slice[3] as i64,
-                ];
+                let key_as_i64: [i64; 4] = key.into();
 
                 let typed_object = stmt
                     .query_row(key_as_i64, |r| {
@@ -627,18 +579,10 @@ impl Vault {
             "INSERT INTO typed_object (hash0, hash1, hash2, hash3, type_id, data)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 
-        let hash_as_u64 = key.as_u64_slice_be();
-
+        let key_as_i64: [i64; 4] = key.into();
         let cnt = self
             .db
             .call(move |conn| {
-                let key_as_i64 = [
-                    hash_as_u64[0] as i64,
-                    hash_as_u64[1] as i64,
-                    hash_as_u64[2] as i64,
-                    hash_as_u64[3] as i64,
-                ];
-
                 let cnt = conn.query_row(SELECT_TYPED_OBJECT_QUERY, key_as_i64, |r| {
                     let cnt: usize = r.get(0)?;
 
@@ -659,10 +603,10 @@ impl Vault {
                 conn.execute(
                     INSERT_TYPED_OBJECT_QUERY,
                     (
-                        hash_as_u64[0] as i64,
-                        hash_as_u64[1] as i64,
-                        hash_as_u64[2] as i64,
-                        hash_as_u64[3] as i64,
+                        key_as_i64[0] as i64,
+                        key_as_i64[1] as i64,
+                        key_as_i64[2] as i64,
+                        key_as_i64[3] as i64,
                         object.uuid.to_string(),
                         object.data,
                     ),
