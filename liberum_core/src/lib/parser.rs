@@ -42,7 +42,8 @@ pub async fn parse_typed(object: TypedObject) -> Result<ObjectEnum> {
         }
         SignedObject::UUID => {
             debug!("Parser: Signed object: {:?}", object);
-            todo!()
+            let signed = TypedObject::try_from_typed(&object)?;
+            Ok(ObjectEnum::Signed(signed))
         }
         PlainFileObject::UUID => {
             debug!("Parser: Plain File Object: {:?}", object);
@@ -56,18 +57,23 @@ pub async fn parse_typed(object: TypedObject) -> Result<ObjectEnum> {
         }
         SimpleIDQuery::UUID => {
             debug!("Parser: Simple ID Query: {:?}", object);
-            let query = TypedObject::try_from_typed(&object).unwrap();
+            let query = TypedObject::try_from_typed(&object)?;
             Ok(ObjectEnum::SimpleIDQuery(query))
         }
         QueryObject::UUID => {
             debug!("Parser: Got Query object: {:?}", object);
-            let query = TypedObject::try_from_typed(&object).unwrap();
+            let query = TypedObject::try_from_typed(&object)?;
             Ok(ObjectEnum::Query(query))
         }
         ResultObject::UUID => {
             debug!("Parser: Got Result object: {:?}", object);
-            let obj = TypedObject::try_from_typed(&object).unwrap();
+            let obj = TypedObject::try_from_typed(&object)?;
             Ok(ObjectEnum::Result(obj))
+        }
+        DeleteObjectQuery::UUID => {
+            debug!("Parser: Got Delete Object Query object: {:?}", object);
+            let obj = TypedObject::try_from_typed(&object)?;
+            Ok(ObjectEnum::DeleteObject(obj))
         }
         _ => {
             debug!("Parser: Unknown object: {:?}", object);
