@@ -92,6 +92,18 @@ impl From<[u64; 4]> for Key {
     }
 }
 
+impl From<[i64; 4]> for Key {
+    fn from(value_i64s: [i64; 4]) -> Self {
+        let value_bytes_vec = value_i64s
+            .into_iter()
+            .flat_map(|i| i.to_be_bytes())
+            .collect::<Vec<u8>>();
+
+        // We are sure that it will work, because there are exactly 32 bytes in vec
+        value_bytes_vec.try_into().unwrap()
+    }
+}
+
 impl TryFrom<&[u64]> for Key {
     type Error = Error;
 
@@ -127,7 +139,7 @@ impl Into<[u64; 4]> for Key {
         self.value_bytes
             .iter()
             .as_slice()
-            .windows(8)
+            .chunks(8)
             .map(|w| u64::from_be_bytes(w.try_into().unwrap()))
             .collect::<Vec<u64>>()
             .try_into()
@@ -138,5 +150,18 @@ impl Into<[u64; 4]> for Key {
 impl Into<Vec<u64>> for Key {
     fn into(self) -> Vec<u64> {
         <Key as Into<[u64; 4]>>::into(self).to_vec()
+    }
+}
+
+impl Into<[i64; 4]> for Key {
+    fn into(self) -> [i64; 4] {
+        self.value_bytes
+            .iter()
+            .as_slice()
+            .chunks(8)
+            .map(|w| i64::from_be_bytes(w.try_into().unwrap()))
+            .collect::<Vec<i64>>()
+            .try_into()
+            .unwrap()
     }
 }
