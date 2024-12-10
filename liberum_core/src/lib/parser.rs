@@ -15,6 +15,7 @@ pub enum ObjectEnum {
     SimpleIDQuery(SimpleIDQuery),
     Query(QueryObject),
     Result(ResultObject),
+    PinObject(PinObject),
 }
 impl UUIDTyped for ObjectEnum {
     // TODO couldn't we do this better? Is it possible to force a member of an enum to implement a trait??
@@ -28,6 +29,7 @@ impl UUIDTyped for ObjectEnum {
             ObjectEnum::SimpleIDQuery(simple_idquery) => simple_idquery.get_type_uuid(),
             ObjectEnum::Query(query_object) => query_object.get_type_uuid(),
             ObjectEnum::Result(result_object) => result_object.get_type_uuid(),
+            ObjectEnum::PinObject(pin_object) => pin_object.get_type_uuid(),
         }
     }
 }
