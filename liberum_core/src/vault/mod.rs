@@ -23,6 +23,7 @@ use liberum_core::parser::ObjectEnum;
 use liberum_core::proto::Hash;
 use liberum_core::proto::TypedObject;
 use liberum_core::types::TypedObjectInfo;
+use rusqlite::params_from_iter;
 use rusqlite::OptionalExtension;
 use tokio::fs::remove_file;
 use tokio::fs::File;
@@ -172,6 +173,32 @@ impl Vault {
             .await?;
 
         Ok(object_infos)
+    }
+
+    #[message]
+    pub async fn delete_typed_object(&self, hash: Hash) -> Result<()> {
+        const DELETE_TYPED_OBJECT_QUERY: &str = "
+            DELETE FROM typed_object
+            WHERE hash0 = ?1 AND hash1 = ?2 AND hash2 = ?3 AND hash3 = ?4
+        ";
+
+        self.db
+            .call(move |conn| {
+                let key_u64: [u64; 4] = Key::from(hash.bytes).into();
+                let key_i64: [i64; 4] = [
+                    key_u64[0] as i64,
+                    key_u64[1] as i64,
+                    key_u64[2] as i64,
+                    key_u64[3] as i64,
+                ];
+
+                conn.execute(DELETE_TYPED_OBJECT_QUERY, params_from_iter(key_i64))?;
+
+                Ok(())
+            })
+            .await?;
+
+        Ok(())
     }
 }
 
@@ -709,5 +736,43 @@ mod tests {
         } else {
             panic!("Object enum is not TypedObject, but it should be")
         }
+    }
+
+    #[tokio::test]
+    async fn typed_object_delete_test() {
+        let tmp_dir = TempDir::new("liberum_tests").unwrap();
+        let vault_dir_path = tmp_dir.path();
+        let vault = Vault::new_on_disk(vault_dir_path).await.unwrap();
+        let vault = kameo::spawn(vault);
+
+        vault
+            .ask(StoreObject {
+                hash: Hash { bytes: [1; 32] },
+                object: ObjectEnum::Typed(TypedObject {
+                    uuid: Uuid::new_v4(),
+                    data: vec![1, 2, 3],
+                }),
+            })
+            .send()
+            .await
+            .unwrap();
+
+        vault
+            .ask(DeleteTypedObject {
+                hash: Hash { bytes: [1; 32] },
+            })
+            .send()
+            .await
+            .unwrap();
+
+        let loaded_obj = vault
+            .ask(LoadObject {
+                hash: Hash { bytes: [1; 32] },
+            })
+            .send()
+            .await
+            .unwrap();
+
+        assert!(loaded_obj.is_none());
     }
 }

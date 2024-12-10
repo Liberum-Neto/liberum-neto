@@ -142,12 +142,12 @@ async fn run_swarm_main(
     // Add the external addresses to the swarm
     if context.node_snapshot.config.external_addresses.is_empty() {
         for addr in default_addr {
-            context.swarm.add_external_address(addr.clone());
+            //context.swarm.add_external_address(addr.clone());
             context.swarm.listen_on(addr.clone())?;
         }
     } else {
         for addr in &context.node_snapshot.config.external_addresses {
-            context.swarm.add_external_address(addr.clone());
+            //context.swarm.add_external_address(addr.clone());
             context.swarm.listen_on(addr.clone())?;
         }
     }
@@ -177,7 +177,7 @@ async fn run_swarm_main(
         .kademlia
         .bootstrap()
         .inspect_err(|e| {
-            info!(err = e.to_string(), "Could not bootstrap the swarm");
+            warn!(err = e.to_string(), "Could not bootstrap the swarm");
         })
         .ok();
 
@@ -233,7 +233,7 @@ impl SwarmContext {
                     .behaviour_mut()
                     .kademlia
                     .add_address(&peer_id, addr);
-                self.print_neighbours();
+                //self.print_neighbours();
             }
             SwarmEvent::OutgoingConnectionError {
                 connection_id,
@@ -277,14 +277,17 @@ impl SwarmContext {
 impl SwarmContext {
     fn print_neighbours(&mut self) {
         debug!(node = self.node_snapshot.name, "Neighbours:");
+        let mut i = 0;
         self.swarm
             .behaviour_mut()
             .kademlia
             .kbuckets()
             .for_each(|k| {
                 k.iter().for_each(|e| {
+                    i += 1;
                     debug!("neighbour: {:?}: {:?}", e.node.key, e.node.value);
                 });
             });
+        error!(node = self.node_snapshot.name, "Neighbour count: {i}")
     }
 }
