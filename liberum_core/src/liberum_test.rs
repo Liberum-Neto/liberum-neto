@@ -245,7 +245,7 @@ async fn run_few_and_collect(
     app_context: AppContext,
 ) -> Result<Vec<(u64, DaemonResponse)>, Box<dyn error::Error>> {
     let mut tasks = Vec::with_capacity(requests.len());
-
+    sleep(Duration::from_millis(250)).await;
     for request in &requests {
         tasks.push(tokio::spawn(daemon_request(
             request.1.clone(),
@@ -301,27 +301,26 @@ async fn handle_create_nodes(
         }
     }
 
-    // load address
-
-    let mut address_requests = Vec::new();
-
+    let mut add_external_addr = Vec::new();
+    // add external adress
     for node in &test_scenario.nodes {
-        if node.visibility() == NodeDefinitionLevel::NeedAddress {
-            let request = DaemonRequest::OverwriteNodeConfig {
-                node_name: node.name.clone(),
-                new_cfg: NodeConfig {
-                    external_addresses: vec![Multiaddr::from_str(node.address()).unwrap()],
-                    bootstrap_nodes: Vec::new(),
+        if node.visibility() == NodeDefinitionLevel::NeedAddress
+        {
+            add_external_addr.push((
+                node.node_id,
+                DaemonRequest::OverwriteNodeConfig {
+                    node_name: node.name.clone(),
+                    new_cfg: NodeConfig{
+                        bootstrap_nodes: Vec::new(),
+                        external_addresses: vec![Multiaddr::from_str("/ip4/0.0.0.0/udp/0/quic-v1").unwrap()]
+                    }
                 },
-            };
-
-            address_requests.push((node.node_id, request));
-            dialable_nodes.get_mut(&node.node_id).unwrap().node_adress = node.address.clone();
+            ));
         }
     }
-    run_few_and_collect(address_requests, app_context.clone())
-        .await
-        .unwrap();
+    run_few_and_collect(add_external_addr, app_context.clone())
+    .await
+    .unwrap();
 
     // start nodes
 
@@ -351,7 +350,7 @@ async fn handle_create_nodes(
             ));
         }
     }
-
+    
     for response in run_few_and_collect(hash_requests, app_context.clone())
         .await
         .unwrap()
@@ -361,6 +360,29 @@ async fn handle_create_nodes(
                 dialable_nodes.get_mut(&node_id).unwrap().node_hash = hash
             }
             _ => panic!(),
+        }
+    }
+
+    // load address
+
+    let mut address_requests = Vec::new();
+
+    for node in &test_scenario.nodes {
+        if node.visibility() == NodeDefinitionLevel::NeedAddress {
+            let request = DaemonRequest::GetNodeDetails {
+                node_name: node.name.clone(),
+            };
+
+            address_requests.push((node.node_id, request));
+        }
+    }
+    for (node_id, result) in run_few_and_collect(address_requests, app_context.clone())
+        .await
+        .unwrap()
+    {
+        if let DaemonResponse::NodeDetails(details) = result {
+            dialable_nodes.get_mut(&node_id).unwrap().node_adress =
+                Some(details.running_addresses.first().unwrap().clone());
         }
     }
 
