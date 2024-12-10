@@ -1,7 +1,9 @@
 use anyhow::anyhow;
+use anyhow::Result;
 use liberum_core::parser::{self, ObjectEnum};
 use liberum_core::proto::{
-    self, DeleteObjectQuery, PlainFileObject, QueryObject, SimpleIDQuery, TypedObject, UUIDTyped,
+    self, DeleteObjectQuery, PlainFileObject, QueryObject, ResultObject, SimpleIDQuery,
+    TypedObject, UUIDTyped,
 };
 use libp2p::identity::PublicKey;
 use libp2p::{
@@ -9,7 +11,10 @@ use libp2p::{
     request_response::{self, InboundRequestId, OutboundRequestId, ResponseChannel},
 };
 use serde::{Deserialize, Serialize};
+use tokio::sync::oneshot;
 use tracing::{debug, error};
+
+use crate::vault;
 
 use super::super::SwarmContext;
 
@@ -218,22 +223,13 @@ impl SwarmContext {
         if let Some(sender) = self.behaviour.pending_inner_get_object.remove(&request_id) {
             let _ = sender.send(Ok(response.object));
         } else if let Some(sender) = self.behaviour.pending_inner_send_object.remove(&request_id) {
-            let r = parser::parse_typed(response.object).await;
-            match r {
-                Ok(obj) => {
-                    if let ObjectEnum::Result(obj) = obj {
-                        let _ = sender.send(Ok(obj));
-                    } else {
-                        let _ = sender.send(Err(anyhow!(
-                            "Unsupported object type {}",
-                            obj.get_type_uuid()
-                        )));
-                    }
-                }
-                Err(e) => {
-                    let _ = sender.send(Err(anyhow!("Failed to parse result object").context(e)));
-                }
-            }
+            self.send_result_object(response.object, sender).await;
+        } else if let Some(sender) = self
+            .behaviour
+            .pending_outer_delete_object
+            .remove(&request_id)
+        {
+            self.send_result_object(response.object, sender).await;
         }
     }
 
@@ -250,7 +246,19 @@ impl SwarmContext {
             },
         );
     }
-
+    fn respond_ok(
+        &mut self,
+        request: &ObjectSendRequest,
+        response_channel: ResponseChannel<ObjectResponse>,
+    ) {
+        let _ = self.swarm.behaviour_mut().object_sender.send_response(
+            response_channel,
+            ObjectResponse {
+                object: proto::ResultObject { result: Ok(()) }.into(),
+                object_id: request.object_id.clone(),
+            },
+        );
+    }
     async fn handle_request_plain_file(
         &mut self,
         _obj: PlainFileObject,
@@ -385,7 +393,14 @@ impl SwarmContext {
                         .behaviour_mut()
                         .kademlia
                         .stop_providing(&request.object_id.clone().into());
-                    //self.vault_ref.ask(vault::) // TODO, delete from vault
+                    self.vault_ref
+                        .ask(vault::DeleteTypedObject {
+                            hash: delete_object.id,
+                        })
+                        .await
+                        .unwrap();
+                    self.respond_ok(&request, response_channel);
+                    return None;
                 } else {
                     self.respond_err(&request, response_channel);
                     return None;
@@ -398,7 +413,6 @@ impl SwarmContext {
             self.respond_err(&request, response_channel);
             return None;
         }
-        todo!()
     }
 
     async fn handle_query_simple_id(
@@ -450,5 +464,28 @@ impl SwarmContext {
         );
 
         None
+    }
+
+    async fn send_result_object(
+        &mut self,
+        object: TypedObject,
+        sender: oneshot::Sender<Result<ResultObject>>,
+    ) {
+        let r = parser::parse_typed(object).await;
+        match r {
+            Ok(obj) => {
+                if let ObjectEnum::Result(obj) = obj {
+                    let _ = sender.send(Ok(obj));
+                } else {
+                    let _ = sender.send(Err(anyhow!(
+                        "Unsupported object type {}",
+                        obj.get_type_uuid()
+                    )));
+                }
+            }
+            Err(e) => {
+                let _ = sender.send(Err(anyhow!("Failed to parse result object").context(e)));
+            }
+        }
     }
 }

@@ -46,6 +46,7 @@ enum Command {
     Dial(Dial),
     PublishFile(PublishFile),
     GetPublishedObjects(GetPublishedObjects),
+    DeleteObject(DeleteObject),
 }
 
 #[derive(Parser)]
@@ -163,6 +164,14 @@ struct GetPublishedObjects {
     node_name: String,
 }
 
+#[derive(Parser)]
+struct DeleteObject {
+    #[arg()]
+    node_name: String,
+    #[arg()]
+    object_id: String,
+}
+
 #[derive(Tabled)]
 struct NodeInfoRow {
     pub name: String,
@@ -235,6 +244,7 @@ async fn handle_command(
         Command::Dial(cmd) => handle_dial(cmd, req, res).await,
         Command::PublishFile(cmd) => handle_publish_file(cmd, req, res).await,
         Command::GetPublishedObjects(cmd) => handle_get_published_objects(ctx, cmd, req, res).await,
+        Command::DeleteObject(cmd) => handle_delete_object(cmd, req, res).await,
     }
 }
 
@@ -703,6 +713,37 @@ async fn handle_get_published_objects(
         Err(e) => {
             println!("Error getting published files list: {e}");
             bail!("Error getting published files list");
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
+        }
+    }
+    Ok(())
+}
+
+async fn handle_delete_object(
+    cmd: DeleteObject,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    req.send(DaemonRequest::DeleteObject {
+        node_name: cmd.node_name,
+        object_id: cmd.object_id,
+    })
+    .await
+    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
+    let resp = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))?;
+    match resp {
+        Ok(DaemonResponse::ObjectDeleted) => {
+            println!("Success");
+        }
+        Err(e) => {
+            println!("Error deleting object: {e}");
+            bail!("Error deleting object");
         }
         _ => {
             bail!("Daemon returned wrong response");

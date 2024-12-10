@@ -1,5 +1,9 @@
-use liberum_core::proto::ResultObject;
 use liberum_core::proto::{self, TypedObject};
+use liberum_core::proto::{DeleteObjectQuery, QueryObject, ResultObject, SerializablePublicKey};
+use libp2p::kad::RecordKey;
+
+use crate::swarm_runner::object_sender::ObjectSendRequest;
+use crate::vault;
 
 use super::behaviour::object_sender;
 use super::SwarmContext;
@@ -75,6 +79,15 @@ pub enum SwarmRunnerMessage {
     },
     GetAddresses {
         response_sender: oneshot::Sender<Result<Vec<Multiaddr>>>,
+    },
+    DeleteObject {
+        obj_id: proto::Hash,
+        peer: PeerId,
+        response_sender: oneshot::Sender<Result<ResultObject>>,
+    },
+    StopProviding {
+        obj_id: proto::Hash,
+        response_sender: oneshot::Sender<Result<()>>,
     },
 }
 
@@ -273,6 +286,60 @@ impl SwarmContext {
 
                 let _ = response_sender.send(Ok(addrs));
 
+                Ok(false)
+            }
+
+            SwarmRunnerMessage::DeleteObject {
+                obj_id,
+                peer,
+                response_sender,
+            } => {
+                let key: SerializablePublicKey = self.node_snapshot.keypair.public().into();
+                let delete_query = DeleteObjectQuery {
+                    id: obj_id,
+                    verification_key_ed25519: key,
+                };
+                let obj: TypedObject = QueryObject {
+                    query_object: delete_query.into(),
+                }
+                .into();
+                let query_id = proto::Hash::try_from(&obj)?;
+
+                let request = ObjectSendRequest {
+                    object: obj,
+                    object_id: query_id,
+                };
+
+                let qid = self
+                    .swarm
+                    .behaviour_mut()
+                    .object_sender
+                    .send_request(&peer, request);
+                self.behaviour
+                    .pending_outer_delete_object
+                    .insert(qid, response_sender);
+                Ok(false)
+            }
+
+            SwarmRunnerMessage::StopProviding {
+                obj_id,
+                response_sender,
+            } => {
+                self.swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .stop_providing(&RecordKey::from(obj_id.bytes.to_vec()));
+                let r = self
+                    .vault_ref
+                    .ask(vault::DeleteTypedObject { hash: obj_id })
+                    .await;
+                if let Ok(_) = r {
+                    response_sender.send(Ok(())).unwrap();
+                } else {
+                    response_sender
+                        .send(Err(anyhow!("Failed to remove from vault")))
+                        .unwrap();
+                }
                 Ok(false)
             }
         }

@@ -43,6 +43,8 @@ pub struct BehaviourContext {
     pub pending_inner_get_closest_peers: HashMap<kad::QueryId, oneshot::Sender<Vec<PeerId>>>,
     pub pending_outer_start_providing:
         HashMap<kad::QueryId, (proto::Hash, ResponseChannel<ObjectResponse>)>,
+    pub pending_outer_delete_object:
+        HashMap<OutboundRequestId, oneshot::Sender<Result<ResultObject>>>,
 }
 
 impl BehaviourContext {
@@ -56,6 +58,7 @@ impl BehaviourContext {
             pending_inner_get_object: HashMap::new(),
             pending_inner_dial: HashMap::new(),
             pending_inner_get_closest_peers: HashMap::new(),
+            pending_outer_delete_object: HashMap::new(),
         }
     }
 }

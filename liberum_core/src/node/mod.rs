@@ -24,7 +24,7 @@ use swarm_runner::messages::SwarmRunnerMessage;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 pub struct Node {
     pub name: String,
@@ -148,7 +148,7 @@ impl Node {
 
     #[message]
     pub async fn download_file(&mut self, obj_id_str: String) -> Result<proto::PlainFileObject> {
-        let obj_id = proto::Hash::try_from(&obj_id_str)?;
+        let obj_id = proto::Hash::try_from(obj_id_str.as_str())?;
 
         // first get the providers of the file
         // Maybe getting the providers could be reused from GetProviders node message handler??
@@ -387,6 +387,74 @@ impl Node {
     #[message]
     pub async fn get_published_objects(&mut self) -> Result<Vec<TypedObjectInfo>> {
         Ok(self.vault_ref.ask(ListTypedObjects).send().await?)
+    }
+
+    #[message]
+    pub async fn delete_object(&mut self, obj_id_str: String) -> Result<()> {
+        let obj_id = proto::Hash::try_from(obj_id_str.as_str())?;
+        let (send, recv) = oneshot::channel();
+        self.swarm_sender
+            .as_mut()
+            .unwrap()
+            .send(SwarmRunnerMessage::GetProviders {
+                obj_id: obj_id.clone(),
+                response_sender: send,
+            })
+            .await?;
+
+        let rec = recv.await;
+        if let Err(e) = rec {
+            debug!(
+                node = self.name,
+                err = format!("{e}"),
+                "Failed to get providers"
+            );
+            return Err(anyhow!("Failed to get providers").context(e));
+        }
+        let providers = rec.unwrap();
+        for peer in &providers {
+            if peer == &self.get_peer_id().unwrap() {
+                error!("Deleting file I'm providing myself");
+                let (send, recv) = oneshot::channel();
+                self.swarm_sender
+                    .as_mut()
+                    .unwrap()
+                    .send(SwarmRunnerMessage::StopProviding {
+                        obj_id: obj_id.clone(),
+                        response_sender: send,
+                    })
+                    .await?;
+                let resp = recv.await;
+                if let Err(_) = resp {
+                    warn!(
+                        node = self.name,
+                        "Failed to stop providing the object myself"
+                    )
+                }
+                continue;
+            }
+            let (send, recv) = oneshot::channel();
+            self.swarm_sender
+                .as_mut()
+                .unwrap()
+                .send(SwarmRunnerMessage::DeleteObject {
+                    obj_id: obj_id.clone(),
+                    peer: peer.clone(),
+                    response_sender: send,
+                })
+                .await?;
+            let rec = recv.await;
+            if let Err(e) = rec {
+                debug!(
+                    node = self.name,
+                    err = format!("{e}"),
+                    asked_node = peer.to_base58(),
+                    "Failed to ask to delete"
+                );
+                continue;
+            }
+        }
+        Ok(())
     }
 }
 

@@ -94,9 +94,9 @@ impl TryFrom<&TypedObject> for Hash {
     }
 }
 
-impl TryFrom<&String> for Hash {
+impl TryFrom<&str> for Hash {
     type Error = Error;
-    fn try_from(value: &String) -> Result<Self> {
+    fn try_from(value: &str) -> Result<Self> {
         bs58::decode(value).into_vec()?.as_slice().try_into()
     }
 }

@@ -7,6 +7,7 @@ use crate::node::manager::NodeManager;
 use crate::node::store::ListNodes;
 use crate::node::store::LoadNode;
 use crate::node::store::NodeStore;
+use crate::node::DeleteObject;
 use crate::node::DialPeer;
 use crate::node::DownloadFile;
 use crate::node::GetAddresses;
@@ -133,6 +134,10 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         DaemonRequest::GetPublishedObjects { node_name } => {
             handle_get_published_objects(node_name, context).await
         }
+        DaemonRequest::DeleteObject {
+            node_name,
+            object_id,
+        } => handle_delete_object(node_name, object_id, context).await,
     }
 }
 
@@ -448,4 +453,20 @@ async fn handle_get_published_objects(node_name: String, context: &AppContext) -
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
     DaemonResult::Ok(DaemonResponse::PublishedObjectsList { object_infos })
+}
+
+async fn handle_delete_object(
+    node_name: String,
+    object_id: String,
+    context: &AppContext,
+) -> DaemonResult {
+    let node = get_node(&node_name, context).await?;
+    node.ask(DeleteObject {
+        obj_id_str: object_id,
+    })
+    .await
+    .inspect_err(|e| debug!(err = e.to_string(), "Failed to delete object"))
+    .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    DaemonResult::Ok(DaemonResponse::ObjectDeleted {})
 }
