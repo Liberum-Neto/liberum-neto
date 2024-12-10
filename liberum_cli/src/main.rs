@@ -166,6 +166,7 @@ struct GetPublishedObjects {
 #[derive(Tabled)]
 struct NodeInfoRow {
     pub name: String,
+    pub peer_id: String,
     pub is_running: bool,
     pub first_cfg_address: String,
     pub first_run_address: String,
@@ -727,6 +728,7 @@ impl From<&NodeInfo> for NodeInfoRow {
     fn from(value: &NodeInfo) -> Self {
         Self {
             name: value.name.to_string(),
+            peer_id: value.peer_id.clone(),
             is_running: value.is_running,
             first_cfg_address: value
                 .config_addresses
