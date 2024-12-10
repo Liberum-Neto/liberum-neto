@@ -2,8 +2,9 @@ use std::{fmt::Display, path::Path};
 
 use anyhow::bail;
 use anyhow::{anyhow, Error, Result};
+use libp2p::identity::PublicKey;
+use libp2p::kad::RecordKey;
 use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
 use uuid::{uuid, Uuid};
 
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq, Clone, Eq)]
@@ -28,6 +29,15 @@ where
             uuid: value.get_type_uuid(),
             data: bincode::serialize(&value).unwrap(),
         }
+    }
+}
+
+impl TypedObject {
+    pub fn try_from_typed<T>(value: &TypedObject) -> Result<T>
+    where
+        T: for<'de> Deserialize<'de>,
+    {
+        bincode::deserialize::<T>(&value.data).map_err(|e| anyhow!(e))
     }
 }
 
@@ -90,6 +100,11 @@ impl TryFrom<&String> for Hash {
         bs58::decode(value).into_vec()?.as_slice().try_into()
     }
 }
+impl Into<libp2p::kad::RecordKey> for Hash {
+    fn into(self) -> libp2p::kad::RecordKey {
+        RecordKey::new(&self.bytes)
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GroupAccessToken {
@@ -120,24 +135,6 @@ pub struct GroupDefinition {
     pub parent_membership_proof: GroupAccessToken,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Signature {
-    Ed25519(SignatureEd25519),
-}
-
-#[serde_as]
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-pub struct SignatureBytes {
-    #[serde_as(as = "serde_with::Bytes")]
-    pub bytes: [u8; 64],
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SignatureEd25519 {
-    pub verifying_key: [u8; 32],
-    pub signature: SignatureBytes,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq)]
 pub struct TypedObject {
     pub uuid: Uuid,
@@ -157,6 +154,34 @@ impl TryFrom<&Vec<u8>> for TypedObject {
         bincode::deserialize::<TypedObject>(value).map_err(|e| anyhow!(e))
     }
 }
+impl TryInto<Vec<u8>> for TypedObject {
+    type Error = Error;
+    fn try_into(self) -> std::result::Result<Vec<u8>, Self::Error> {
+        bincode::serialize(&self).map_err(|e| anyhow!(e))
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Signature {
+    pub bytes: Vec<u8>,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SerializablePublicKey {
+    pub key: Vec<u8>,
+}
+impl From<libp2p::identity::PublicKey> for SerializablePublicKey {
+    fn from(value: libp2p::identity::PublicKey) -> Self {
+        SerializablePublicKey {
+            key: bincode::serialize(&value.encode_protobuf()).unwrap(),
+        }
+    }
+}
+impl TryInto<libp2p::identity::PublicKey> for SerializablePublicKey {
+    type Error = Error;
+    fn try_into(self) -> Result<libp2p::identity::PublicKey> {
+        PublicKey::try_decode_protobuf(bincode::deserialize(&self.key)?).map_err(|e| anyhow!(e))
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SignedObject {
@@ -169,6 +194,19 @@ impl SignedObject {
 impl UUIDTyped for SignedObject {
     fn get_type_uuid(&self) -> Uuid {
         SignedObject::UUID
+    }
+}
+impl SignedObject {
+    pub fn sign_ed25519(object: TypedObject, keypair: libp2p::identity::Keypair) -> Result<Self> {
+        let v: Vec<u8> = object.clone().try_into()?;
+        let signature = Signature {
+            bytes: keypair.sign(v.as_slice()).map_err(|e| anyhow!(e))?,
+        };
+        Ok(Self { object, signature })
+    }
+    pub fn verify_ed25519(&self, public: libp2p::identity::PublicKey) -> Result<bool> {
+        let msg: Vec<u8> = self.object.clone().try_into()?;
+        Ok(public.verify(msg.as_slice(), &self.signature.bytes.as_slice()))
     }
 }
 
@@ -199,12 +237,7 @@ impl UUIDTyped for PlainFileObject {
         PlainFileObject::UUID
     }
 }
-impl TryFrom<&TypedObject> for PlainFileObject {
-    type Error = Error;
-    fn try_from(value: &TypedObject) -> Result<Self> {
-        bincode::deserialize::<PlainFileObject>(&(value.data)).map_err(|e| anyhow!(e))
-    }
-}
+
 impl PlainFileObject {
     pub async fn try_from_path(path: &Path) -> Result<Self> {
         let name = {
@@ -249,12 +282,6 @@ impl UUIDTyped for QueryObject {
         QueryObject::UUID
     }
 }
-impl TryFrom<&TypedObject> for QueryObject {
-    type Error = Error;
-    fn try_from(value: &TypedObject) -> Result<Self> {
-        bincode::deserialize::<QueryObject>(&(value.data)).map_err(|e| anyhow!(e))
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SimpleIDQuery {
@@ -275,10 +302,18 @@ impl From<SimpleIDQuery> for QueryObject {
         }
     }
 }
-impl TryFrom<&TypedObject> for SimpleIDQuery {
-    type Error = Error;
-    fn try_from(value: &TypedObject) -> Result<Self> {
-        bincode::deserialize::<SimpleIDQuery>(&(value.data)).map_err(|e| anyhow!(e))
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DeleteObjectQuery {
+    pub id: ObjectId,
+    pub verification_key_ed25519: SerializablePublicKey,
+}
+impl DeleteObjectQuery {
+    pub const UUID: Uuid = uuid!("0193b1a3-0b17-73a4-941c-5c79ac9a3780");
+}
+impl UUIDTyped for DeleteObjectQuery {
+    fn get_type_uuid(&self) -> Uuid {
+        DeleteObjectQuery::UUID
     }
 }
 
@@ -292,11 +327,5 @@ impl ResultObject {
 impl UUIDTyped for ResultObject {
     fn get_type_uuid(&self) -> Uuid {
         ResultObject::UUID
-    }
-}
-impl TryFrom<&TypedObject> for ResultObject {
-    type Error = Error;
-    fn try_from(value: &TypedObject) -> Result<Self> {
-        bincode::deserialize::<ResultObject>(&(value.data)).map_err(|e| anyhow!(e))
     }
 }

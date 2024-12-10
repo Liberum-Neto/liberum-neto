@@ -142,12 +142,12 @@ async fn run_swarm_main(
     // Add the external addresses to the swarm
     if context.node_snapshot.config.external_addresses.is_empty() {
         for addr in default_addr {
-            context.swarm.add_external_address(addr.clone());
+            //context.swarm.add_external_address(addr.clone());
             context.swarm.listen_on(addr.clone())?;
         }
     } else {
         for addr in &context.node_snapshot.config.external_addresses {
-            context.swarm.add_external_address(addr.clone());
+            //context.swarm.add_external_address(addr.clone());
             context.swarm.listen_on(addr.clone())?;
         }
     }
