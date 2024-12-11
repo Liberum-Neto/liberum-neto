@@ -78,6 +78,8 @@ message Action {
      PublishObject publish_object = 3;
     //  PublishMeta publishMeta = 4; //
      GetObject get_object = 5;
+     DeleteObject delete_object = 8;
+     PublishMeta publish_meta = 9;
     }
 
 
@@ -87,11 +89,28 @@ message Action {
     message PublishObject {
         string Hash = 2;
     }
-    // message PublishMeta {
-    //     bytes Object = 1;
-    // }
+    message PublishMeta {
+         oneof meta_type{
+             Tag tag = 1;
+             Link link = 2;
+         }
+         message Tag{
+             uint64 from_hash_id = 1;
+             uint64 to_hash_id = 2;
+         }
+         message Link{
+             uint64 from_hash_id = 1;
+             uint64 via_hash_id = 2;
+             oneof to {
+                 uint64 to_hash_id = 3;
+             }
+         }
+    }
     message GetObject {
-        string ObjectHash = 1;
+        uint64 object_hash_id = 1;
+    }
+    message DeleteObject {
+        uint64 object_hash_id  = 1;
     }
 
 }
@@ -111,6 +130,11 @@ message NodeInstance{
 
 message TestPartDescriptor{
     uint64 partId = 1;
+    repeated HashIdToHash newHashes = 2;
+    message HashIdToHash{
+        uint64 hash_id = 1;
+        string hash = 2;
+    }
 }
 
 message TestPartResult{
@@ -127,24 +151,27 @@ message ActionResoult{
     oneof details{
         DialNodeResult dial = 5;
         PublishObjectResult publish_object = 6;
-       //  PublishMeta publishMeta = 4; //
         GetObjectResult get_object = 8;
+        DeleteObjectResult delete_object = 10;
+        PublishMetaResult publish_meta = 11;
        }
-
-    // optional DialNodeResoult dial = 2;
-    // optional PublishObjectResoult publish = 3;
-    // optional PublishMetaResoult publishMeta = 4;
-    // optional GetObjectResoult getObject = 5; 
 
     message DialNodeResult {
     }
     message PublishObjectResult {
+        string object_hash = 1;
     }
-    // message PublishMeta {
-    //     bytes Object = 1;
-    // }
+    message PublishMetaResult{
+        string object_hash = 1;
+    }
     message GetObjectResult {
         optional DaemonQueryStats stats = 1;
+    }
+
+    message DeleteObjectResult{
+        bool deleted_myself = 1;
+        uint64 deleted_count = 2;
+        uint64 failed_count = 3;
     }
 }
 

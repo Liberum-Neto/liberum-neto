@@ -8,7 +8,7 @@ use connection::AppContext;
 use liberum_core::{node_config::NodeConfig, DaemonError, DaemonRequest, DaemonResponse};
 use libp2p::Multiaddr;
 use node::store::NodeStore;
-use tokio::time::sleep;
+use tokio::{sync::RwLock, time::sleep};
 use tonic::{
     metadata::MetadataValue,
     service::Interceptor,
@@ -41,6 +41,7 @@ struct TestContext {
     scenario: TestScenario,
     callable_nodes: HashMap<u64, CallableNode>,
     app_context: AppContext,
+    hash_map: HashMap<u64, String>,
 }
 
 struct HostHeaderInterceptor {
@@ -91,6 +92,7 @@ pub(crate) async fn run_test(
         scenario: test_scenario,
         callable_nodes: HashMap::new(),
         app_context,
+        hash_map: HashMap::new(),
     };
 
     for node in diallable_nodes.nodes {
@@ -108,10 +110,19 @@ pub(crate) async fn run_test(
         .await?
         .into_inner();
 
-    let ctx = Arc::new(test_context);
+    let ctx = Arc::new(RwLock::new(test_context));
 
     while let Some(descriptor) = part_stream.message().await? {
-        let part = &ctx.scenario.parts[descriptor.part_id as usize];
+        {
+            let mut ctx_local = ctx.write().await;
+            for hash_map_entry in descriptor.new_hashes {
+                ctx_local
+                    .hash_map
+                    .insert(hash_map_entry.hash_id, hash_map_entry.hash);
+            }
+        }
+
+        let part = &ctx.read().await.scenario.parts[descriptor.part_id as usize];
 
         let mut actions_tasks = Vec::new();
         let mut action_result = Vec::new();
@@ -140,12 +151,16 @@ pub(crate) async fn run_test(
     Ok(())
 }
 
-async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionResoult {
+async fn handle_simple_action(
+    action: Action,
+    _ctx: Arc<tokio::sync::RwLock<TestContext>>,
+) -> ActionResoult {
     let mut result = ActionResoult {
         action_source_id: action.action_id,
         action_start_time: chrono::Utc::now().to_rfc3339(),
         ..Default::default()
     };
+    let ctx = _ctx.read().await;
 
     match action.details {
         Some(details) => {
@@ -174,9 +189,15 @@ async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionRe
                 test_protocol::action::Details::GetObject(get_object) => {
                     DaemonRequest::DownloadFile {
                         node_name: action.node_name,
-                        id: get_object.object_hash.clone(),
+                        id: ctx
+                            .hash_map
+                            .get(&get_object.object_hash_id)
+                            .unwrap()
+                            .clone(),
                     }
                 }
+                test_protocol::action::Details::DeleteObject(delete_object) => {todo!()},
+                test_protocol::action::Details::PublishMeta(publish_meta) => todo!(),
             };
 
             let daemon_request = daemon_request(request, ctx.app_context.clone()).await;
@@ -186,11 +207,9 @@ async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionRe
                 Ok(response) => {
                     result.is_success = true;
                     result.details = Some(match response {
-                        // DaemonResponse::FileProvided { id } => todo!(),
-                        // DaemonResponse::Providers { ids } => todo!(),
                         DaemonResponse::FileDownloaded { data: _, stats } => {
                             if let Some(stats) = stats {
-                                Details::GetObject(GetObjectResult {
+                                test_protocol::action_resoult::Details::GetObject(GetObjectResult {
                                     stats: Some(DaemonQueryStats {
                                         query_duration_in_nano: stats.query_duration.as_nanos()
                                             as u64,
@@ -198,12 +217,26 @@ async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionRe
                                     }),
                                 })
                             } else {
-                                Details::GetObject(GetObjectResult { stats: None })
+                                test_protocol::action_resoult::Details::GetObject(GetObjectResult {
+                                    stats: None,
+                                })
                             }
                         }
-                        DaemonResponse::Dialed => Details::Dial(DialNodeResult {}),
-                        DaemonResponse::FilePublished { id: _ } => {
-                            Details::PublishObject(PublishObjectResult {})
+                        DaemonResponse::Dialed => {
+                            test_protocol::action_resoult::Details::Dial(DialNodeResult {})
+                        }
+                        DaemonResponse::FilePublished { id } => {
+                            if let test_protocol::action::Details::PublishObject(_) = &details {
+                                test_protocol::action_resoult::Details::PublishObject(
+                                    PublishObjectResult { object_hash: id },
+                                )
+                            } else {
+                                test_protocol::action_resoult::Details::PublishMeta(
+                                    test_protocol::action_resoult::PublishMetaResult {
+                                        object_hash: id,
+                                    },
+                                )
+                            }
                         }
                         _ => panic!(),
                     })
@@ -212,11 +245,25 @@ async fn handle_simple_action(action: Action, ctx: Arc<TestContext>) -> ActionRe
                     DaemonError::Other(err) => {
                         result.error = Some(err);
                         result.details = Some(match &details {
+                            test_protocol::action::Details::DeleteObject(_) => {
+                                Details::DeleteObject(
+                                    test_protocol::action_resoult::DeleteObjectResult {
+                                        ..Default::default()
+                                    },
+                                )
+                            }
+                            test_protocol::action::Details::PublishMeta(_) => Details::PublishMeta(
+                                test_protocol::action_resoult::PublishMetaResult {
+                                    ..Default::default()
+                                },
+                            ),
                             test_protocol::action::Details::Dial(_) => {
                                 Details::Dial(DialNodeResult {})
                             }
                             test_protocol::action::Details::PublishObject(_) => {
-                                Details::PublishObject(PublishObjectResult {})
+                                Details::PublishObject(PublishObjectResult {
+                                    ..Default::default()
+                                })
                             }
                             test_protocol::action::Details::GetObject(_) => {
                                 Details::GetObject(GetObjectResult { stats: None })
@@ -304,23 +351,24 @@ async fn handle_create_nodes(
     let mut add_external_addr = Vec::new();
     // add external adress
     for node in &test_scenario.nodes {
-        if node.visibility() == NodeDefinitionLevel::NeedAddress
-        {
+        if node.visibility() == NodeDefinitionLevel::NeedAddress {
             add_external_addr.push((
                 node.node_id,
                 DaemonRequest::OverwriteNodeConfig {
                     node_name: node.name.clone(),
-                    new_cfg: NodeConfig{
+                    new_cfg: NodeConfig {
                         bootstrap_nodes: Vec::new(),
-                        external_addresses: vec![Multiaddr::from_str("/ip4/0.0.0.0/udp/0/quic-v1").unwrap()]
-                    }
+                        external_addresses: vec![
+                            Multiaddr::from_str("/ip4/0.0.0.0/udp/0/quic-v1").unwrap()
+                        ],
+                    },
                 },
             ));
         }
     }
     run_few_and_collect(add_external_addr, app_context.clone())
-    .await
-    .unwrap();
+        .await
+        .unwrap();
 
     // start nodes
 
@@ -350,7 +398,7 @@ async fn handle_create_nodes(
             ));
         }
     }
-    
+
     for response in run_few_and_collect(hash_requests, app_context.clone())
         .await
         .unwrap()
