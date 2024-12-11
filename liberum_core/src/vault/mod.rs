@@ -1,11 +1,11 @@
 pub mod fragment;
 
+use core::hash;
 use std::cmp;
 use std::iter::once;
 use std::iter::successors;
 use std::path::Path;
 use std::path::PathBuf;
-use std::pin::Pin;
 use std::str::FromStr;
 
 use anyhow::anyhow;
@@ -24,6 +24,7 @@ use liberum_core::parser::ObjectEnum;
 use liberum_core::proto::Hash;
 use liberum_core::proto::PinObject;
 use liberum_core::proto::TypedObject;
+use liberum_core::proto::TypedObjectRef;
 use liberum_core::types::TypedObjectInfo;
 use rusqlite::params;
 use rusqlite::params_from_iter;
@@ -144,8 +145,6 @@ impl Vault {
         }
 
         let type_id = type_id.unwrap();
-        println!("{type_id}");
-
         let load_result = match type_id {
             TypedObject::UUID => self
                 .load_typed_object(key)
@@ -444,7 +443,7 @@ impl Vault {
             CREATE TABLE IF NOT EXISTS pin_object (
                 hash TEXT NOT NULL PRIMARY KEY,
                 hash_from TEXT NOT NULL UNIQUE,
-                hash_to TEXT NOT NULL UNIQUE, 
+                hash_to TEXT NOT NULL UNIQUE
             );
             CREATE INDEX pin_object_hash_from_idx ON pin_object (hash_from);
             CREATE INDEX pin_object_hash_to_idx ON pin_object (hash_to)
@@ -635,7 +634,12 @@ impl Vault {
 
         let object_hash_b58str = key.as_base58();
         let from_hash_b58str = Key::from(object.from.bytes).as_base58();
-        let to_hash: Hash = (&object.to).try_into()?;
+
+        let to_hash: Hash = match object.to {
+            TypedObjectRef::Direct(typed_object) => (&typed_object).try_into()?,
+            TypedObjectRef::ByHash(hash) => hash,
+        };
+
         let to_hash_b58str = Key::from(to_hash.bytes).as_base58();
 
         self.db
@@ -659,26 +663,43 @@ impl Vault {
 
         let object_hash_str = key.as_base58();
 
-        self.db
+        let hashes = self
+            .db
             .call(move |conn| {
-                conn.query_row(
-                    SELECT_PIN_OBJECT_BY_HASH_QUERY,
-                    params![object_hash_str],
-                    |row| {
-                        let hash_from: String = row.get(0)?;
-                        let hash_to: String = row.get(1)?;
+                let hashes = conn
+                    .query_row(
+                        SELECT_PIN_OBJECT_BY_HASH_QUERY,
+                        params![object_hash_str],
+                        |row| {
+                            let hash_from: String = row.get(0)?;
+                            let hash_to: String = row.get(1)?;
 
-                        //let pin_object = PinObject{from: hash_from, }
+                            Ok((hash_from, hash_to))
+                        },
+                    )
+                    .optional()?;
 
-                        Ok(())
-                    },
-                )?;
-
-                Ok(())
+                Ok(hashes)
             })
             .await?;
 
-        todo!()
+        if let None = hashes {
+            return Ok(None);
+        }
+
+        let hashes = hashes.unwrap();
+
+        let hash_from = hashes.0;
+        let hash_from = Hash::try_from(&hash_from)?;
+        let hash_to = hashes.1;
+        let hash_to = Hash::try_from(&hash_to)?;
+
+        let pin_object = PinObject {
+            from: hash_from,
+            to: TypedObjectRef::ByHash(hash_to),
+        };
+
+        Ok(Some(pin_object))
     }
 
     async fn ensure_dirs(vault_dir_path: &Path) -> Result<()> {
