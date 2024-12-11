@@ -975,4 +975,81 @@ mod tests {
             panic!("Object enum is not TypedObject, but it should be")
         }
     }
+
+    #[tokio::test]
+    async fn pin_object_load_store_test() {
+        let tmp_dir = TempDir::new("liberum_tests").unwrap();
+        let vault_dir_path = tmp_dir.path();
+        let vault = Vault::new_on_disk(vault_dir_path).await.unwrap();
+        let vault = kameo::spawn(vault);
+
+        vault
+            .ask(StoreObject {
+                hash: Hash { bytes: [1; 32] },
+                object: ObjectEnum::PinObject(PinObject {
+                    from: Hash { bytes: [2; 32] },
+                    to: TypedObjectRef::ByHash(Hash { bytes: [3; 32] }),
+                }),
+            })
+            .send()
+            .await
+            .unwrap();
+
+        let left_results = vault
+            .ask(LoadPinObjects {
+                from: Some(Hash::from(&[2; 32])),
+                to: None,
+            })
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(left_results.len(), 1);
+        assert_eq!(left_results[0].from, Hash::from(&[2; 32]));
+        let left_result = left_results[0].clone();
+        match left_result.to {
+            TypedObjectRef::Direct(_) => panic!(),
+            TypedObjectRef::ByHash(hash) => {
+                assert_eq!(hash, Hash::from(&[3; 32]));
+            }
+        }
+
+        let right_results = vault
+            .ask(LoadPinObjects {
+                from: None,
+                to: Some(Hash::from(&[3; 32])),
+            })
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(right_results.len(), 1);
+        assert_eq!(right_results[0].from, Hash::from(&[2; 32]));
+        let right_result = right_results[0].clone();
+        match right_result.to {
+            TypedObjectRef::Direct(_) => panic!(),
+            TypedObjectRef::ByHash(hash) => {
+                assert_eq!(hash, Hash::from(&[3; 32]));
+            }
+        }
+
+        let all_results = vault
+            .ask(LoadPinObjects {
+                from: None,
+                to: None,
+            })
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(all_results.len(), 1);
+        assert_eq!(all_results[0].from, Hash::from(&[2; 32]));
+        let all_result = all_results[0].clone();
+        match all_result.to {
+            TypedObjectRef::Direct(_) => panic!(),
+            TypedObjectRef::ByHash(hash) => {
+                assert_eq!(hash, Hash::from(&[3; 32]));
+            }
+        }
+    }
 }
