@@ -59,28 +59,20 @@ impl TryFrom<&[u8]> for Hash {
         })
     }
 }
-impl TryFrom<&[u8; 32]> for Hash {
-    type Error = Error;
-
-    fn try_from(bytes: &[u8; 32]) -> Result<Self> {
-        if bytes.len() != 32 {
-            return Err(anyhow!(
-                "Hash has 32 bytes, tried to convert from {} bytes",
-                bytes.len()
-            ));
+impl From<&[u8; 32]> for Hash {
+    fn from(value: &[u8; 32]) -> Self {
+        Hash {
+            bytes: value.clone(),
         }
-        Ok(Hash {
-            bytes: bytes[..32].try_into()?,
-        })
     }
 }
 impl TryFrom<&TypedObject> for Hash {
     type Error = Error;
 
     fn try_from(value: &TypedObject) -> Result<Self> {
-        blake3::hash(bincode::serialize(value)?.as_slice())
+        Ok(blake3::hash(bincode::serialize(value)?.as_slice())
             .as_bytes()
-            .try_into()
+            .into())
     }
 }
 
