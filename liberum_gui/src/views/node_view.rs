@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use egui::{Align2, Color32};
 use egui_file::FileDialog;
@@ -15,6 +18,8 @@ pub struct NodeView {
     status_line: String,
     download_window_opened: bool,
     download_data: Vec<u8>,
+    download_destination_dialog: Option<FileDialog>,
+    download_destination_path: Option<PathBuf>,
     dial_peer_id: String,
     dial_addr: String,
     dial_history: Vec<(String, String, bool)>,
@@ -31,6 +36,8 @@ impl NodeView {
             status_line: String::new(),
             download_window_opened: false,
             download_data: Vec::new(),
+            download_destination_dialog: None,
+            download_destination_path: None,
             dial_peer_id: String::new(),
             dial_addr: String::new(),
             dial_history: Vec::new(),
@@ -164,24 +171,65 @@ impl NodeView {
                 ui.add_space(20.0);
 
                 ui.heading("Download file");
-                ui.label("File ID:");
-                ui.text_edit_singleline(&mut self.file_to_download_id);
+                ui.horizontal(|ui| {
+                    ui.colored_label(Color32::from_rgb(0, 100, 200), "File ID:");
+                    ui.text_edit_singleline(&mut self.file_to_download_id);
+                });
+                ui.horizontal(|ui| {
+                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Download destination:");
+                    ui.label(
+                        self.download_destination_path
+                            .clone()
+                            .map(|path| path.to_string_lossy().to_string())
+                            .unwrap_or("Not selected".to_string()),
+                    );
+                });
                 ui.add_space(10.0);
 
-                if ui.button("Download").clicked() {
-                    match ctx
-                        .daemon_com
-                        .download_file(&self.node_name, &self.file_to_download_id)
-                    {
-                        Ok(data) => {
-                            self.status_line = "File downloaded".to_string();
-                            self.file_to_download_id = String::new();
-                            self.download_window_opened = true;
-                            self.download_data = data;
-                        }
-                        Err(e) => self.status_line = e.to_string(),
+                ui.horizontal(|ui| {
+                    if ui.button("Select destination").clicked() {
+                        let mut dialog =
+                            FileDialog::save_file(self.download_destination_path.clone());
+                        dialog.open();
+                        self.download_destination_dialog = Some(dialog);
                     }
-                }
+
+                    if let Some(dialog) = &mut self.download_destination_dialog {
+                        if dialog.show(ctx.egui_ctx).selected() {
+                            if let Some(file_path) = dialog.path() {
+                                self.download_destination_path = Some(file_path.to_path_buf());
+                            }
+                        }
+                    }
+
+                    ui.add_space(10.0);
+
+                    if ui.button("Download").clicked() {
+                        match ctx
+                            .daemon_com
+                            .download_file(&self.node_name, &self.file_to_download_id)
+                        {
+                            Ok(data) => {
+                                self.status_line = "File downloaded".to_string();
+                                self.file_to_download_id = String::new();
+                                self.download_window_opened = true;
+                                self.download_data = data.clone();
+
+                                // TODO: Verify if path is set
+                                match fs::write(
+                                    self.download_destination_path.clone().unwrap(),
+                                    data,
+                                ) {
+                                    Ok(_) => self.status_line = format!("File saved!"),
+                                    Err(e) => {
+                                        self.status_line = format!("File saving failed, err={e}")
+                                    }
+                                }
+                            }
+                            Err(e) => self.status_line = e.to_string(),
+                        }
+                    }
+                });
 
                 ui.add_space(20.0);
             });
