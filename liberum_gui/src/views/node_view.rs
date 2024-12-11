@@ -17,7 +17,9 @@ pub struct NodeView {
     config_window_opened: bool,
     status_line: String,
     download_window_opened: bool,
-    download_data: Vec<u8>,
+    downloaded_file_id: Option<String>,
+    downloaded_file_path: Option<PathBuf>,
+    downloaded_file_size: Option<usize>,
     download_destination_dialog: Option<FileDialog>,
     download_destination_path: Option<PathBuf>,
     dial_peer_id: String,
@@ -35,7 +37,9 @@ impl NodeView {
             config_window_opened: false,
             status_line: String::new(),
             download_window_opened: false,
-            download_data: Vec::new(),
+            downloaded_file_id: None,
+            downloaded_file_path: None,
+            downloaded_file_size: None,
             download_destination_dialog: None,
             download_destination_path: None,
             dial_peer_id: String::new(),
@@ -218,9 +222,12 @@ impl NodeView {
                                     {
                                         Ok(data) => {
                                             self.status_line = "File downloaded".to_string();
-                                            self.file_to_download_id = String::new();
+                                            self.downloaded_file_id =
+                                                Some(self.file_to_download_id.clone());
+                                            self.downloaded_file_path =
+                                                self.download_destination_path.clone();
+                                            self.downloaded_file_size = Some(data.len());
                                             self.download_window_opened = true;
-                                            self.download_data = data.clone();
 
                                             match fs::write(dest_path.clone(), data) {
                                                 Ok(_) => self.status_line = format!("File saved!"),
@@ -239,6 +246,9 @@ impl NodeView {
                                     "Download destination is not selected".to_string();
                             }
                         }
+
+                        self.file_to_download_id = String::new();
+                        self.download_destination_path = None;
                     }
                 });
 
@@ -380,7 +390,28 @@ impl NodeView {
         egui::Window::new("Download info")
             .open(&mut self.download_window_opened)
             .show(ctx.egui_ctx, |ui| {
-                ui.label(String::from_utf8(self.download_data.clone()).unwrap());
+                ui.horizontal(|ui| {
+                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Object ID:");
+                    ui.label(self.downloaded_file_id.clone().unwrap_or("?".to_string()));
+                });
+                ui.horizontal(|ui| {
+                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Save path:");
+                    ui.label(
+                        self.downloaded_file_path
+                            .clone()
+                            .map(|path| path.to_string_lossy().to_string())
+                            .unwrap_or("?".to_string()),
+                    );
+                });
+                ui.horizontal(|ui| {
+                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Object size:");
+                    ui.label(
+                        self.downloaded_file_size
+                            .clone()
+                            .map(|n| n.to_string())
+                            .unwrap_or("?".to_string()),
+                    );
+                });
             });
     }
 
