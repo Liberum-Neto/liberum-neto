@@ -333,7 +333,7 @@ impl UUIDTyped for ResultObject {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PinObject {
     pub from: Hash,
-    pub to: TypedObject,
+    pub to: TypedObjectRef,
 }
 impl PinObject {
     pub const UUID: Uuid = uuid!("fdf23e1d-f966-4605-a399-9198bf5870e5");
@@ -349,4 +349,10 @@ impl TryFrom<&TypedObject> for PinObject {
     fn try_from(value: &TypedObject) -> std::result::Result<Self, Self::Error> {
         bincode::deserialize::<PinObject>(&(value.data)).map_err(|e| anyhow!(e))
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum TypedObjectRef {
+    Direct(TypedObject),
+    ByHash(Hash),
 }
