@@ -127,7 +127,7 @@ impl Into<[u64; 4]> for Key {
         self.value_bytes
             .iter()
             .as_slice()
-            .windows(8)
+            .chunks(8)
             .map(|w| u64::from_be_bytes(w.try_into().unwrap()))
             .collect::<Vec<u64>>()
             .try_into()

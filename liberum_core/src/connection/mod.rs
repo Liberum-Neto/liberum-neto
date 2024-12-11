@@ -5,11 +5,13 @@ use crate::node::manager::NodeManager;
 use crate::node::store::ListNodes;
 use crate::node::store::LoadNode;
 use crate::node::store::NodeStore;
+use crate::node::DeleteObject;
 use crate::node::DialPeer;
 use crate::node::DownloadFile;
 use crate::node::GetAddresses;
 use crate::node::GetProviders;
 use crate::node::GetPublishedObjects;
+use crate::node::Node;
 use crate::node::NodeSnapshot;
 use crate::node::ProvideFile;
 use crate::node::PublishFile;
@@ -137,17 +139,33 @@ pub async fn handle_message(message: DaemonRequest, context: &AppContext) -> Dae
         DaemonRequest::GetPublishedObjects { node_name } => {
             handle_get_published_objects(node_name, context).await
         }
+        DaemonRequest::DeleteObject {
+            node_name,
+            object_id,
+        } => handle_delete_object(node_name, object_id, context).await,
     }
 }
 
-async fn handle_get_peer_id(node_name: String, context: &AppContext) -> DaemonResult {
-    let node = context
+async fn get_node(node_name: &str, context: &AppContext) -> Result<ActorRef<Node>, DaemonError> {
+    context
         .node_manager
-        .ask(node::manager::GetNode { name: node_name })
+        .ask(GetNode {
+            name: node_name.to_string(),
+        })
         .send()
         .await
-        .inspect_err(|e| debug!(err = e.to_string(), "Failed to get peer id"))
-        .map_err(|e| DaemonError::Other(e.to_string()))?;
+        .inspect_err(|e| {
+            debug!(
+                err = e.to_string(),
+                node_name = node_name,
+                "Failed to get node"
+            )
+        })
+        .map_err(|e| DaemonError::Other(e.to_string()))
+}
+
+async fn handle_get_peer_id(node_name: String, context: &AppContext) -> DaemonResult {
+    let node = get_node(&node_name, context).await?;
 
     let peer_id = node
         .ask(node::GetPeerId)
@@ -322,14 +340,7 @@ async fn get_node_details(node_name: &str, context: &AppContext) -> Result<NodeI
 
     let running_ext_addrs = match is_running {
         true => {
-            let node = context
-                .node_manager
-                .ask(GetNode {
-                    name: node_name.to_string(),
-                })
-                .send()
-                .await
-                .map_err(|e| DaemonError::Other(e.to_string()))?;
+            let node = get_node(node_name, context).await?;
 
             node.ask(GetAddresses)
                 .send()
@@ -356,15 +367,7 @@ async fn get_node_details(node_name: &str, context: &AppContext) -> Result<NodeI
 }
 
 async fn handle_provide_file(node_name: &str, path: PathBuf, context: &AppContext) -> DaemonResult {
-    let node = context
-        .node_manager
-        .ask(GetNode {
-            name: node_name.to_string(),
-        })
-        .send()
-        .await
-        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle provide file"))
-        .map_err(|e| DaemonError::Other(e.to_string()))?;
+    let node = get_node(&node_name, context).await?;
 
     let resp_id = node
         .ask(ProvideFile { path })
@@ -377,15 +380,7 @@ async fn handle_provide_file(node_name: &str, path: PathBuf, context: &AppContex
 }
 
 async fn handle_get_providers(node_name: String, id: String, context: &AppContext) -> DaemonResult {
-    let node = context
-        .node_manager
-        .ask(GetNode {
-            name: node_name.clone(),
-        })
-        .send()
-        .await
-        .inspect_err(|e| debug!(err = e.to_string(), "Failed to get file providers"))
-        .map_err(|e| DaemonError::Other(e.to_string()))?;
+    let node = get_node(&node_name, context).await?;
 
     let resp = node
         .ask(GetProviders {
@@ -404,15 +399,7 @@ async fn handle_get_providers(node_name: String, id: String, context: &AppContex
 
 // TODO! Downloading a file is blocking now, it should be done in background in some way
 async fn handle_download_file(node_name: String, id: String, context: &AppContext) -> DaemonResult {
-    let node = context
-        .node_manager
-        .ask(GetNode {
-            name: node_name.to_string(),
-        })
-        .send()
-        .await
-        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
-        .map_err(|e| DaemonError::Other(e.to_string()))?;
+    let node = get_node(&node_name, context).await?;
 
     let resp = node
         .ask(DownloadFile { obj_id_str: id })
@@ -433,15 +420,7 @@ async fn handle_dial(
     addr: String,
     context: &AppContext,
 ) -> DaemonResult {
-    let node = context
-        .node_manager
-        .ask(GetNode {
-            name: node_name.to_string(),
-        })
-        .send()
-        .await
-        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle dial"))
-        .map_err(|e| DaemonError::Other(e.to_string()))?;
+    let node = get_node(&node_name, context).await?;
 
     node.ask(DialPeer {
         peer_id: peer_id.clone(),
@@ -461,15 +440,7 @@ async fn handle_publish_file(
     path: PathBuf,
     context: &AppContext,
 ) -> DaemonResult {
-    let node = context
-        .node_manager
-        .ask(GetNode {
-            name: node_name.to_string(),
-        })
-        .send()
-        .await
-        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish file"))
-        .map_err(|e| DaemonError::Other(e.to_string()))?;
+    let node = get_node(&node_name, context).await?;
 
     let resp_id = node
         .ask(PublishFile { path })
@@ -482,22 +453,7 @@ async fn handle_publish_file(
 }
 
 async fn handle_get_published_objects(node_name: String, context: &AppContext) -> DaemonResult {
-    let node = context
-        .node_manager
-        .ask(GetNode {
-            name: node_name.to_string(),
-        })
-        .send()
-        .await
-        .inspect_err(|e| {
-            debug!(
-                err = e.to_string(),
-                node_name = node_name,
-                "Failed to get node"
-            )
-        })
-        .map_err(|e| DaemonError::Other(e.to_string()))?;
-
+    let node = get_node(&node_name, context).await?;
     let object_infos = node
         .ask(GetPublishedObjects)
         .send()
@@ -506,4 +462,21 @@ async fn handle_get_published_objects(node_name: String, context: &AppContext) -
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
     DaemonResult::Ok(DaemonResponse::PublishedObjectsList { object_infos })
+}
+
+async fn handle_delete_object(
+    node_name: String,
+    object_id: String,
+    context: &AppContext,
+) -> DaemonResult {
+    let node = get_node(&node_name, context).await?;
+    let result = node
+        .ask(DeleteObject {
+            obj_id_str: object_id,
+        })
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to delete object"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    DaemonResult::Ok(result)
 }

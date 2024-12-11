@@ -9,22 +9,19 @@ use kameo::messages;
 use kameo::request::MessageSend;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::NodeConfig;
-use liberum_core::proto::{self, TypedObject};
+use liberum_core::proto::{self, SignedObject, TypedObject};
 use liberum_core::proto::{PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
 use liberum_core::types::TypedObjectInfo;
-use liberum_core::{parser, DaemonQueryStats};
+use liberum_core::{parser, DaemonQueryStats, DaemonResponse};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
-use std::borrow::Borrow;
-use std::fmt;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{borrow::Borrow, collections::HashSet, fmt, path::PathBuf, str::FromStr};
 use swarm_runner::messages::SwarmRunnerMessage;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 pub struct Node {
     pub name: String,
@@ -116,8 +113,15 @@ impl Node {
             .await?;
 
         if let Ok(received) = recv.await {
-            debug!(node = self.name, "Got providers: {:?}", received.0);
-            return Ok(received);
+            let peers: Vec<PeerId> = received
+                .0
+                .into_iter()
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            let stats = received.1;
+            debug!(node = self.name, "Got providers: {peers:?}");
+            return Ok((peers, stats));
         }
 
         Err(anyhow!("Could not get providers"))
@@ -154,7 +158,7 @@ impl Node {
         &mut self,
         obj_id_str: String,
     ) -> Result<(proto::PlainFileObject, Option<DaemonQueryStats>)> {
-        let obj_id = proto::Hash::try_from(&obj_id_str)?;
+        let obj_id = proto::Hash::try_from(obj_id_str.as_str())?;
 
         // first get the providers of the file
         // Maybe getting the providers could be reused from GetProviders node message handler??
@@ -179,6 +183,11 @@ impl Node {
             obj_id = obj_id_str,
             "Found providers: {providers:?}"
         );
+        let providers: Vec<PeerId> = providers
+            .into_iter()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
         for peer in &providers {
             debug!(
                 node = self.name,
@@ -239,15 +248,20 @@ impl Node {
                         );
                         continue;
                     }
-                    match parser::parse_typed(obj).await {
-                        Ok(parser::ObjectEnum::PlainFile(file)) => return Ok((file, stats)),
-                        Err(e) => {
-                            debug!("{e}");
-                            continue;
-                        }
-                        Ok(_) => {
-                            debug!("Received object was not a file!");
-                            continue;
+
+                    let mut typed = Some(obj);
+                    while let Some(obj) = typed.clone() {
+                        typed = match parser::parse_typed(obj).await {
+                            Ok(parser::ObjectEnum::Signed(signed)) => Some(signed.object),
+                            Ok(parser::ObjectEnum::PlainFile(file)) => return Ok((file, stats)),
+                            Err(e) => {
+                                debug!("{e}");
+                                continue;
+                            }
+                            Ok(_) => {
+                                debug!("Received object was not a file!");
+                                continue;
+                            }
                         }
                     }
                 }
@@ -305,6 +319,9 @@ impl Node {
         // a new behaviour kademlia could talk to, which would provide streams of data.
         // (Maybe could be implemented on the existing request_response if it would be generalised more?)
         let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
+        let object: TypedObject = SignedObject::sign_ed25519(object, self.keypair.clone())
+            .unwrap()
+            .into();
         let obj_id = proto::Hash::try_from(&object)?;
         let obj_id_str = bs58::encode(&obj_id.bytes).into_string();
 
@@ -322,7 +339,16 @@ impl Node {
         if peers.is_empty() {
             return Err(anyhow!("Could not find provider for file {obj_id_str}.").into());
         }
-
+        debug!(
+            node = self.name,
+            "Found {} closest nodes for publishing",
+            peers.len()
+        );
+        let peers: Vec<PeerId> = peers
+            .into_iter()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
         let kad_k_parameter: i32 = 20;
         let mut successes = 0;
         for peer in &peers {
@@ -386,6 +412,113 @@ impl Node {
     #[message]
     pub async fn get_published_objects(&mut self) -> Result<Vec<TypedObjectInfo>> {
         Ok(self.vault_ref.ask(ListTypedObjects).send().await?)
+    }
+
+    #[message]
+    pub async fn delete_object(&mut self, obj_id_str: String) -> Result<DaemonResponse> {
+        let obj_id = proto::Hash::try_from(obj_id_str.as_str())?;
+        let (send, recv) = oneshot::channel();
+
+        error!("Get providers");
+        self.swarm_sender
+            .as_mut()
+            .unwrap()
+            .send(SwarmRunnerMessage::GetProviders {
+                obj_id: obj_id.clone(),
+                response_sender: send,
+            })
+            .await?;
+
+        let rec = recv.await;
+        if let Err(e) = rec {
+            debug!(
+                node = self.name,
+                err = format!("{e}"),
+                "Failed to get providers"
+            );
+            return Err(anyhow!("Failed to get providers").context(e));
+        }
+        let rec = rec.unwrap();
+        error!("Fouind providers");
+        let _stats = rec.1;
+        let providers: Vec<PeerId> = rec
+            .0
+            .into_iter()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        let mut deleted_count: u32 = 0;
+        let mut failed_count: u32 = 0;
+        let mut deleted_myself = false;
+        for peer in &providers {
+            if peer == &self.get_peer_id().unwrap() {
+                debug!(
+                    node = self.name,
+                    obj_id = obj_id_str,
+                    "Deleting object I'm providing myself"
+                );
+                let (send, recv) = oneshot::channel();
+                self.swarm_sender
+                    .as_mut()
+                    .unwrap()
+                    .send(SwarmRunnerMessage::StopProviding {
+                        obj_id: obj_id.clone(),
+                        response_sender: send,
+                    })
+                    .await?;
+                let resp = recv.await;
+                if let Err(_) = resp {
+                    warn!(
+                        node = self.name,
+                        "Failed to stop providing the object myself"
+                    )
+                }
+                deleted_myself = true;
+                continue;
+            }
+            let (send, recv) = oneshot::channel();
+            self.swarm_sender
+                .as_mut()
+                .unwrap()
+                .send(SwarmRunnerMessage::DeleteObject {
+                    obj_id: obj_id.clone(),
+                    peer: peer.clone(),
+                    response_sender: send,
+                })
+                .await?;
+            let rec = recv.await;
+            match rec {
+                Err(e) => {
+                    debug!(
+                        node = self.name,
+                        err = format!("{e}"),
+                        asked_node = peer.to_base58(),
+                        "Failed to ask to delete"
+                    );
+                    failed_count += 1;
+                }
+                Ok(r) => match r {
+                    Err(e) => {
+                        debug!(
+                            node = self.name,
+                            err = format!("{e}"),
+                            asked_node = peer.to_base58(),
+                            "Failed to ask to send Delete Object Query"
+                        );
+                        failed_count += 1;
+                    }
+                    Ok(r) => match r.result {
+                        Ok(_) => deleted_count += 1,
+                        Err(_) => failed_count += 1,
+                    },
+                },
+            }
+        }
+        Ok(DaemonResponse::ObjectDeleted {
+            deleted_myself,
+            deleted_count,
+            failed_count,
+        })
     }
 }
 

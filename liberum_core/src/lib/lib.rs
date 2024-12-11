@@ -77,6 +77,10 @@ pub enum DaemonRequest {
     GetPublishedObjects {
         node_name: String,
     },
+    DeleteObject {
+        node_name: String,
+        object_id: String,
+    },
 }
 
 /// Messages that are sent from the daemon as a reponse
@@ -118,6 +122,11 @@ pub enum DaemonResponse {
     },
     PublishedObjectsList {
         object_infos: Vec<TypedObjectInfo>,
+    },
+    ObjectDeleted {
+        deleted_myself: bool,
+        deleted_count: u32,
+        failed_count: u32,
     },
 }
 
