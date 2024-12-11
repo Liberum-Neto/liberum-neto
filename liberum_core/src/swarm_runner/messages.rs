@@ -1,5 +1,9 @@
-use liberum_core::proto::ResultObject;
 use liberum_core::proto::{self, TypedObject};
+use liberum_core::proto::{DeleteObjectQuery, QueryObject, ResultObject, SerializablePublicKey};
+use libp2p::kad::RecordKey;
+
+use crate::swarm_runner::object_sender::ObjectSendRequest;
+use crate::vault;
 
 use super::behaviour::object_sender;
 use super::SwarmContext;
@@ -9,7 +13,6 @@ use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::PeerId;
 use libp2p::{kad, Multiaddr};
 use std::collections::hash_map;
-use std::collections::HashSet;
 use tokio::sync::oneshot;
 use tracing::error;
 use tracing::{debug, info};
@@ -38,7 +41,7 @@ pub enum SwarmRunnerMessage {
     /// no provider was found.
     GetProviders {
         obj_id: proto::Hash,
-        response_sender: oneshot::Sender<HashSet<PeerId>>,
+        response_sender: oneshot::Sender<Vec<PeerId>>,
     },
     /// Start providing a file in the network. Only the node that sent this message
     /// will be a provider for the file. The fact of providing the file will be
@@ -72,10 +75,19 @@ pub enum SwarmRunnerMessage {
     /// up to `k` peers that are closest to the given key.
     GetClosestPeers {
         obj_id: proto::Hash,
-        response_sender: oneshot::Sender<HashSet<PeerId>>,
+        response_sender: oneshot::Sender<Vec<PeerId>>,
     },
     GetAddresses {
         response_sender: oneshot::Sender<Result<Vec<Multiaddr>>>,
+    },
+    DeleteObject {
+        obj_id: proto::Hash,
+        peer: PeerId,
+        response_sender: oneshot::Sender<Result<ResultObject>>,
+    },
+    StopProviding {
+        obj_id: proto::Hash,
+        response_sender: oneshot::Sender<Result<()>>,
     },
 }
 
@@ -150,6 +162,7 @@ impl SwarmContext {
                 obj_id,
                 response_sender,
             } => {
+                self.print_neighbours();
                 let query_id = self
                     .swarm
                     .behaviour_mut()
@@ -157,7 +170,7 @@ impl SwarmContext {
                     .get_providers(kad::RecordKey::new(&obj_id.bytes));
                 self.behaviour
                     .pending_inner_get_providers
-                    .insert(query_id, response_sender);
+                    .insert(query_id, (Vec::new(), response_sender));
                 Ok(false)
             }
 
@@ -169,10 +182,9 @@ impl SwarmContext {
             } => {
                 debug!(
                     "Sending a get object request for obj_id {} to peer {}",
-                    bs58::encode(kad::RecordKey::new(&obj_id.bytes)).into_string(),
+                    obj_id.to_string(),
                     peer_id.to_base58()
                 );
-
                 // If the local peer
                 if &peer_id == self.swarm.local_peer_id() {
                     debug!(
@@ -191,14 +203,16 @@ impl SwarmContext {
                     }
                 } else {
                     // Send a request to the peer
+                    let query_obj: TypedObject = proto::QueryObject {
+                        query_object: proto::SimpleIDQuery { id: obj_id.clone() }.into(),
+                    }
+                    .into();
+                    let query_obj_id = proto::Hash::try_from(&query_obj).unwrap();
                     let query_id = self.swarm.behaviour_mut().object_sender.send_request(
                         &peer_id,
                         object_sender::ObjectSendRequest {
-                            object: proto::QueryObject {
-                                query_object: proto::SimpleIDQuery { id: obj_id.clone() }.into(),
-                            }
-                            .into(),
-                            object_id: obj_id,
+                            object: query_obj,
+                            object_id: query_obj_id,
                         },
                     );
 
@@ -206,12 +220,14 @@ impl SwarmContext {
                         .pending_inner_get_object
                         .insert(query_id, response_sender);
                 }
+                self.print_neighbours();
                 Ok(false)
             }
             SwarmRunnerMessage::GetClosestPeers {
                 obj_id,
                 response_sender,
             } => {
+                self.print_neighbours();
                 let query_id = self
                     .swarm
                     .behaviour_mut()
@@ -219,7 +235,7 @@ impl SwarmContext {
                     .get_closest_peers(obj_id.bytes.to_vec());
                 self.behaviour
                     .pending_inner_get_closest_peers
-                    .insert(query_id, response_sender);
+                    .insert(query_id, (Vec::new(), response_sender));
                 Ok(false)
             }
             SwarmRunnerMessage::SendObject {
@@ -270,6 +286,60 @@ impl SwarmContext {
 
                 let _ = response_sender.send(Ok(addrs));
 
+                Ok(false)
+            }
+
+            SwarmRunnerMessage::DeleteObject {
+                obj_id,
+                peer,
+                response_sender,
+            } => {
+                let key: SerializablePublicKey = self.node_snapshot.keypair.public().into();
+                let delete_query = DeleteObjectQuery {
+                    id: obj_id,
+                    verification_key_ed25519: key,
+                };
+                let obj: TypedObject = QueryObject {
+                    query_object: delete_query.into(),
+                }
+                .into();
+                let query_id = proto::Hash::try_from(&obj)?;
+
+                let request = ObjectSendRequest {
+                    object: obj,
+                    object_id: query_id,
+                };
+
+                let qid = self
+                    .swarm
+                    .behaviour_mut()
+                    .object_sender
+                    .send_request(&peer, request);
+                self.behaviour
+                    .pending_outer_delete_object
+                    .insert(qid, response_sender);
+                Ok(false)
+            }
+
+            SwarmRunnerMessage::StopProviding {
+                obj_id,
+                response_sender,
+            } => {
+                self.swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .stop_providing(&RecordKey::from(obj_id.bytes.to_vec()));
+                let r = self
+                    .vault_ref
+                    .ask(vault::DeleteTypedObject { hash: obj_id })
+                    .await;
+                if let Ok(_) = r {
+                    response_sender.send(Ok(())).unwrap();
+                } else {
+                    response_sender
+                        .send(Err(anyhow!("Failed to remove from vault")))
+                        .unwrap();
+                }
                 Ok(false)
             }
         }
