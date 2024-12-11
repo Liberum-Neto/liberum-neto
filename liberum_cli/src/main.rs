@@ -31,26 +31,41 @@ struct Cli {
 /// and can send messages to the daemon
 #[derive(Subcommand)]
 enum Command {
-    /// Creates a new node
+    /// Creates a new node with a given name
     NewNode(NewNode),
+    /// Starts a node
     StartNode(StartNode),
+    /// Configure a node
     ConfigNode(ConfigNode),
+    /// List all the nodes, online or offlie
     ListNodes,
+    /// Lists details about a node
     GetNodeDetails(GetNodeDetails),
+    /// Lists all addresses the node listens on
     GetNodeAddresses(GetNodeAddresses),
+    /// Stops a node
     StopNode(StopNode),
+    /// Starts to provide a file, other nodes get to know about it. No other node is asked to provide the file. The object ID of the file is printed.
     ProvideFile(ProvideFile),
+    /// Finds nodes that are said to be providing an object
     GetProviders(GetProviders),
+    /// Download an object using its ID
     DownloadFile(DownloadFile),
+    /// Prints the peer ID of a given node.
     GetPeerID(GetPeerID),
+    /// Dials a node using its peer ID and multiaddress
     Dial(Dial),
+    /// Publish a file, equivalent of asking multiple nodes in the network to provide-file
     PublishFile(PublishFile),
+    /// Prints all the objects which the node provides
     GetPublishedObjects(GetPublishedObjects),
+    /// Asks the providers of an object to delete it using the node's keypair to verify. Only the node that published the file can delete it.
     DeleteObject(DeleteObject),
 }
 
 #[derive(Parser)]
 struct NewNode {
+    /// The name of the node to affect
     #[arg()]
     name: String,
     /// WARNING - the seed is as dangerous as the private key
@@ -61,113 +76,149 @@ struct NewNode {
 
 #[derive(Parser)]
 struct StartNode {
+    /// The name of the node to affect
     #[arg()]
     name: String,
 }
 
 #[derive(Parser)]
 struct ConfigNode {
+    /// The name of the node to affect
     #[arg()]
     name: String,
+    /// Choose a configuration option
     #[command(subcommand)]
     subcommand: ConfigNodeCommand,
 }
 
 #[derive(Parser)]
 struct GetNodeDetails {
+    /// The name of the node to affect
     #[arg()]
     name: String,
 }
 
 #[derive(Parser)]
 struct GetNodeAddresses {
+    /// The name of the node to affect
     #[arg()]
     name: String,
 }
 
 #[derive(Parser)]
 struct StopNode {
+    /// The name of the node to affect
     #[arg()]
     name: String,
 }
 
 #[derive(Subcommand)]
 enum ConfigNodeCommand {
+    /// Add a permament peer ID and multiaddress of a node that the configured one will try to dial to connect to the network
     AddBootstrapNode(AddBootstrapNode),
+    /// Add an address that is guaranteed to be an external address that other nodes in the network will be able to use to contact the node
     AddExternalAddr(AddExternalAddr),
 }
 
 #[derive(Parser)]
 struct AddBootstrapNode {
+    /// The peer ID of the bootstrap node
     #[arg()]
     id: String,
+    /// A multiaddress containing the nodes IP address, transport protocol and port
+    /// /<ipX>/<ip_addr>/<transport>/<port>/[additional_data]
+    /// Example:
+    ///     /ip4/14.63.55.123/udp/52137/quic-v1
+    #[arg()]
     addr: String,
 }
 
 #[derive(Parser)]
 struct AddExternalAddr {
+    /// A multiaddress containing the nodes IP address, transport protocol and port
+    /// /<ipX>/<ip_addr>/<transport>/<port>/[additional_data]
+    /// Example:
+    ///     /ip4/14.63.55.123/udp/52137/quic-v1
     #[arg()]
     addr: String,
 }
 
 #[derive(Parser)]
 struct ProvideFile {
+    /// The name of the node to affect
     #[arg()]
     node_name: String,
+    /// Path to the file
     #[arg()]
     path: PathBuf,
 }
 
 #[derive(Parser)]
 struct GetProviders {
+    /// The name of the node to affect
     #[arg()]
     node_name: String,
+    /// Object ID, printed when publishing or by get-published-objects
     #[arg()]
     id: String,
 }
 
 #[derive(Parser)]
 struct DownloadFile {
+    /// The name of the node to affect
     #[arg()]
     node_name: String,
+    /// Object ID, printed when publishing or by get-published-objects
     #[arg()]
     id: String,
 }
 
 #[derive(Parser)]
 struct GetPeerID {
+    /// The name of the node to affect
     #[arg()]
     node_name: String,
 }
 
 #[derive(Parser)]
 struct Dial {
+    /// The name of the node to affect
     #[arg()]
     node_name: String,
+    /// The peer ID of the node to dial
     #[arg()]
     peer_id: String,
+    /// A multiaddress containing the nodes IP address, transport protocol and port
+    /// /<ipX>/<ip_addr>/<transport>/<port>/[additional_data]
+    /// Example:
+    ///     /ip4/14.63.55.123/udp/52137/quic-v1
     #[arg()]
     addr: String,
 }
 
 #[derive(Parser)]
 struct PublishFile {
+    /// The name of the node to affect
     #[arg()]
     node_name: String,
+    /// Path to the file
     #[arg()]
     path: PathBuf,
 }
 
 #[derive(Parser)]
 struct GetPublishedObjects {
+    /// The name of the node to affect
     #[arg()]
     node_name: String,
 }
 
 #[derive(Parser)]
 struct DeleteObject {
+    /// The name of the node to affect
     #[arg()]
     node_name: String,
+    /// Object ID, printed when publishing or by get-published-objects
     #[arg()]
     object_id: String,
 }
