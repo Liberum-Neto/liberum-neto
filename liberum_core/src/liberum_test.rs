@@ -196,7 +196,9 @@ async fn handle_simple_action(
                             .clone(),
                     }
                 }
-                test_protocol::action::Details::DeleteObject(delete_object) => {todo!()},
+                test_protocol::action::Details::DeleteObject(delete_object) => {
+                    todo!()
+                }
                 test_protocol::action::Details::PublishMeta(publish_meta) => todo!(),
             };
 
