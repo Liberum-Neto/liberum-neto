@@ -205,28 +205,39 @@ impl NodeView {
                     ui.add_space(10.0);
 
                     if ui.button("Download").clicked() {
-                        match ctx
-                            .daemon_com
-                            .download_file(&self.node_name, &self.file_to_download_id)
-                        {
-                            Ok(data) => {
-                                self.status_line = "File downloaded".to_string();
-                                self.file_to_download_id = String::new();
-                                self.download_window_opened = true;
-                                self.download_data = data.clone();
+                        match &self.download_destination_path {
+                            Some(dest_path) => match self.file_to_download_id.is_empty() {
+                                true => {
+                                    self.status_line =
+                                        "File ID to download must not be empty!".to_string();
+                                }
+                                false => {
+                                    match ctx
+                                        .daemon_com
+                                        .download_file(&self.node_name, &self.file_to_download_id)
+                                    {
+                                        Ok(data) => {
+                                            self.status_line = "File downloaded".to_string();
+                                            self.file_to_download_id = String::new();
+                                            self.download_window_opened = true;
+                                            self.download_data = data.clone();
 
-                                // TODO: Verify if path is set
-                                match fs::write(
-                                    self.download_destination_path.clone().unwrap(),
-                                    data,
-                                ) {
-                                    Ok(_) => self.status_line = format!("File saved!"),
-                                    Err(e) => {
-                                        self.status_line = format!("File saving failed, err={e}")
+                                            match fs::write(dest_path.clone(), data) {
+                                                Ok(_) => self.status_line = format!("File saved!"),
+                                                Err(e) => {
+                                                    self.status_line =
+                                                        format!("File saving failed, err={e}")
+                                                }
+                                            }
+                                        }
+                                        Err(e) => self.status_line = e.to_string(),
                                     }
                                 }
+                            },
+                            None => {
+                                self.status_line =
+                                    "Download destination is not selected".to_string();
                             }
-                            Err(e) => self.status_line = e.to_string(),
                         }
                     }
                 });
