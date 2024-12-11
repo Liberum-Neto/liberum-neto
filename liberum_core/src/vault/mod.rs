@@ -1,6 +1,5 @@
 pub mod fragment;
 
-use core::hash;
 use std::cmp;
 use std::iter::once;
 use std::iter::successors;
@@ -285,7 +284,84 @@ impl Vault {
         from: Option<Hash>,
         to: Option<Hash>,
     ) -> Result<Vec<PinObject>> {
-        todo!()
+        let query;
+        let params_list;
+
+        match (from, to) {
+            (Some(from), Some(to)) => {
+                query = "
+                    SELECT hash, hash_from, hash_to
+                    FROM pin_object
+                    WHERE hash_from = ?1 AND hash_to = ?2
+                ";
+                let from_str = from.to_string();
+                let to_str = to.to_string();
+                params_list = vec![from_str, to_str];
+            }
+            (Some(from), None) => {
+                query = "
+                    SELECT hash, hash_from, hash_to
+                    FROM pin_object
+                    WHERE hash_from = ?1
+                ";
+                let from_str = from.to_string();
+                params_list = vec![from_str];
+            }
+            (None, Some(to)) => {
+                query = "
+                    SELECT hash, hash_from, hash_to
+                    FROM pin_object
+                    WHERE hash_to = ?1
+                ";
+                let to_str = to.to_string();
+                params_list = vec![to_str];
+            }
+            (None, None) => {
+                query = "
+                    SELECT hash, hash_from, hash_to
+                    FROM pin_object
+                ";
+                params_list = vec![];
+            }
+        }
+
+        let pin_objects_triples = self
+            .db
+            .call(move |conn| {
+                let mut stmt = conn.prepare(query)?;
+                let pin_objects_iter = stmt.query_map(params_from_iter(params_list), |row| {
+                    let hash_str: String = row.get(0)?;
+                    let hash_from_str: String = row.get(1)?;
+                    let hash_to_str: String = row.get(2)?;
+
+                    Ok((hash_str, hash_from_str, hash_to_str))
+                })?;
+
+                let mut pin_objects = Vec::new();
+
+                for pin_obj in pin_objects_iter {
+                    pin_objects.push(pin_obj?);
+                }
+
+                Ok(pin_objects)
+            })
+            .await?;
+
+        let mut pin_objects = Vec::new();
+
+        for triple in pin_objects_triples {
+            let hash_from = Hash::try_from(&triple.1)?;
+            let hash_to = Hash::try_from(&triple.2)?;
+
+            let pin_obj = PinObject {
+                from: hash_from,
+                to: TypedObjectRef::ByHash(hash_to),
+            };
+
+            pin_objects.push(pin_obj);
+        }
+
+        Ok(pin_objects)
     }
 }
 
