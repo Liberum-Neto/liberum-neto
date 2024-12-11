@@ -13,14 +13,10 @@ use liberum_core::proto::{self, SignedObject, TypedObject};
 use liberum_core::proto::{PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
 use liberum_core::types::TypedObjectInfo;
-use liberum_core::{parser, DaemonResponse};
+use liberum_core::{parser, DaemonQueryStats, DaemonResponse};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
-use std::borrow::Borrow;
-use std::collections::HashSet;
-use std::fmt;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{borrow::Borrow, collections::HashSet, fmt, path::PathBuf, str::FromStr};
 use swarm_runner::messages::SwarmRunnerMessage;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, oneshot};
@@ -96,7 +92,10 @@ impl Node {
     /// Message called on the node from the daemon to get the list of providers
     /// of an id. Changes the ID from string to libp2p format and just passes it to the swarm.
     #[message]
-    pub async fn get_providers(&mut self, obj_id_str: String) -> Result<Vec<PeerId>> {
+    pub async fn get_providers(
+        &mut self,
+        obj_id_str: String,
+    ) -> Result<(Vec<PeerId>, Option<DaemonQueryStats>)> {
         debug!(node = self.name, "Node got GetProviders");
         let obj_id_kad = str_to_file_id(&obj_id_str)?;
         let obj_id = proto::Hash {
@@ -114,13 +113,15 @@ impl Node {
             .await?;
 
         if let Ok(received) = recv.await {
-            let received: Vec<PeerId> = received
+            let peers: Vec<PeerId> = received
+                .0
                 .into_iter()
                 .collect::<HashSet<_>>()
                 .into_iter()
                 .collect();
-            debug!(node = self.name, "Got providers: {received:?}");
-            return Ok(received);
+            let stats = received.1;
+            debug!(node = self.name, "Got providers: {peers:?}");
+            return Ok((peers, stats));
         }
 
         Err(anyhow!("Could not get providers"))
@@ -153,7 +154,10 @@ impl Node {
     }
 
     #[message]
-    pub async fn download_file(&mut self, obj_id_str: String) -> Result<proto::PlainFileObject> {
+    pub async fn download_file(
+        &mut self,
+        obj_id_str: String,
+    ) -> Result<(proto::PlainFileObject, Option<DaemonQueryStats>)> {
         let obj_id = proto::Hash::try_from(obj_id_str.as_str())?;
 
         // first get the providers of the file
@@ -169,7 +173,8 @@ impl Node {
             })
             .await?;
 
-        let providers = resp_recv.await?;
+        let resp = resp_recv.await?;
+        let (providers, stats) = resp;
         if providers.is_empty() {
             return Err(anyhow!("Could not find provider for file {obj_id_str}.").into());
         }
@@ -248,7 +253,7 @@ impl Node {
                     while let Some(obj) = typed.clone() {
                         typed = match parser::parse_typed(obj).await {
                             Ok(parser::ObjectEnum::Signed(signed)) => Some(signed.object),
-                            Ok(parser::ObjectEnum::PlainFile(file)) => return Ok(file),
+                            Ok(parser::ObjectEnum::PlainFile(file)) => return Ok((file, stats)),
                             Err(e) => {
                                 debug!("{e}");
                                 continue;
@@ -433,9 +438,11 @@ impl Node {
             );
             return Err(anyhow!("Failed to get providers").context(e));
         }
+        let rec = rec.unwrap();
         error!("Fouind providers");
+        let _stats = rec.1;
         let providers: Vec<PeerId> = rec
-            .unwrap()
+            .0
             .into_iter()
             .collect::<HashSet<_>>()
             .into_iter()

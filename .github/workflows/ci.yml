@@ -12,6 +12,10 @@ jobs:
     name: Build and check formatting
     runs-on: ubuntu-latest
     steps:
+    - run: curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v25.1/protoc-25.1-linux-x86_64.zip
+    - run: unzip protoc-25.1-linux-x86_64.zip -d $HOME/.local
+    - run: export PATH="$PATH:$HOME/.local/bin"
+    - run: protoc --version
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --quiet
