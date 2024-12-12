@@ -1,4 +1,4 @@
-use liberum_core::proto::ResultObject;
+use liberum_core::proto::{PinObject, ResultObject, SignedObject};
 use liberum_core::proto::{self, TypedObject};
 
 use super::behaviour::object_sender;
@@ -77,6 +77,12 @@ pub enum SwarmRunnerMessage {
     GetAddresses {
         response_sender: oneshot::Sender<Result<Vec<Multiaddr>>>,
     },
+    Query {
+        obj_id: proto::Hash,
+        peer_id: PeerId,
+        query: TypedObject,
+        response_sender: oneshot::Sender<Result<Vec<PinObject>>>,
+    }
 }
 
 /// Methods on SwarmContext for handling SwarmRunner messages
@@ -272,6 +278,42 @@ impl SwarmContext {
 
                 Ok(false)
             }
+            SwarmRunnerMessage::Query { obj_id, peer_id, response_sender ,query} => {
+                debug!(
+                    "Sending a get object request for obj_id {} to peer {}",
+                    bs58::encode(kad::RecordKey::new(&obj_id.bytes)).into_string(),
+                    peer_id.to_base58()
+                );
+
+                // If the local peer
+                if &peer_id == self.swarm.local_peer_id() {
+                    debug!(
+                        peer = peer_id.to_base58(),
+                        local = self.swarm.local_peer_id().to_base58(),
+                        "Local peer requested query"
+                    );
+                    let object = self.query_objects_from_vault(obj_id.clone(),query).await;
+                    let _ = response_sender.send(Ok(object));
+                    return Ok(false);
+                } else {
+                    // Send a request to the peer
+                    let query_id = self.swarm.behaviour_mut().object_sender.send_request(
+                        &peer_id,
+                        object_sender::ObjectSendRequest {
+                            object: proto::QueryObject {
+                                query_object: proto::SimpleIDQuery { id: obj_id.clone() }.into(),
+                            }
+                            .into(),
+                            object_id: obj_id,
+                        },
+                    );
+
+                    self.behaviour
+                        .pending_inner_get_object
+                        .insert(query_id, response_sender);
+                }
+                Ok(false)
+            },
         }
     }
 

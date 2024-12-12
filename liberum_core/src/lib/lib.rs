@@ -74,6 +74,11 @@ pub enum DaemonRequest {
     GetPublishedObjects {
         node_name: String,
     },
+    Query{
+        node_name: String,
+        object_id: String,
+        query: TypedObject,
+    }
 }
 
 /// Messages that are sent from the daemon as a reponse
@@ -96,6 +101,7 @@ pub enum DaemonResponse {
     Dialed,
     FilePublished { id: String },
     PublishedObjectsList { object_infos: Vec<TypedObjectInfo> },
+    QueryResult { results: Vec<PinObject> }
 }
 
 /// Errors that can be returned by the daemon

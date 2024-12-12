@@ -1,10 +1,10 @@
 use crate::{
     swarm_runner::{object_sender, SwarmContext},
-    vault::{LoadObject, StoreObject},
+    vault::{LoadObject, StoreObject,LoadPinObjects},
 };
 use anyhow::Result;
 use kameo::request::MessageSend;
-use liberum_core::{parser::ObjectEnum, proto};
+use liberum_core::{parser::ObjectEnum, proto::{self, TypedObject}};
 use libp2p::{
     kad::{
         store::RecordStore, AddProviderError, AddProviderOk, Event, GetClosestPeersResult,
@@ -288,6 +288,20 @@ impl SwarmContext {
             },
             None => None,
         }
+    }
+
+    pub async fn query_objects_from_vault(
+        &mut self,
+        obj_id: proto::Hash,
+        query: TypedObject,
+    )-> Vec::<proto::PinObject>{
+        let objs = self.vault_ref.ask(
+            LoadPinObjects {
+                from: Some(obj_id),
+                to: None, // TODO extract to from query
+            }).send().await.unwrap();
+
+        return objs;
     }
 
     pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {

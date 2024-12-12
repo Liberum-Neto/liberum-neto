@@ -279,7 +279,7 @@ impl Vault {
     }
 
     #[message]
-    async fn load_pin_objects(
+    pub async fn load_pin_objects(
         &self,
         from: Option<Hash>,
         to: Option<Hash>,

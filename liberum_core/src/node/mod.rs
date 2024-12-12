@@ -10,7 +10,7 @@ use kameo::request::MessageSend;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::NodeConfig;
 use liberum_core::parser;
-use liberum_core::proto::{self, TypedObject};
+use liberum_core::proto::{self, PinObject, TypedObject};
 use liberum_core::proto::{PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
 use liberum_core::types::TypedObjectInfo;
@@ -369,6 +369,92 @@ impl Node {
     #[message]
     pub async fn get_published_objects(&mut self) -> Result<Vec<TypedObjectInfo>> {
         Ok(self.vault_ref.ask(ListTypedObjects).send().await?)
+    }
+
+    #[message]
+    pub async fn query(&mut self, obj_id_str: String, query: TypedObject ) -> Result<Vec<PinObject>>{
+        let obj_id = proto::Hash::try_from(&obj_id_str)?;
+
+        // first get the providers of the file
+        let (resp_send, resp_recv) = oneshot::channel();
+
+        self.swarm_sender
+            .as_mut()
+            .unwrap()
+            .send(SwarmRunnerMessage::GetProviders {
+                obj_id: obj_id.clone(),
+                response_sender: resp_send,
+            })
+            .await?;
+
+        let providers = resp_recv.await?;
+        if providers.is_empty() {
+            return Err(anyhow!("Could not find provider for file {obj_id_str}.").into());
+        }
+        debug!(
+            node = self.name,
+            obj_id = obj_id_str,
+            "Found providers: {providers:?}"
+        );
+        for peer in &providers {
+            debug!(
+                node = self.name,
+                peer_id = peer.to_base58(),
+                obj_id = obj_id_str,
+                "Trying to download query from peer"
+            );
+
+            let (obj_sender, obj_receiver) = oneshot::channel();
+            let result = self
+                .swarm_sender
+                .as_mut()
+                .unwrap()
+                .send(SwarmRunnerMessage::Query {
+                    obj_id: obj_id.clone(),
+                    peer_id: peer.clone(),
+                    response_sender: obj_sender,
+                });
+
+            if let Err(e) = result.await {
+                error!(
+                    node = self.name,
+                    err = e.to_string(),
+                    "Failed to send download file message"
+                );
+                continue;
+            }
+
+            match obj_receiver.await {
+                Err(e) => {
+                    debug!(
+                        node = self.name,
+                        from = format!("{peer}"),
+                        err = e.to_string(),
+                        "Failed to download file"
+                    );
+                    continue;
+                }
+                Ok(Err(e)) => {
+                    debug!(
+                        node = self.name,
+                        from = format!("{peer}"),
+                        err = e.to_string(),
+                        "Failed to download file"
+                    );
+                    continue;
+                }
+
+                Ok(Ok(obj)) => {
+                    let calculated_obj_id = proto::Hash::try_from(&obj)?;
+                 
+                    match parser::parse_typed(obj).await {
+                        Ok(parser::ObjectEnum::PlainFile(file)) => return Ok(file),
+                        Err(e) => return Err(e),
+                        Ok(_) => return Err(anyhow!("Received object was not a file!")),
+                    }
+                }
+            }
+        }
     }
 }
 

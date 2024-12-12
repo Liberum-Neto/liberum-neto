@@ -15,6 +15,7 @@ use crate::node::GetPublishedObjects;
 use crate::node::NodeSnapshot;
 use crate::node::ProvideFile;
 use crate::node::PublishFile;
+use crate::node::Query;
 use anyhow::Result;
 use futures::SinkExt;
 use futures::StreamExt;
@@ -132,7 +133,31 @@ async fn handle_message(message: DaemonRequest, context: &AppContext) -> DaemonR
         DaemonRequest::GetPublishedObjects { node_name } => {
             handle_get_published_objects(node_name, context).await
         }
+        DaemonRequest::Query { node_name, object_id, query } => {
+            handle_query(node_name,object_id,query,context).await
+        }
     }
+}
+
+async fn handle_query(node_name: String, object_id: String, query: liberum_core::proto::TypedObject,context: &AppContext) -> std::result::Result<DaemonResponse, DaemonError> {
+    let node = context
+        .node_manager
+        .ask(GetNode {
+            name: node_name.to_string(),
+        })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle query file"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    let files = node
+        .ask(Query { obj_id_str: object_id, query })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    Ok(DaemonResponse::QueryResult { results: files })
 }
 
 async fn handle_get_peer_id(node_name: String, context: &AppContext) -> DaemonResult {
