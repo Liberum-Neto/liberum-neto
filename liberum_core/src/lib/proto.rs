@@ -249,6 +249,38 @@ impl TryFrom<&TypedObject> for QueryObject {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TagQuery{
+    pub from: Option<Hash>,
+    pub to: Option<Hash>,
+    pub inner: Option<TypedObject>
+}
+
+impl TagQuery {
+    pub const UUID: Uuid = uuid!("88b5bb47-dc81-4511-97dc-92f83fb26c05");
+}
+
+impl UUIDTyped for TagQuery{
+    fn get_type_uuid(&self) -> Uuid {
+        TagQuery::UUID
+    }
+}
+
+impl From<TagQuery> for QueryObject{
+    fn from(obj: TagQuery) -> Self {
+        QueryObject {
+            query_object: obj.into(),
+        }
+    }
+}
+
+impl TryFrom<&TypedObject> for TagQuery {
+    type Error = Error;
+    fn try_from(value: &TypedObject) -> Result<Self> {
+        bincode::deserialize::<TagQuery>(&(value.data)).map_err(|e| anyhow!(e))
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SimpleIDQuery {
     pub id: ObjectId,
 }

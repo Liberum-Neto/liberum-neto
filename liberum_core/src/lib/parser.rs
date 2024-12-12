@@ -14,6 +14,7 @@ pub enum ObjectEnum {
     Empty(EmptyObject),
     SimpleIDQuery(SimpleIDQuery),
     Query(QueryObject),
+    QueryTag(TagQuery),
     Result(ResultObject),
     PinObject(PinObject),
 }
@@ -30,6 +31,7 @@ impl UUIDTyped for ObjectEnum {
             ObjectEnum::Query(query_object) => query_object.get_type_uuid(),
             ObjectEnum::Result(result_object) => result_object.get_type_uuid(),
             ObjectEnum::PinObject(pin_object) => pin_object.get_type_uuid(),
+            ObjectEnum::QueryTag(tag_query) => tag_query.get_type_uuid(),
         }
     }
 }
@@ -65,6 +67,11 @@ pub async fn parse_typed(object: TypedObject) -> Result<ObjectEnum> {
             Ok(ObjectEnum::Query(QueryObject {
                 query_object: query.query_object,
             }))
+        }
+        TagQuery::UUID => {
+            debug!("Parser: Got Tag Query object: {:?}", object);
+            let tag_query = TagQuery::try_from(&object).unwrap();
+            Ok(ObjectEnum::QueryTag(tag_query))
         }
         ResultObject::UUID => {
             debug!("Parser: Got Result object: {:?}", object);
