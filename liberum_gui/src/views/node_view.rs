@@ -175,96 +175,6 @@ impl NodeView {
                 });
 
                 ui.add_space(20.0);
-
-                ui.heading("Download file");
-                ui.horizontal(|ui| {
-                    ui.colored_label(Color32::from_rgb(0, 100, 200), "File ID:");
-                    ui.text_edit_singleline(&mut self.file_to_download_id);
-                });
-                ui.horizontal(|ui| {
-                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Download destination:");
-                    ui.label(
-                        self.download_destination_path
-                            .clone()
-                            .map(|path| path.to_string_lossy().to_string())
-                            .unwrap_or("Not selected".to_string()),
-                    );
-                });
-                ui.add_space(10.0);
-
-                ui.horizontal(|ui| {
-                    if ui.button("Select destination").clicked() {
-                        let mut dialog =
-                            FileDialog::save_file(self.download_destination_path.clone());
-                        dialog.open();
-                        self.download_destination_dialog = Some(dialog);
-                    }
-
-                    if let Some(dialog) = &mut self.download_destination_dialog {
-                        if dialog.show(ctx.egui_ctx).selected() {
-                            if let Some(file_path) = dialog.path() {
-                                self.download_destination_path = Some(file_path.to_path_buf());
-                            }
-                        }
-                    }
-
-                    ui.add_space(10.0);
-
-                    if ui.button("Download").clicked() {
-                        match &self.download_destination_path {
-                            Some(dest_path) => match self.file_to_download_id.is_empty() {
-                                true => {
-                                    self.status_line =
-                                        "File ID to download must not be empty!".to_string();
-                                }
-                                false => {
-                                    match ctx
-                                        .daemon_com
-                                        .download_file(&self.node_name, &self.file_to_download_id)
-                                    {
-                                        Ok(data) => {
-                                            self.status_line = "File downloaded".to_string();
-                                            self.downloaded_file_id =
-                                                Some(self.file_to_download_id.clone());
-                                            self.downloaded_file_path =
-                                                self.download_destination_path.clone();
-                                            self.downloaded_file_size = Some(data.len());
-                                            self.download_window_opened = true;
-
-                                            match fs::write(dest_path.clone(), data) {
-                                                Ok(_) => self.status_line = format!("File saved!"),
-                                                Err(e) => {
-                                                    self.status_line =
-                                                        format!("File saving failed, err={e}")
-                                                }
-                                            }
-
-                                            // TODO: Placeholder
-                                            self.downloaded_object_pins = vec![
-                                                bs58::encode("hello---------------------------")
-                                                    .into_string(),
-                                                bs58::encode("p2p-----------------------------")
-                                                    .into_string(),
-                                                bs58::encode("world---------------------------")
-                                                    .into_string(),
-                                            ];
-                                        }
-                                        Err(e) => self.status_line = e.to_string(),
-                                    }
-                                }
-                            },
-                            None => {
-                                self.status_line =
-                                    "Download destination is not selected".to_string();
-                            }
-                        }
-
-                        self.file_to_download_id = String::new();
-                        self.download_destination_path = None;
-                    }
-                });
-
-                ui.add_space(20.0);
             });
     }
 
@@ -333,6 +243,112 @@ impl NodeView {
                                 }
                             });
                     }
+                });
+            });
+    }
+
+    fn show_downloader_window(&mut self, ctx: &mut ViewContext) {
+        egui::Window::new("Downloader")
+            .anchor(Align2::RIGHT_BOTTOM, [-16.0, -16.0])
+            .show(ctx.egui_ctx, |ui| {
+                egui::TopBottomPanel::top("downloader_controls").show_inside(ui, |ui| {
+                    ui.heading("Download file");
+                    ui.horizontal(|ui| {
+                        ui.colored_label(Color32::from_rgb(0, 100, 200), "File ID:");
+                        ui.text_edit_singleline(&mut self.file_to_download_id);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.colored_label(Color32::from_rgb(0, 100, 200), "Download destination:");
+                        ui.label(
+                            self.download_destination_path
+                                .clone()
+                                .map(|path| path.to_string_lossy().to_string())
+                                .unwrap_or("Not selected".to_string()),
+                        );
+                    });
+                    ui.add_space(10.0);
+
+                    ui.horizontal(|ui| {
+                        if ui.button("Select destination").clicked() {
+                            let mut dialog =
+                                FileDialog::save_file(self.download_destination_path.clone());
+                            dialog.open();
+                            self.download_destination_dialog = Some(dialog);
+                        }
+
+                        if let Some(dialog) = &mut self.download_destination_dialog {
+                            if dialog.show(ctx.egui_ctx).selected() {
+                                if let Some(file_path) = dialog.path() {
+                                    self.download_destination_path = Some(file_path.to_path_buf());
+                                }
+                            }
+                        }
+
+                        ui.add_space(10.0);
+
+                        if ui.button("Download").clicked() {
+                            match &self.download_destination_path {
+                                Some(dest_path) => match self.file_to_download_id.is_empty() {
+                                    true => {
+                                        self.status_line =
+                                            "File ID to download must not be empty!".to_string();
+                                    }
+                                    false => {
+                                        match ctx.daemon_com.download_file(
+                                            &self.node_name,
+                                            &self.file_to_download_id,
+                                        ) {
+                                            Ok(data) => {
+                                                self.status_line = "File downloaded".to_string();
+                                                self.downloaded_file_id =
+                                                    Some(self.file_to_download_id.clone());
+                                                self.downloaded_file_path =
+                                                    self.download_destination_path.clone();
+                                                self.downloaded_file_size = Some(data.len());
+                                                self.download_window_opened = true;
+
+                                                match fs::write(dest_path.clone(), data) {
+                                                    Ok(_) => {
+                                                        self.status_line = format!("File saved!")
+                                                    }
+                                                    Err(e) => {
+                                                        self.status_line =
+                                                            format!("File saving failed, err={e}")
+                                                    }
+                                                }
+
+                                                // TODO: Placeholder
+                                                self.downloaded_object_pins = vec![
+                                                    bs58::encode(
+                                                        "hello---------------------------",
+                                                    )
+                                                    .into_string(),
+                                                    bs58::encode(
+                                                        "p2p-----------------------------",
+                                                    )
+                                                    .into_string(),
+                                                    bs58::encode(
+                                                        "world---------------------------",
+                                                    )
+                                                    .into_string(),
+                                                ];
+                                            }
+                                            Err(e) => self.status_line = e.to_string(),
+                                        }
+                                    }
+                                },
+                                None => {
+                                    self.status_line =
+                                        "Download destination is not selected".to_string();
+                                }
+                            }
+
+                            self.file_to_download_id = String::new();
+                            self.download_destination_path = None;
+                        }
+                    });
+
+                    ui.add_space(10.0);
                 });
             });
     }
@@ -483,6 +499,7 @@ impl AppView for NodeView {
         self.show_node_window(&mut ctx);
         self.show_download_window(&mut ctx);
         self.show_dialer_window(&mut ctx);
+        self.show_downloader_window(&mut ctx);
         self.show_status_bar(&mut ctx)
     }
 
