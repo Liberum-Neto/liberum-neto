@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use egui::{Align2, Color32};
+use egui::{Align2, Color32, RichText};
 use egui_file::FileDialog;
 use liberum_core::types::NodeInfo;
 
@@ -22,6 +22,7 @@ pub struct NodeView {
     downloaded_file_size: Option<usize>,
     download_destination_dialog: Option<FileDialog>,
     download_destination_path: Option<PathBuf>,
+    downloaded_object_pins: Vec<String>,
     dial_peer_id: String,
     dial_addr: String,
     dial_history: Vec<(String, String, bool)>,
@@ -42,6 +43,7 @@ impl NodeView {
             downloaded_file_size: None,
             download_destination_dialog: None,
             download_destination_path: None,
+            downloaded_object_pins: Vec::new(),
             dial_peer_id: String::new(),
             dial_addr: String::new(),
             dial_history: Vec::new(),
@@ -236,6 +238,16 @@ impl NodeView {
                                                         format!("File saving failed, err={e}")
                                                 }
                                             }
+
+                                            // TODO: Placeholder
+                                            self.downloaded_object_pins = vec![
+                                                bs58::encode("hello---------------------------")
+                                                    .into_string(),
+                                                bs58::encode("p2p-----------------------------")
+                                                    .into_string(),
+                                                bs58::encode("world---------------------------")
+                                                    .into_string(),
+                                            ];
                                         }
                                         Err(e) => self.status_line = e.to_string(),
                                     }
@@ -412,6 +424,27 @@ impl NodeView {
                             .unwrap_or("?".to_string()),
                     );
                 });
+
+                ui.add_space(10.0);
+                ui.colored_label(
+                    Color32::from_rgb(0, 200, 100),
+                    RichText::heading("Pinned objects:".into()),
+                );
+
+                if !self.downloaded_object_pins.is_empty() {
+                    egui::Grid::new("downloaded_object_pins")
+                        .num_columns(1)
+                        .striped(true)
+                        .show(ui, |ui| {
+                            ui.label("Pinned object ID");
+                            ui.end_row();
+
+                            for obj_id in &self.downloaded_object_pins {
+                                ui.label(obj_id.to_string());
+                                ui.end_row();
+                            }
+                        });
+                }
             });
     }
 
