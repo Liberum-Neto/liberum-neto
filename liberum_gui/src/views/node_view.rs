@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::Result;
 use egui::{Align2, Color32, RichText};
 use egui_file::FileDialog;
 use liberum_core::types::NodeInfo;
@@ -23,6 +24,7 @@ pub struct NodeView {
     download_destination_dialog: Option<FileDialog>,
     download_destination_path: Option<PathBuf>,
     downloaded_object_pins: Vec<String>,
+    download_history: Vec<Result<(String, String, usize, Vec<String>)>>,
     dial_peer_id: String,
     dial_addr: String,
     dial_history: Vec<(String, String, bool)>,
@@ -44,6 +46,7 @@ impl NodeView {
             download_destination_dialog: None,
             download_destination_path: None,
             downloaded_object_pins: Vec::new(),
+            download_history: Vec::new(),
             dial_peer_id: String::new(),
             dial_addr: String::new(),
             dial_history: Vec::new(),
@@ -224,26 +227,26 @@ impl NodeView {
                     }
 
                     ui.add_space(10.0);
-
-                    if !self.dial_history.is_empty() {
-                        egui::Grid::new("dial_history")
-                            .num_columns(3)
-                            .striped(true)
-                            .show(ui, |ui| {
-                                ui.label("Peer ID");
-                                ui.label("Peer address");
-                                ui.label("Successful?");
-                                ui.end_row();
-
-                                for (peer_id, peer_addr, success) in &self.dial_history {
-                                    ui.label(peer_id);
-                                    ui.label(peer_addr);
-                                    ui.label(success.to_string());
-                                    ui.end_row();
-                                }
-                            });
-                    }
                 });
+
+                if !self.dial_history.is_empty() {
+                    egui::Grid::new("dial_history")
+                        .num_columns(3)
+                        .striped(true)
+                        .show(ui, |ui| {
+                            ui.label("Peer ID");
+                            ui.label("Peer address");
+                            ui.label("Successful?");
+                            ui.end_row();
+
+                            for (peer_id, peer_addr, success) in &self.dial_history {
+                                ui.label(peer_id);
+                                ui.label(peer_addr);
+                                ui.label(success.to_string());
+                                ui.end_row();
+                            }
+                        });
+                }
             });
     }
 
@@ -332,6 +335,17 @@ impl NodeView {
                                                     )
                                                     .into_string(),
                                                 ];
+
+                                                self.download_history.push(Ok((
+                                                    self.downloaded_file_id.clone().unwrap(),
+                                                    self.downloaded_file_path
+                                                        .clone()
+                                                        .unwrap()
+                                                        .to_string_lossy()
+                                                        .to_string(),
+                                                    self.downloaded_file_size.unwrap(),
+                                                    self.downloaded_object_pins.clone(),
+                                                )));
                                             }
                                             Err(e) => self.status_line = e.to_string(),
                                         }
@@ -350,6 +364,41 @@ impl NodeView {
 
                     ui.add_space(10.0);
                 });
+
+                if !self.download_history.is_empty() {
+                    egui::Grid::new("download_history")
+                        .num_columns(3)
+                        .striped(true)
+                        .show(ui, |ui| {
+                            ui.label("Object ID");
+                            ui.label("Save path");
+                            ui.label("Size");
+                            ui.label("Pins count");
+                            ui.label("Successful?");
+                            ui.end_row();
+
+                            for download in &self.download_history {
+                                match download {
+                                    Ok(d) => {
+                                        ui.label(d.0.clone());
+                                        ui.label(d.1.clone());
+                                        ui.label(d.2.to_string());
+                                        ui.label(d.3.len().to_string());
+                                        ui.label("true");
+                                    }
+                                    Err(_) => {
+                                        ui.label("-");
+                                        ui.label("-");
+                                        ui.label("-");
+                                        ui.label("-");
+                                        ui.label("false");
+                                    }
+                                }
+
+                                ui.end_row();
+                            }
+                        });
+                }
             });
     }
 
