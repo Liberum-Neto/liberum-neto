@@ -25,6 +25,10 @@ pub struct NodeView {
     download_destination_path: Option<PathBuf>,
     downloaded_object_pins: Vec<String>,
     download_history: Vec<Result<(String, String, usize, Vec<String>)>>,
+    download_details_file_id: Option<String>,
+    download_details_file_path: Option<String>,
+    download_details_file_size: Option<usize>,
+    download_details_pins: Vec<String>,
     dial_peer_id: String,
     dial_addr: String,
     dial_history: Vec<(String, String, bool)>,
@@ -47,6 +51,10 @@ impl NodeView {
             download_destination_path: None,
             downloaded_object_pins: Vec::new(),
             download_history: Vec::new(),
+            download_details_file_id: None,
+            download_details_file_path: None,
+            download_details_file_size: None,
+            download_details_pins: Vec::new(),
             dial_peer_id: String::new(),
             dial_addr: String::new(),
             dial_history: Vec::new(),
@@ -308,6 +316,14 @@ impl NodeView {
                                                 self.downloaded_file_path =
                                                     self.download_destination_path.clone();
                                                 self.downloaded_file_size = Some(data.len());
+
+                                                self.download_details_file_id =
+                                                    Some(self.file_to_download_id.clone());
+                                                self.download_details_file_path = self
+                                                    .download_destination_path
+                                                    .clone()
+                                                    .map(|path| path.to_string_lossy().to_string());
+                                                self.download_details_file_size = Some(data.len());
                                                 self.download_window_opened = true;
 
                                                 match fs::write(dest_path.clone(), data) {
@@ -335,6 +351,8 @@ impl NodeView {
                                                     )
                                                     .into_string(),
                                                 ];
+                                                self.download_details_pins =
+                                                    self.downloaded_object_pins.clone();
 
                                                 self.download_history.push(Ok((
                                                     self.downloaded_file_id.clone().unwrap(),
@@ -375,6 +393,7 @@ impl NodeView {
                             ui.label("Size");
                             ui.label("Pins count");
                             ui.label("Successful?");
+                            ui.label("Details");
                             ui.end_row();
 
                             for download in &self.download_history {
@@ -385,6 +404,14 @@ impl NodeView {
                                         ui.label(d.2.to_string());
                                         ui.label(d.3.len().to_string());
                                         ui.label("true");
+
+                                        if ui.button("Details").clicked() {
+                                            self.download_details_file_id = Some(d.0.clone());
+                                            self.download_details_file_path = Some(d.1.clone());
+                                            self.download_details_file_size = Some(d.2.clone());
+                                            self.download_details_pins = d.3.clone();
+                                            self.download_window_opened = true;
+                                        }
                                     }
                                     Err(_) => {
                                         ui.label("-");
@@ -469,21 +496,24 @@ impl NodeView {
             .show(ctx.egui_ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.colored_label(Color32::from_rgb(0, 100, 200), "Object ID:");
-                    ui.label(self.downloaded_file_id.clone().unwrap_or("?".to_string()));
+                    ui.label(
+                        self.download_details_file_id
+                            .clone()
+                            .unwrap_or("?".to_string()),
+                    );
                 });
                 ui.horizontal(|ui| {
                     ui.colored_label(Color32::from_rgb(0, 100, 200), "Save path:");
                     ui.label(
-                        self.downloaded_file_path
+                        self.download_details_file_path
                             .clone()
-                            .map(|path| path.to_string_lossy().to_string())
                             .unwrap_or("?".to_string()),
                     );
                 });
                 ui.horizontal(|ui| {
                     ui.colored_label(Color32::from_rgb(0, 100, 200), "Object size:");
                     ui.label(
-                        self.downloaded_file_size
+                        self.download_details_file_size
                             .clone()
                             .map(|n| n.to_string())
                             .unwrap_or("?".to_string()),
@@ -504,7 +534,7 @@ impl NodeView {
                             ui.label("Pinned object ID");
                             ui.end_row();
 
-                            for obj_id in &self.downloaded_object_pins {
+                            for obj_id in &self.download_details_pins {
                                 ui.label(obj_id.to_string());
                                 ui.end_row();
                             }
