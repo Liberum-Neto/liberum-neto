@@ -1,4 +1,5 @@
 pub mod connection;
+pub mod modules;
 pub mod node;
 pub mod swarm_runner;
 pub mod vault;

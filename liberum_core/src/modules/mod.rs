@@ -1,0 +1,110 @@
+pub mod signed_object;
+
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
+
+use liberum_core::{
+    module::{Module, ModuleQueryParams, ModuleStoreParams},
+    proto::{self, TypedObject},
+};
+use signed_object::SignedObjectModule;
+use uuid::Uuid;
+
+pub struct Modules {
+    installed_modules: HashMap<Uuid, Arc<Box<dyn Module>>>,
+}
+
+impl Modules {
+    pub fn install_module(&mut self, module: Arc<Box<dyn Module>>) {
+        for uuid in module.register_module() {
+            self.installed_modules.insert(uuid, module.clone());
+        }
+    }
+
+    pub fn new() -> Modules {
+        Modules {
+            installed_modules: HashMap::new(),
+        }
+    }
+
+    // in external function you must publish input file in locations specified (get provider results)
+    pub async fn publish(&self, object: TypedObject) -> Vec<proto::Hash> {
+        let mut obj = object;
+        let mut publish_places: HashSet<proto::Hash> = HashSet::new();
+
+        while let Some(module) = self.installed_modules.get(&obj.get_uuid()) {
+            let (object, places) = module.publish(obj).await;
+
+            if let Some(places) = places {
+                for ele in places {
+                    publish_places.insert(ele);
+                }
+            };
+
+            if let Some(object) = object {
+                obj = object;
+            } else {
+                break;
+            }
+        }
+
+        let mut vec = Vec::new();
+        for ele in publish_places {
+            vec.push(ele);
+        }
+        return vec;
+    }
+
+    // before calling add object to vault
+    // if false then remove object from vault
+    pub async fn store(&self, object: TypedObject) -> bool {
+        let mut params = ModuleStoreParams {
+            object: Some(object),
+            signed_objects_hashes: Vec::new(),
+        };
+
+        while let Some(obj) = &params.object {
+            if let Some(module) = self.installed_modules.get(&obj.get_uuid()) {
+                params = module.store(params).await;
+
+                if params.signed_objects_hashes.len() == 0 {
+                    return false; // first object must be signed
+                }
+            }
+        }
+        true
+    }
+
+    // map these values into objects from vault
+    pub async fn query(&self, object: TypedObject) -> Vec<proto::Hash> {
+        let mut params = ModuleQueryParams {
+            matched_object_id: None,
+            object: Some(object),
+        };
+        while let Some(obj) = &params.object {
+            if let Some(module) = self.installed_modules.get(&obj.get_uuid()) {
+                params = module.query(params).await;
+
+                if let Some(matches) = &params.matched_object_id {
+                    if matches.len() == 0 {
+                        return matches.to_vec();
+                    }
+                }
+            }
+        }
+        if let Some(matches) = params.matched_object_id {
+            return matches;
+        }
+        return Vec::new();
+    }
+}
+
+
+impl Modules{
+ fn install_default(&mut self){
+    // this can only be done without need for more actors (this will need to be in other file)
+    self.install_module(Arc::new(Box::new(SignedObjectModule{})));
+ }
+}

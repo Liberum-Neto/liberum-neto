@@ -42,3 +42,4 @@ rusqlite = "0.32.1"
 tokio-rusqlite = "0.6.0"
 tokio-stream = "0.1.17"
 ed25519 = {version="2.2.3", features=["serde"]}
+async-trait = "0.1.83"
