@@ -95,7 +95,7 @@ impl Vault {
     #[message]
     pub async fn list_typed_objects(&self) -> Result<Vec<TypedObjectInfo>> {
         const SELECT_TYPED_OBJECT_QUERY: &str = "
-            SELECT hash0, hash1, hash2, hash3, type_id
+            SELECT hash, type_id
             FROM typed_object;
         ";
 
@@ -104,9 +104,9 @@ impl Vault {
             .call(|conn| {
                 let mut stmt = conn.prepare(SELECT_TYPED_OBJECT_QUERY)?;
                 let rows = stmt.query_map([], |row| {
-                    let key_i64s: [i64; 4] = [row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?];
-                    let key = Key::from(key_i64s);
-                    let type_id_str: String = row.get(4)?;
+                    let key_string: String = row.get(0)?;
+                    let key = Key::try_from(key_string).unwrap();
+                    let type_id_str: String = row.get(1)?;
                     let type_id = Uuid::from_str(&type_id_str).expect("type id to be correct");
 
                     Ok(TypedObjectInfo {
@@ -129,23 +129,14 @@ impl Vault {
 
     #[message]
     async fn store_hash_type_mapping(&self, hash: Hash, type_id: Uuid) -> Result<()> {
-        const INSERT_HASH_TYPE_MAPPING_QUERY: &str =
-            "INSERT INTO hash_type_mapping (hash0, hash1, hash2, hash3, type_id)
-             VALUES (?1, ?2, ?3, ?4, ?5)";
-
-        let key_as_i64: [i64; 4] = Key::from(hash.bytes).into();
+        const INSERT_HASH_TYPE_MAPPING_QUERY: &str = "INSERT INTO hash_type_mapping (hash, type_id)
+             VALUES (?1, ?2)";
 
         self.db
             .call(move |conn| {
                 conn.execute(
                     INSERT_HASH_TYPE_MAPPING_QUERY,
-                    params![
-                        key_as_i64[0],
-                        key_as_i64[1],
-                        key_as_i64[2],
-                        key_as_i64[3],
-                        type_id.to_string()
-                    ],
+                    params![hash.to_string(), type_id.to_string()],
                 )?;
 
                 Ok(())
@@ -157,16 +148,15 @@ impl Vault {
     #[message]
     async fn load_hash_type_mapping(&self, hash: Hash) -> Result<Option<Uuid>> {
         const SELECT_HASH_TYPE_MAPPING_QUERY: &str =
-            "SELECT type_id FROM hash_type_mapping WHERE hash0 = ?1 AND hash1 = ?2 AND hash2 = ?3 AND hash3 = ?4";
+            "SELECT type_id FROM hash_type_mapping WHERE hash = ?1";
 
         let type_id_str = self
             .db
             .call(move |conn| {
-                let key_as_i64: [i64; 4] = Key::from(hash.bytes).into();
                 let type_id_str = conn
                     .query_row(
                         SELECT_HASH_TYPE_MAPPING_QUERY,
-                        params_from_iter(key_as_i64),
+                        params![hash.to_string()],
                         |row| {
                             let type_id_str: String = row.get(0)?;
                             Ok(type_id_str)
@@ -193,14 +183,12 @@ impl Vault {
     async fn delete_hash_type_mapping(&self, hash: Hash) -> Result<()> {
         const DELETE_HASH_TYPE_MAPPING_QUERY: &str = "
             DELETE FROM hash_type_mapping
-            WHERE hash0 = ?1 AND hash1 = ?2 AND hash2 = ?3 AND hash3 = ?4
+            WHERE hash = ?1
         ";
 
         self.db
             .call(move |conn| {
-                let key_as_i64: [i64; 4] = Key::from(hash.bytes).into();
-
-                conn.execute(DELETE_HASH_TYPE_MAPPING_QUERY, params_from_iter(key_as_i64))?;
+                conn.execute(DELETE_HASH_TYPE_MAPPING_QUERY, params![hash.to_string()])?;
 
                 Ok(())
             })
@@ -317,13 +305,9 @@ impl Vault {
     async fn prepare_db(&self) -> Result<()> {
         const CREATE_TYPED_OBJECT_TABLE_QUERY: &str = "
             CREATE TABLE IF NOT EXISTS typed_object (
-                hash0 INTEGER NOT NULL,
-                hash1 INTEGER NOT NULL,
-                hash2 INTEGER NOT NULL,
-                hash3 INTEGER NOT NULL,
+                hash TEXT NOT NULL PRIMARY KEY,
                 type_id TEXT NOT NULL,
-                data BLOB NOT NULL,
-                PRIMARY KEY (hash0, hash1, hash2, hash3)
+                data BLOB NOT NULL
             )
         ";
 
@@ -333,12 +317,8 @@ impl Vault {
 
         const CREATE_HASH_TYPE_MAPPING_TABLE_QUERY: &str = "
             CREATE TABLE IF NOT EXISTS hash_type_mapping (
-                hash0 INTEGER NOT NULL,
-                hash1 INTEGER NOT NULL,
-                hash2 INTEGER NOT NULL,
-                hash3 INTEGER NOT NULL,
-                type_id TEXT NOT NULL,
-                PRIMARY KEY (hash0, hash1, hash2, hash3)
+                hash TEXT NOT NULL PRIMARY KEY,
+                type_id TEXT NOT NULL
             )
         ";
 
@@ -367,16 +347,15 @@ impl Vault {
         const SELECT_TYPED_OBJECT_QUERY: &str = "
             SELECT type_id, data
             FROM typed_object
-            WHERE hash0 = ?1 AND hash1 = ?2 AND hash2 = ?3 AND hash3 = ?4
+            WHERE hash = ?1
         ";
 
         self.db
             .call(move |conn| {
                 let mut stmt = conn.prepare(SELECT_TYPED_OBJECT_QUERY)?;
-                let key_as_i64: [i64; 4] = key.into();
 
                 let typed_object = stmt
-                    .query_row(key_as_i64, |r| {
+                    .query_row(params![key.to_string()], |r| {
                         let uuid: String = r.get(0)?;
                         let data: Vec<u8> = r.get(1)?;
 
@@ -394,21 +373,19 @@ impl Vault {
     }
 
     async fn store_typed_object(&self, key: Key, object: TypedObject) -> Result<()> {
-        const SELECT_TYPED_OBJECT_QUERY: &str =
-            "SELECT COUNT(*) FROM typed_object WHERE hash0 = ?1 AND hash1 = ?2 AND hash2 = ?3 AND hash3 = ?4";
+        const SELECT_TYPED_OBJECT_QUERY: &str = "SELECT COUNT(*) FROM typed_object WHERE hash = ?1";
         const INSERT_TYPED_OBJECT_QUERY: &str =
-            "INSERT INTO typed_object (hash0, hash1, hash2, hash3, type_id, data)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
+            "INSERT INTO typed_object (hash, type_id, data) VALUES (?1, ?2, ?3)";
 
-        let key_as_i64: [i64; 4] = key.into();
         let cnt = self
             .db
             .call(move |conn| {
-                let cnt = conn.query_row(SELECT_TYPED_OBJECT_QUERY, key_as_i64, |r| {
-                    let cnt: usize = r.get(0)?;
+                let cnt =
+                    conn.query_row(SELECT_TYPED_OBJECT_QUERY, params![key.to_string()], |r| {
+                        let cnt: usize = r.get(0)?;
 
-                    Ok(cnt)
-                })?;
+                        Ok(cnt)
+                    })?;
 
                 Ok(cnt)
             })
@@ -423,14 +400,7 @@ impl Vault {
             .call(move |conn| {
                 conn.execute(
                     INSERT_TYPED_OBJECT_QUERY,
-                    (
-                        key_as_i64[0] as i64,
-                        key_as_i64[1] as i64,
-                        key_as_i64[2] as i64,
-                        key_as_i64[3] as i64,
-                        object.uuid.to_string(),
-                        object.data,
-                    ),
+                    (key.to_string(), object.uuid.to_string(), object.data),
                 )?;
 
                 Ok(())
