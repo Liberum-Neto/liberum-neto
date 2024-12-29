@@ -7,7 +7,7 @@ use libp2p::kad::RecordKey;
 use serde::{Deserialize, Serialize};
 use uuid::{uuid, Uuid};
 
-#[derive(Serialize, Deserialize, Debug, Hash, PartialEq, Clone, Eq)]
+#[derive(Serialize, Deserialize, Debug, Hash, PartialEq, Clone, Copy, Eq)]
 pub struct Hash {
     pub bytes: [u8; 32],
 }

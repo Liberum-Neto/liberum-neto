@@ -276,8 +276,8 @@ impl Vault {
         let mut pin_objects = Vec::new();
 
         for triple in pin_objects_triples {
-            let hash_from = Hash::try_from(&triple.1)?;
-            let hash_to = Hash::try_from(&triple.2)?;
+            let hash_from = Hash::try_from(triple.1.as_str())?;
+            let hash_to = Hash::try_from(triple.2.as_str())?;
 
             let pin_obj = PinObject {
                 from: hash_from,
@@ -288,6 +288,79 @@ impl Vault {
         }
 
         Ok(pin_objects)
+    }
+
+    #[message]
+    async fn get_typed_object_children(&self, parent_hash: Hash) -> Result<Vec<Hash>> {
+        let mut hashes: Vec<Hash> = vec![];
+
+        const QUERY_TYPED_OBJECTS: &'static str = "
+            SELECT hash
+            FROM typed_object
+            WHERE parent_hash = ?1
+        ";
+
+        let typed_object_hashes = self
+            .db
+            .call(move |conn| {
+                let mut stmt = conn.prepare(&QUERY_TYPED_OBJECTS)?;
+                let typed_object_hashes_iter =
+                    stmt.query_map(params![parent_hash.to_string()], |row| {
+                        let hash_str: String = row.get(0)?;
+
+                        Ok(hash_str)
+                    })?;
+
+                let mut typed_object_hashes = Vec::new();
+                for typed_object_hash in typed_object_hashes_iter {
+                    typed_object_hashes.push(typed_object_hash?);
+                }
+
+                Ok(typed_object_hashes)
+            })
+            .await?;
+
+        let mut typed_object_hashes = typed_object_hashes
+            .iter()
+            .map(|s| Hash::try_from(s.as_str()).unwrap())
+            .collect::<Vec<Hash>>();
+
+        hashes.append(&mut typed_object_hashes);
+
+        const QUERY_PIN_OBJECTS: &'static str = "
+            SELECT hash
+            FROM pin_object
+            WHERE parent_hash = ?1
+        ";
+
+        let pin_object_hashes = self
+            .db
+            .call(move |conn| {
+                let mut stmt = conn.prepare(&QUERY_PIN_OBJECTS)?;
+                let pin_object_hashes_iter =
+                    stmt.query_map(params![parent_hash.to_string()], |row| {
+                        let hash_str: String = row.get(0)?;
+
+                        Ok(hash_str)
+                    })?;
+
+                let mut pin_object_hashes = Vec::new();
+                for pin_object_hash in pin_object_hashes_iter {
+                    pin_object_hashes.push(pin_object_hash?);
+                }
+
+                Ok(pin_object_hashes)
+            })
+            .await?;
+
+        let mut pin_object_hashes = pin_object_hashes
+            .iter()
+            .map(|s| Hash::try_from(s.as_str()).unwrap())
+            .collect::<Vec<Hash>>();
+
+        hashes.append(&mut pin_object_hashes);
+
+        Ok(hashes)
     }
 }
 
@@ -512,9 +585,9 @@ impl Vault {
         let hashes = hashes.unwrap();
 
         let hash_from = hashes.0;
-        let hash_from = Hash::try_from(&hash_from)?;
+        let hash_from = Hash::try_from(hash_from.as_str())?;
         let hash_to = hashes.1;
-        let hash_to = Hash::try_from(&hash_to)?;
+        let hash_to = Hash::try_from(hash_to.as_str())?;
 
         let pin_object = PinObject {
             from: hash_from,
