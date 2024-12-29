@@ -44,19 +44,26 @@ impl Actor for Vault {
 #[messages]
 impl Vault {
     #[message]
-    pub async fn store_object(&self, hash: Hash, object: ObjectEnum) -> Result<()> {
+    pub async fn store_object(
+        &self,
+        hash: Hash,
+        parent_hash: Option<Hash>,
+        object: ObjectEnum,
+    ) -> Result<()> {
         let key: Key = hash.bytes.into();
+        let parent_key = parent_hash.map(|h| Key::from(h.bytes));
 
         match object {
             ObjectEnum::Empty(_) => {}
             ObjectEnum::Typed(typed_object) => {
                 self.store_hash_type_mapping(hash, typed_object.uuid)
                     .await?;
-                self.store_typed_object(key, typed_object).await?;
+                self.store_typed_object(key, parent_key, typed_object)
+                    .await?;
             }
             ObjectEnum::PinObject(pin_object) => {
                 self.store_hash_type_mapping(hash, PinObject::UUID).await?;
-                self.store_pin_object(key, pin_object).await?;
+                self.store_pin_object(key, parent_key, pin_object).await?;
             }
             _ => return Result::Err(anyhow!("Storing this object type is not supported!")),
         }
@@ -305,9 +312,12 @@ impl Vault {
     async fn prepare_db(&self) -> Result<()> {
         const CREATE_TYPED_OBJECT_TABLE_QUERY: &str = "
             CREATE TABLE IF NOT EXISTS typed_object (
-                hash TEXT NOT NULL PRIMARY KEY,
+                hash TEXT NOT NULL,
+                parent_hash TEXT NOT NULL,
                 type_id TEXT NOT NULL,
-                data BLOB NOT NULL
+                data BLOB NOT NULL,
+                PRIMARY KEY(hash, parent_hash),
+                FOREIGN KEY(parent_hash) REFERENCES typed_object(hash)
             )
         ";
 
@@ -328,9 +338,12 @@ impl Vault {
 
         const CREATE_PIN_OBJECT_TABLE_QUERY: &str = "
             CREATE TABLE IF NOT EXISTS pin_object (
-                hash TEXT NOT NULL PRIMARY KEY,
+                hash TEXT NOT NULL,
+                parent_hash TEXT NOT NULL,
                 hash_from TEXT NOT NULL UNIQUE,
-                hash_to TEXT NOT NULL UNIQUE
+                hash_to TEXT NOT NULL UNIQUE,
+                PRIMARY KEY(hash, parent_hash),
+                FOREIGN KEY(parent_hash) REFERENCES typed_object(hash)
             );
             CREATE INDEX pin_object_hash_from_idx ON pin_object (hash_from);
             CREATE INDEX pin_object_hash_to_idx ON pin_object (hash_to)
@@ -372,20 +385,30 @@ impl Vault {
             .map_err(|e| anyhow!(e))
     }
 
-    async fn store_typed_object(&self, key: Key, object: TypedObject) -> Result<()> {
-        const SELECT_TYPED_OBJECT_QUERY: &str = "SELECT COUNT(*) FROM typed_object WHERE hash = ?1";
+    async fn store_typed_object(
+        &self,
+        key: Key,
+        parent_key: Option<Key>,
+        object: TypedObject,
+    ) -> Result<()> {
+        const SELECT_TYPED_OBJECT_QUERY: &str =
+            "SELECT COUNT(*) FROM typed_object WHERE hash = ?1 AND parent_hash = ?2";
         const INSERT_TYPED_OBJECT_QUERY: &str =
-            "INSERT INTO typed_object (hash, type_id, data) VALUES (?1, ?2, ?3)";
+            "INSERT INTO typed_object (hash, parent_hash, type_id, data) VALUES (?1, ?2, ?3, ?4)";
 
+        let parent_key = parent_key.unwrap_or(key);
         let cnt = self
             .db
             .call(move |conn| {
-                let cnt =
-                    conn.query_row(SELECT_TYPED_OBJECT_QUERY, params![key.to_string()], |r| {
+                let cnt = conn.query_row(
+                    SELECT_TYPED_OBJECT_QUERY,
+                    params![key.to_string(), parent_key.to_string()],
+                    |r| {
                         let cnt: usize = r.get(0)?;
 
                         Ok(cnt)
-                    })?;
+                    },
+                )?;
 
                 Ok(cnt)
             })
@@ -400,7 +423,12 @@ impl Vault {
             .call(move |conn| {
                 conn.execute(
                     INSERT_TYPED_OBJECT_QUERY,
-                    (key.to_string(), object.uuid.to_string(), object.data),
+                    (
+                        key.to_string(),
+                        parent_key.to_string(),
+                        object.uuid.to_string(),
+                        object.data,
+                    ),
                 )?;
 
                 Ok(())
@@ -409,12 +437,18 @@ impl Vault {
             .map_err(|e| anyhow!(e))
     }
 
-    async fn store_pin_object(&self, key: Key, object: PinObject) -> Result<()> {
+    async fn store_pin_object(
+        &self,
+        key: Key,
+        parent_key: Option<Key>,
+        object: PinObject,
+    ) -> Result<()> {
         const INSERT_PIN_OBJECT_QUERY: &str = "
-            INSERT INTO pin_object (hash, hash_from, hash_to)
-            VALUES (?1, ?2, ?3)
+            INSERT INTO pin_object (hash, parent_hash, hash_from, hash_to)
+            VALUES (?1, ?2, ?3, ?4)
         ";
 
+        let parent_key = parent_key.unwrap_or(key);
         let object_hash_b58str = key.as_base58();
         let from_hash_b58str = Key::from(object.from.bytes).as_base58();
 
@@ -429,7 +463,12 @@ impl Vault {
             .call(move |conn| {
                 conn.execute(
                     INSERT_PIN_OBJECT_QUERY,
-                    params![object_hash_b58str, from_hash_b58str, to_hash_b58str],
+                    params![
+                        object_hash_b58str,
+                        parent_key.to_string(),
+                        from_hash_b58str,
+                        to_hash_b58str
+                    ],
                 )?;
 
                 Ok(())
@@ -518,6 +557,7 @@ mod tests {
         vault
             .ask(StoreObject {
                 hash: Hash { bytes: [1; 32] },
+                parent_hash: None,
                 object: ObjectEnum::Typed(TypedObject {
                     uuid: TypedObject::UUID,
                     data: vec![1, 2, 3],
@@ -554,6 +594,7 @@ mod tests {
         vault
             .ask(StoreObject {
                 hash: Hash { bytes: [1; 32] },
+                parent_hash: None,
                 object: ObjectEnum::PinObject(PinObject {
                     from: Hash { bytes: [2; 32] },
                     to: TypedObjectRef::ByHash(Hash { bytes: [3; 32] }),
