@@ -6,26 +6,14 @@ pub mod vault;
 use anyhow::{anyhow, Result};
 use connection::listen;
 use daemonize::*;
-use std::{fs::Permissions, io, os::unix::fs::PermissionsExt, path::Path};
-use tokio::net::UnixListener;
+use std::{io, path::Path};
 use tracing::{debug, error};
 
 /// The main function of the core daemon
 #[tokio::main]
-async fn run(path: &Path) -> Result<()> {
-    let socket = path.join("liberum-core-socket");
-    let listener = UnixListener::bind(&socket)
-        .inspect_err(|e| error!(err = e.to_string(), "Failed to bind the socket"))?;
-    tokio::fs::set_permissions(&socket, Permissions::from_mode(0o666))
-        .await
-        .inspect_err(|e| {
-            error!(
-                err = e.to_string(),
-                "Failed to set permissions on the socket"
-            )
-        })?;
+async fn run(path: &'static Path) -> Result<()> {
+    listen(path).await?;
 
-    listen(listener).await?;
     Ok(())
 }
 

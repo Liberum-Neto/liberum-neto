@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::path::PathBuf;
 
 use crate::node;
@@ -22,7 +23,6 @@ use futures::SinkExt;
 use futures::StreamExt;
 use kameo::actor::ActorRef;
 use kameo::request::MessageSend;
-use liberum_core::codec::AsymmetricMessageCodec;
 use liberum_core::node_config::NodeConfig;
 use liberum_core::types::NodeInfo;
 use liberum_core::DaemonError;
@@ -34,10 +34,18 @@ use libp2p::PeerId;
 use tokio::net::UnixListener;
 use tokio_util::codec::Decoder;
 use tokio_util::codec::Framed;
+use tracing::error;
 use tracing::{debug, info, warn};
 
-type SocketFramed =
-    Framed<tokio::net::UnixStream, AsymmetricMessageCodec<DaemonResult, DaemonRequest>>;
+type SocketFramed = Framed<
+    tokio::net::UnixStream,
+    liberum_core::codec::AsymmetricMessageCodec<DaemonResult, DaemonRequest>,
+>;
+
+type SocketFramedJSON = Framed<
+    tokio::net::UnixStream,
+    liberum_core::json_codec::AsymmetricMessageCodec<DaemonResult, DaemonRequest>,
+>;
 
 #[derive(Clone)]
 struct AppContext {
@@ -52,25 +60,97 @@ impl AppContext {
     }
 }
 
-pub async fn listen(listener: UnixListener) -> Result<()> {
-    info!("Server listening on {:?}", listener);
+pub async fn listen(socket_base_path: &'static Path) -> Result<()> {
+    let postcard_handle = tokio::spawn(listen_postcard(socket_base_path));
+    let json_handle = tokio::spawn(listen_json(socket_base_path));
+
+    postcard_handle.await??;
+    json_handle.await??;
+
+    Ok(())
+}
+
+async fn listen_postcard(socket_base_path: &'static Path) -> Result<()> {
+    const POSTCARD_SOCKET_NAME: &'static str = "liberum-core-socket";
+
+    let postcard_socket_path = socket_base_path.join(POSTCARD_SOCKET_NAME);
+    let postcard_listener = UnixListener::bind(&postcard_socket_path)
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to bind the socket"))?;
+
+    info!("Server listening on {:?}", postcard_listener);
+
     let mut id = 0;
     let app_context = AppContext::new(kameo::spawn(NodeStore::with_default_nodes_dir().await?));
+
     loop {
-        let (daemon_socket, _) = listener.accept().await?;
+        let (daemon_socket, _) = postcard_listener.accept().await?;
         let daemon_socket_framed: SocketFramed =
-            AsymmetricMessageCodec::new().framed(daemon_socket);
+            liberum_core::codec::AsymmetricMessageCodec::new().framed(daemon_socket);
+
         tokio::spawn(handle_connection(
             daemon_socket_framed,
             id.clone(),
             app_context.clone(),
         ));
+
+        id = id.wrapping_add(1);
+    }
+}
+
+async fn listen_json(socket_base_path: &'static Path) -> Result<()> {
+    const JSON_SOCKET_NAME: &'static str = "liberum-core-socket-json";
+
+    let json_socket_path = socket_base_path.join(JSON_SOCKET_NAME);
+    let json_listener = UnixListener::bind(&json_socket_path)
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to bind the socket"))?;
+
+    info!("Server listening JSON on {:?}", json_socket_path);
+
+    let mut id = 0;
+    let app_context = AppContext::new(kameo::spawn(NodeStore::with_default_nodes_dir().await?));
+
+    loop {
+        let (daemon_socket, _) = json_listener.accept().await?;
+        let daemon_socket_framed: SocketFramedJSON =
+            liberum_core::json_codec::AsymmetricMessageCodec::new().framed(daemon_socket);
+
+        tokio::spawn(handle_connection_json(
+            daemon_socket_framed,
+            id.clone(),
+            app_context.clone(),
+        ));
+
         id = id.wrapping_add(1);
     }
 }
 
 async fn handle_connection(
     mut daemon_socket_framed: SocketFramed,
+    id: u64,
+    app_context: AppContext,
+) -> Result<()> {
+    loop {
+        tokio::select! {
+            Some(message) = daemon_socket_framed.next() => {
+                debug!("Received: {message:?} at {id}");
+                match message {
+                    Ok(message) => {
+                        let response = handle_message(message, &app_context).await;
+                        daemon_socket_framed.send(response).await?;
+                    },
+                    Err(e) => {warn!(err=e.to_string(), "Error receiving message"); break;}
+                };
+            },
+            else => {
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn handle_connection_json(
+    mut daemon_socket_framed: SocketFramedJSON,
     id: u64,
     app_context: AppContext,
 ) -> Result<()> {

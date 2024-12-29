@@ -1,4 +1,5 @@
 pub mod codec;
+pub mod json_codec;
 pub mod node_config;
 pub mod parser;
 pub mod proto;
