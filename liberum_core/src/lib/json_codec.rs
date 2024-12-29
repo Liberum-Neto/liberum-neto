@@ -1,7 +1,8 @@
 use bytes::{Buf, Bytes, BytesMut};
 use serde::{de::DeserializeOwned, Serialize};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, str::from_utf8};
 use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
+use tracing::debug;
 
 pub struct AsymmetricMessageCodec<U, V> {
     framing_codec: LengthDelimitedCodec,
@@ -34,7 +35,12 @@ where
         let result = self.framing_codec.decode(src)?;
 
         match result {
-            Some(data) => Ok(Some(serde_json::from_reader(data.reader()).unwrap())),
+            Some(data) => {
+                let json_vec = data.to_vec();
+                let json_str = from_utf8(&json_vec).unwrap();
+                debug!(json = json_str, "Received and decoded json");
+                Ok(Some(serde_json::from_reader(data.reader()).unwrap()))
+            }
             None => Ok(None),
         }
     }

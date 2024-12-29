@@ -179,6 +179,50 @@ pub async fn connect(
     Ok((daemon_sender, ui_receiver))
 }
 
+pub async fn connect_json(
+    socket_path: PathBuf,
+) -> Result<(mpsc::Sender<DaemonRequest>, mpsc::Receiver<DaemonResult>)> {
+    let socket = UnixStream::connect(&socket_path).await?;
+    let encoder: json_codec::AsymmetricMessageCodec<DaemonRequest, DaemonResult> =
+        json_codec::AsymmetricMessageCodec::new();
+    let mut daemon_socket = encoder.framed(socket);
+    let (daemon_sender, mut daemon_receiver) = mpsc::channel::<DaemonRequest>(16);
+    let (ui_sender, ui_receiver) = mpsc::channel::<DaemonResult>(16);
+
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                Some(message) = daemon_receiver.recv() => {
+                    match daemon_socket.send(message).await{
+                        Err(e)=> error!(err=e.to_string(),"Failed to send message to daemon"),
+                        Ok(_) => {}
+                    }
+
+                    let resp = match daemon_socket.next().await {
+                        Some(Ok(resp)) => resp,
+                        Some(Err(e)) => {
+                            error!(err=e.to_string(), "Error receiving message");
+                            break;
+                        },
+                        None => {
+                            debug!("Connection closed");
+                            break;
+                        }
+                    };
+
+                    match ui_sender.send(resp).await {
+                        Err(e) => error!(err=e.to_string(), "Failed to send message to UI"),
+                        Ok(_) => {}
+                    }
+                }
+                else => break
+            };
+        }
+    });
+
+    Ok((daemon_sender, ui_receiver))
+}
+
 pub async fn get_file_id(path: &Path) -> Result<libp2p::kad::RecordKey> {
     let file = File::open(path).await?;
     let mut stream = ReaderStream::new(file);

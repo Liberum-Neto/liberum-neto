@@ -194,7 +194,7 @@ struct HandlerContext {
 #[tokio::main]
 async fn main() -> Result<()> {
     let path = Path::new("/tmp/liberum-core/");
-    let conn = liberum_core::connect(path.join("liberum-core-socket")).await;
+    let conn = liberum_core::connect_json(path.join("liberum-core-socket-json")).await;
 
     let (request_sender, response_receiver) = match conn {
         Ok(c) => c,
