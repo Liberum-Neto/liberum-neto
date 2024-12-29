@@ -2,3 +2,5 @@
 target/
 *.svg
 *.png
+.idea/
+FILE_SHARE_SAVED_FILES/
