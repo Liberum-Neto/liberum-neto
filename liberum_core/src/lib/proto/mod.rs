@@ -1,5 +1,6 @@
 pub mod file;
 pub mod group;
+pub mod pins;
 pub mod queries;
 pub mod signed;
 
