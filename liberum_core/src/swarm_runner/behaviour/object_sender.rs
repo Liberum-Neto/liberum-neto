@@ -368,7 +368,7 @@ impl SwarmContext {
     async fn handle_query_delete_object(
         &mut self,
         delete_object: DeleteObjectQuery,
-        id: &proto::Hash,
+        _id: &proto::Hash,
         request: &ObjectSendRequest,
         _request_id: &InboundRequestId,
         response_channel: ResponseChannel<ObjectResponse>,

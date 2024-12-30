@@ -1,3 +1,4 @@
+pub mod pin_object;
 pub mod plain_file_object;
 pub mod signed_object;
 pub mod simple_id_query_object;
