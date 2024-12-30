@@ -1,3 +1,4 @@
+pub mod plain_file_object;
 pub mod signed_object;
 pub mod simple_id_query_object;
 
@@ -11,7 +12,9 @@ use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
     proto::{self, TypedObject},
 };
+use plain_file_object::PlainFileObjectModule;
 use signed_object::SignedObjectModule;
+use simple_id_query_object::SimpleIDQueryModule;
 use uuid::Uuid;
 
 use crate::vault::Vault;
@@ -108,6 +111,14 @@ impl Modules {
 impl Modules {
     pub fn install_default(&mut self, vault: ActorRef<Vault>) {
         // this can only be done without need for more actors (this will need to be in other file)
-        self.install_module(Arc::new(Box::new(SignedObjectModule { vault: vault })));
+        self.install_module(Arc::new(Box::new(SignedObjectModule {
+            vault: vault.clone(),
+        })));
+        self.install_module(Arc::new(Box::new(SimpleIDQueryModule {
+            vault: vault.clone(),
+        })));
+        self.install_module(Arc::new(Box::new(PlainFileObjectModule {
+            vault: vault.clone(),
+        })));
     }
 }
