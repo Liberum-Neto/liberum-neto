@@ -1,6 +1,7 @@
 pub mod behaviour;
 pub mod messages;
 
+use crate::modules::Modules;
 use crate::node::NodeSnapshot;
 use crate::node::{self, Node};
 use crate::vault::Vault;
@@ -42,6 +43,7 @@ struct SwarmContext {
     vault_ref: ActorRef<Vault>,
     node_snapshot: NodeSnapshot,
     behaviour: BehaviourContext,
+    modules: Modules,
 }
 
 /// Prepares the sender to send messages to the swarm
@@ -118,7 +120,9 @@ async fn run_swarm_main(
         vault_ref,
         swarm: swarm,
         behaviour: BehaviourContext::new(),
+        modules: Modules::new(),
     };
+    context.modules.install_default(context.vault_ref.clone());
 
     let swarm_default_addr_ip6 =
         Multiaddr::from_str(DEFAULT_MULTIADDR_STR_IP6).inspect_err(|e| {

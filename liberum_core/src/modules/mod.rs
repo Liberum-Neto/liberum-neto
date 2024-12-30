@@ -22,11 +22,11 @@ use uuid::Uuid;
 use crate::vaultv3::Vaultv3;
 
 pub struct Modules {
-    installed_modules: HashMap<Uuid, Arc<Box<dyn Module>>>,
+    installed_modules: HashMap<Uuid, Arc<Box<dyn Module + Send + Sync>>>,
 }
 
 impl Modules {
-    pub fn install_module(&mut self, module: Arc<Box<dyn Module>>) {
+    pub fn install_module(&mut self, module: Arc<Box<dyn Module + Send + Sync>>) {
         for uuid in module.register_module() {
             self.installed_modules.insert(uuid, module.clone());
         }
