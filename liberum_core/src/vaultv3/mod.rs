@@ -11,9 +11,9 @@ use kameo::Actor;
 use key::Key;
 use liberum_core::parser::parse_typed;
 use liberum_core::parser::ObjectEnum;
-use liberum_core::proto::signed::SignedObject;
 use liberum_core::proto::Hash;
 use liberum_core::proto::TypedObject;
+use liberum_core::types::TypedObjectInfo;
 use rusqlite::params;
 use tokio_rusqlite::Connection;
 use tracing::debug;
@@ -42,13 +42,13 @@ impl Vaultv3 {
     pub async fn store_object(
         &self,
         hash: Hash,
-        object: SignedObject, /* tylko taki obiekt można zapisać w db */
+        object: TypedObject, /* tylko taki obiekt można zapisać w db */
     ) -> Result<bool> /*true if added, false if exist*/ {
         let key: Key = hash.bytes.into();
         self.store_signed_object(key, object).await
     }
     #[message]
-    pub async fn retrive_object(&self, hash: Hash) -> Result<Option<SignedObject>> {
+    pub async fn retrieve_object(&self, hash: Hash) -> Result<Option<TypedObject>> {
         let key: Key = hash.bytes.into();
         self.load_signed_object(key).await
     }
@@ -98,6 +98,11 @@ impl Vaultv3 {
             .iter()
             .map(|key| key.to_hash().unwrap())
             .collect())
+    }
+
+    #[message]
+    pub async fn list_objects(&self) -> Result<Vec<TypedObjectInfo>> {
+        todo!()
     }
 }
 
@@ -170,7 +175,7 @@ impl Vaultv3 {
         Ok(is_success)
     }
 
-    async fn load_signed_object(&self, key: Key) -> Result<Option<SignedObject>> {
+    async fn load_signed_object(&self, key: Key) -> Result<Option<TypedObject>> {
         const SELECT_TYPED_OBJECT_QUERY: &str = "
             SELECT data
             FROM typed_object
@@ -191,17 +196,10 @@ impl Vaultv3 {
             })
             .await
             .map_err(|e| anyhow!(e))?;
-
-        if let ObjectEnum::Signed(signed) =
-            parse_typed(TypedObject::try_from(&db_response)?).await?
-        {
-            Ok(Some(signed))
-        } else {
-            Ok(None)
-        }
+        Ok(Some(TypedObject::try_from(&db_response)?))
     }
 
-    async fn store_signed_object(&self, key: Key, object: SignedObject) -> Result<bool> {
+    async fn store_signed_object(&self, key: Key, object: TypedObject) -> Result<bool> {
         const SELECT_TYPED_OBJECT_QUERY: &str = "SELECT COUNT(*) FROM typed_object WHERE hash = ?1";
         const INSERT_TYPED_OBJECT_QUERY: &str = "INSERT INTO typed_object (hash, data)
              VALUES (?1, ?2)";
@@ -224,9 +222,14 @@ impl Vaultv3 {
             // Already stored, no need to change as objects are immutable
             return Ok(false);
         }
+        let typed: TypedObject;
+        if let ObjectEnum::Signed(signed) = parse_typed(object).await? {
+            typed = signed.into();
+        } else {
+            return Err(anyhow!("Object was not a SignedObject"));
+        }
 
         let key_as_string = key.as_base58();
-        let typed: TypedObject = object.try_into()?;
         let data: Vec<u8> = typed.try_into()?;
 
         self.db

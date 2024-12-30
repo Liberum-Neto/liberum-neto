@@ -29,3 +29,5 @@ impl SignedObject {
         Ok(public.verify(msg.as_slice(), &self.signature.bytes.as_slice()))
     }
 }
+
+impl TypedObject {}

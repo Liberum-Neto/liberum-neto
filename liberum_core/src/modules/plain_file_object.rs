@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use liberum_core::proto::file::PlainFileObject;
 use liberum_core::{
@@ -11,33 +12,36 @@ pub struct PlainFileObjectModule {}
 
 #[async_trait]
 impl Module for PlainFileObjectModule {
-    async fn publish(&self, _object: TypedObject) -> (Option<TypedObject>, Option<Vec<Hash>>) {
-        return (None, None);
+    async fn publish(
+        &self,
+        object: TypedObject,
+    ) -> Result<(Option<TypedObject>, Option<Vec<Hash>>)> {
+        if let ObjectEnum::PlainFile(_obj) = parse_typed(object).await? {
+            return Ok((None, None));
+        }
+        return Err(anyhow!("Error parsing Plain File Object"));
     }
 
-    async fn store(&self, params: ModuleStoreParams) -> ModuleStoreParams {
-        if let ObjectEnum::PlainFile(_obj) = parse_typed(params.object.unwrap()).await.unwrap() {
+    async fn store(&self, params: ModuleStoreParams) -> Result<ModuleStoreParams> {
+        if let ObjectEnum::PlainFile(_obj) = parse_typed(params.object.unwrap()).await? {
             // no action
+            return Ok(ModuleStoreParams {
+                object: None,
+                signed_objects_hashes: params.signed_objects_hashes,
+            });
         }
 
-        ModuleStoreParams {
-            object: None,
-            signed_objects_hashes: params.signed_objects_hashes,
-        }
+        return Err(anyhow!("Error parsing Plain File Object"));
     }
 
-    async fn query(&self, params: ModuleQueryParams) -> ModuleQueryParams {
-        if let ObjectEnum::PlainFile(_obj) = parse_typed(params.object.unwrap()).await.unwrap() {
-            ModuleQueryParams {
+    async fn query(&self, params: ModuleQueryParams) -> Result<ModuleQueryParams> {
+        if let ObjectEnum::PlainFile(_obj) = parse_typed(params.object.unwrap()).await? {
+            return Ok(ModuleQueryParams {
                 matched_object_id: params.matched_object_id,
                 object: None, // improper object in query
-            }
-        } else {
-            ModuleQueryParams {
-                matched_object_id: params.matched_object_id,
-                object: None,
-            }
+            });
         }
+        return Err(anyhow!("Error parsing Plain File Object"));
     }
 
     fn register_module(&self) -> Vec<Uuid> {
