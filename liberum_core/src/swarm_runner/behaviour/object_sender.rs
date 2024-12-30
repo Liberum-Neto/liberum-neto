@@ -1,3 +1,4 @@
+use crate::modules::Modules;
 use anyhow::anyhow;
 use anyhow::Result;
 use liberum_core::parser::{self, ObjectEnum};
