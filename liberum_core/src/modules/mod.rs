@@ -1,4 +1,5 @@
 pub mod signed_object;
+pub mod simple_id_query_object;
 
 use std::{
     collections::{HashMap, HashSet},

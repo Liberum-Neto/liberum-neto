@@ -2,15 +2,15 @@ use async_trait::async_trait;
 use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
     parser::{parse_typed, ObjectEnum},
-    proto::{Hash, SignedObject, SimpleIDQuery, TypedObject},
+    proto::{Hash, SimpleIDQuery, TypedObject},
 };
 use uuid::Uuid;
 
 pub struct SimpleIDQueryModule {}
 
 #[async_trait]
-impl Module for SignedObjectModule {
-    async fn publish(&self, object: TypedObject) -> (Option<TypedObject>, Option<Vec<Hash>>) {
+impl Module for SimpleIDQueryModule {
+    async fn publish(&self, _object: TypedObject) -> (Option<TypedObject>, Option<Vec<Hash>>) {
         return (None, None);
     }
 
@@ -38,5 +38,4 @@ impl Module for SignedObjectModule {
     fn register_module(&self) -> Vec<Uuid> {
         return vec![SimpleIDQuery::UUID];
     }
-
 }
