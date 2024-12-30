@@ -1,7 +1,7 @@
-use crate::vault::{self, Vault};
+use crate::vault::Vault;
 use async_trait::async_trait;
 use kameo::actor::ActorRef;
-use liberum_core::proto::PlainFileObject;
+use liberum_core::proto::file::PlainFileObject;
 use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
     parser::{parse_typed, ObjectEnum},

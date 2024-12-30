@@ -7,7 +7,7 @@ pub mod types;
 
 use libp2p::futures::StreamExt;
 use node_config::NodeConfig;
-use proto::*;
+use proto::{file::PlainFileObject, *};
 use std::path::{Path, PathBuf};
 use tokio::fs::File;
 use tokio::net::UnixStream;

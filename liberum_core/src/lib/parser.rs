@@ -1,3 +1,7 @@
+use crate::proto::file::*;
+use crate::proto::group::*;
+use crate::proto::queries::*;
+use crate::proto::signed::*;
 use crate::proto::*;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
