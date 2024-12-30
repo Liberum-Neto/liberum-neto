@@ -101,10 +101,9 @@ impl Modules {
     }
 }
 
-
-impl Modules{
- fn install_default(&mut self){
-    // this can only be done without need for more actors (this will need to be in other file)
-    self.install_module(Arc::new(Box::new(SignedObjectModule{})));
- }
+impl Modules {
+    pub fn install_default(&mut self) {
+        // this can only be done without need for more actors (this will need to be in other file)
+        self.install_module(Arc::new(Box::new(SignedObjectModule {})));
+    }
 }
