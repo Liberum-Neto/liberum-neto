@@ -7,7 +7,7 @@ use liberum_core::DaemonQueryStats;
 use libp2p::kad::RecordKey;
 
 use crate::swarm_runner::object_sender::ObjectSendRequest;
-use crate::vault;
+use crate::vaultv3;
 
 use super::behaviour::object_sender;
 use super::SwarmContext;
@@ -335,7 +335,7 @@ impl SwarmContext {
                     .stop_providing(&RecordKey::from(obj_id.bytes.to_vec()));
                 let r = self
                     .vault_ref
-                    .ask(vault::DeleteTypedObject { hash: obj_id })
+                    .ask(vaultv3::DeleteObject { hash: obj_id })
                     .await;
                 if let Ok(_) = r {
                     response_sender.send(Ok(())).unwrap();

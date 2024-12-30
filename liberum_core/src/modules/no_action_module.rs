@@ -1,3 +1,4 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
@@ -9,22 +10,25 @@ pub struct NoActionModule {}
 
 #[async_trait]
 impl Module for NoActionModule {
-    async fn publish(&self, _object: TypedObject) -> (Option<TypedObject>, Option<Vec<Hash>>) {
-        return (None, None);
+    async fn publish(
+        &self,
+        _object: TypedObject,
+    ) -> Result<(Option<TypedObject>, Option<Vec<Hash>>)> {
+        return Ok((None, None));
     }
 
-    async fn store(&self, params: ModuleStoreParams) -> ModuleStoreParams {
-        ModuleStoreParams {
+    async fn store(&self, params: ModuleStoreParams) -> Result<ModuleStoreParams> {
+        Ok(ModuleStoreParams {
             object: None,
             signed_objects_hashes: params.signed_objects_hashes,
-        }
+        })
     }
 
-    async fn query(&self, params: ModuleQueryParams) -> ModuleQueryParams {
-        ModuleQueryParams {
+    async fn query(&self, params: ModuleQueryParams) -> Result<ModuleQueryParams> {
+        Ok(ModuleQueryParams {
             matched_object_id: params.matched_object_id,
             object: None,
-        }
+        })
     }
 
     fn register_module(&self) -> Vec<Uuid> {

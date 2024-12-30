@@ -9,6 +9,7 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::{anyhow, Result};
 use kameo::actor::ActorRef;
 use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
@@ -39,12 +40,12 @@ impl Modules {
     }
 
     // in external function you must publish input file in locations specified (get provider results)
-    pub async fn publish(&self, object: TypedObject) -> Vec<proto::Hash> {
+    pub async fn publish(&self, object: TypedObject) -> Result<Vec<proto::Hash>> {
         let mut obj = object;
         let mut publish_places: HashSet<proto::Hash> = HashSet::new();
 
         while let Some(module) = self.installed_modules.get(&obj.get_uuid()) {
-            let (object, places) = module.publish(obj).await;
+            let (object, places) = module.publish(obj).await?;
 
             if let Some(places) = places {
                 for ele in places {
@@ -63,12 +64,12 @@ impl Modules {
         for ele in publish_places {
             vec.push(ele);
         }
-        return vec;
+        return Ok(vec);
     }
 
     // before calling add object to vault
     // if false then remove object from vault
-    pub async fn store(&self, object: TypedObject) -> bool {
+    pub async fn store(&self, object: TypedObject) -> Result<bool> {
         let mut params = ModuleStoreParams {
             object: Some(object),
             signed_objects_hashes: Vec::new(),
@@ -76,37 +77,37 @@ impl Modules {
 
         while let Some(obj) = &params.object {
             if let Some(module) = self.installed_modules.get(&obj.get_uuid()) {
-                params = module.store(params).await;
+                params = module.store(params).await?;
 
                 if params.signed_objects_hashes.len() == 0 {
-                    return false; // first object must be signed
+                    return Err(anyhow!("Object not Signed")); // first object must be signed
                 }
             }
         }
-        true
+        Ok(true)
     }
 
     // map these values into objects from vault
-    pub async fn query(&self, object: TypedObject) -> Vec<proto::Hash> {
+    pub async fn query(&self, object: TypedObject) -> Result<Vec<proto::Hash>> {
         let mut params = ModuleQueryParams {
             matched_object_id: None,
             object: Some(object),
         };
         while let Some(obj) = &params.object {
             if let Some(module) = self.installed_modules.get(&obj.get_uuid()) {
-                params = module.query(params).await;
+                params = module.query(params).await?;
 
                 if let Some(matches) = &params.matched_object_id {
                     if matches.len() == 0 {
-                        return matches.to_vec();
+                        return Ok(matches.to_vec());
                     }
                 }
             }
         }
         if let Some(matches) = params.matched_object_id {
-            return matches;
+            return Ok(matches);
         }
-        return Vec::new();
+        return Ok(vec![]);
     }
 }
 

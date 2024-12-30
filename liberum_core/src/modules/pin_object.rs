@@ -1,4 +1,5 @@
 use crate::vaultv3::{self, Vaultv3};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use kameo::actor::ActorRef;
 use liberum_core::{
@@ -14,15 +15,18 @@ pub struct PinObjectModule {
 
 #[async_trait]
 impl Module for PinObjectModule {
-    async fn publish(&self, object: TypedObject) -> (Option<TypedObject>, Option<Vec<Hash>>) {
-        if let ObjectEnum::Pin(obj) = parse_typed(object).await.unwrap() {
-            return (Some(obj.object), Some(vec![obj.pinned_id]));
+    async fn publish(
+        &self,
+        object: TypedObject,
+    ) -> Result<(Option<TypedObject>, Option<Vec<Hash>>)> {
+        if let ObjectEnum::Pin(obj) = parse_typed(object).await? {
+            return Ok((Some(obj.object), Some(vec![obj.pinned_id])));
         }
-        return (None, None);
+        return Err(anyhow!("Error parsing PinObject"));
     }
 
-    async fn store(&self, params: ModuleStoreParams) -> ModuleStoreParams {
-        if let ObjectEnum::Pin(obj) = parse_typed(params.object.unwrap()).await.unwrap() {
+    async fn store(&self, params: ModuleStoreParams) -> Result<ModuleStoreParams> {
+        if let ObjectEnum::Pin(obj) = parse_typed(params.object.unwrap()).await? {
             let result = self
                 .vault
                 .ask(vaultv3::StorePin {
@@ -33,19 +37,16 @@ impl Module for PinObjectModule {
                 .await;
             result.unwrap();
 
-            return ModuleStoreParams {
+            return Ok(ModuleStoreParams {
                 signed_objects_hashes: params.signed_objects_hashes,
                 object: Some(obj.object),
-            };
+            });
         }
-        return ModuleStoreParams {
-            signed_objects_hashes: vec![],
-            object: None,
-        };
+        return Err(anyhow!("Error parsing PinObject"));
     }
 
-    async fn query(&self, params: ModuleQueryParams) -> ModuleQueryParams {
-        if let ObjectEnum::Pin(obj) = parse_typed(params.object.unwrap()).await.unwrap() {
+    async fn query(&self, params: ModuleQueryParams) -> Result<ModuleQueryParams> {
+        if let ObjectEnum::Pin(obj) = parse_typed(params.object.unwrap()).await? {
             let matching_pins = self
                 .vault
                 .ask(vaultv3::MatchingPins {
@@ -53,19 +54,14 @@ impl Module for PinObjectModule {
                     from_object_hash: Some(obj.pinned_id),
                     relation_object_hash: obj.relation,
                 })
-                .await
-                .unwrap();
+                .await?;
 
-            ModuleQueryParams {
+            return Ok(ModuleQueryParams {
                 matched_object_id: Some(matching_pins),
                 object: Some(obj.object),
-            }
-        } else {
-            ModuleQueryParams {
-                matched_object_id: params.matched_object_id,
-                object: None,
-            }
+            });
         }
+        return Err(anyhow!("Error parsing PinObject"));
     }
 
     fn register_module(&self) -> Vec<Uuid> {

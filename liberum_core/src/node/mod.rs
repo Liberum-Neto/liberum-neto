@@ -2,7 +2,7 @@ pub mod manager;
 pub mod store;
 
 use crate::swarm_runner;
-use crate::vault::{ListTypedObjects, Vault};
+use crate::vaultv3::{ListObjects, Vaultv3};
 use anyhow::{anyhow, Result};
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
@@ -28,7 +28,7 @@ pub struct Node {
     pub keypair: Keypair,
     pub config: NodeConfig,
     pub manager_ref: ActorRef<NodeManager>,
-    pub vault_ref: ActorRef<Vault>,
+    pub vault_ref: ActorRef<Vaultv3>,
     // These fields are mandatory, but may be set only after spawning the node, so unwrapping them should be safe from
     // all of the methods:
     pub self_actor_ref: Option<ActorRef<Self>>,
@@ -411,7 +411,7 @@ impl Node {
 
     #[message]
     pub async fn get_published_objects(&mut self) -> Result<Vec<TypedObjectInfo>> {
-        Ok(self.vault_ref.ask(ListTypedObjects).send().await?)
+        Ok(self.vault_ref.ask(ListObjects {}).send().await?)
     }
 
     #[message]
@@ -569,7 +569,7 @@ pub struct NodeBuilder {
     keypair: Option<Keypair>,
     config: Option<NodeConfig>,
     manager_ref: Option<ActorRef<NodeManager>>,
-    vault_ref: Option<ActorRef<Vault>>,
+    vault_ref: Option<ActorRef<Vaultv3>>,
     self_actor_ref: Option<ActorRef<Node>>,
     swarm_sender: Option<Sender<SwarmRunnerMessage>>,
 }
@@ -609,7 +609,7 @@ impl NodeBuilder {
         self
     }
 
-    pub fn vault_ref(mut self, vault_ref: ActorRef<Vault>) -> Self {
+    pub fn vault_ref(mut self, vault_ref: ActorRef<Vaultv3>) -> Self {
         self.vault_ref = Some(vault_ref);
         self
     }

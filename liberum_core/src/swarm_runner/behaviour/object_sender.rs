@@ -1,4 +1,4 @@
-use crate::modules::Modules;
+use crate::vaultv3;
 use anyhow::anyhow;
 use anyhow::Result;
 use liberum_core::parser::{self, ObjectEnum};
@@ -14,8 +14,6 @@ use libp2p::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 use tracing::{debug, error};
-
-use crate::vault;
 
 use super::super::SwarmContext;
 
@@ -407,7 +405,7 @@ impl SwarmContext {
                         .kademlia
                         .stop_providing(&request.object_id.clone().into());
                     self.vault_ref
-                        .ask(vault::DeleteTypedObject {
+                        .ask(vaultv3::DeleteObject {
                             hash: delete_object.id,
                         })
                         .await
