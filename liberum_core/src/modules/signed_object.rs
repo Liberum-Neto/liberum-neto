@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use kameo::actor::ActorRef;
 use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
     parser::{parse_typed, ObjectEnum},
@@ -6,12 +7,18 @@ use liberum_core::{
 };
 use uuid::Uuid;
 
-pub struct SignedObjectModule {}
+use crate::vault::Vault;
+
+pub struct SignedObjectModule {
+    pub vault: ActorRef<Vault>,
+}
 
 #[async_trait]
 impl Module for SignedObjectModule {
     async fn publish(&self, object: TypedObject) -> (Option<TypedObject>, Option<Vec<Hash>>) {
         if let ObjectEnum::Signed(obj) = parse_typed(object).await.unwrap() {
+            // self.vault.ask() // nie ten vault więc tylko tutaj to zostawie
+
             let typed_object: TypedObject = obj.clone().into();
             let vec_hash = vec![Hash::try_from(&typed_object).unwrap()];
             return (Some(obj.object), Some(vec_hash));
