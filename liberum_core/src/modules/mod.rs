@@ -6,12 +6,15 @@ use std::{
     sync::Arc,
 };
 
+use kameo::actor::ActorRef;
 use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
     proto::{self, TypedObject},
 };
 use signed_object::SignedObjectModule;
 use uuid::Uuid;
+
+use crate::vault::Vault;
 
 pub struct Modules {
     installed_modules: HashMap<Uuid, Arc<Box<dyn Module>>>,
@@ -103,8 +106,8 @@ impl Modules {
 }
 
 impl Modules {
-    pub fn install_default(&mut self) {
+    pub fn install_default(&mut self, vault: ActorRef<Vault>) {
         // this can only be done without need for more actors (this will need to be in other file)
-        self.install_module(Arc::new(Box::new(SignedObjectModule {})));
+        self.install_module(Arc::new(Box::new(SignedObjectModule { vault: vault })));
     }
 }
