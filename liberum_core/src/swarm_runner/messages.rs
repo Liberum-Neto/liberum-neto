@@ -1,6 +1,8 @@
 use liberum_core::proto::{
     self, DeleteObjectQuery, QueryObject, ResultObject, SerializablePublicKey, TypedObject,
 };
+use liberum_core::proto::{self, TypedObject};
+use liberum_core::proto::{queries::*, ResultObject, SerializablePublicKey};
 use liberum_core::DaemonQueryStats;
 use libp2p::kad::RecordKey;
 
@@ -205,8 +207,8 @@ impl SwarmContext {
                     }
                 } else {
                     // Send a request to the peer
-                    let query_obj: TypedObject = proto::QueryObject {
-                        query_object: proto::SimpleIDQuery { id: obj_id.clone() }.into(),
+                    let query_obj: TypedObject = QueryObject {
+                        query_object: SimpleIDQuery { id: obj_id.clone() }.into(),
                     }
                     .into();
                     let query_obj_id = proto::Hash::try_from(&query_obj).unwrap();

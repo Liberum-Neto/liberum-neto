@@ -2,8 +2,8 @@ use anyhow::anyhow;
 use anyhow::Result;
 use liberum_core::parser::{self, ObjectEnum};
 use liberum_core::proto::{
-    self, DeleteObjectQuery, PlainFileObject, QueryObject, ResultObject, SimpleIDQuery,
-    TypedObject, UUIDTyped,
+    self, file::PlainFileObject, queries::*, signed::SignedObject, ResultObject, TypedObject,
+    UUIDTyped,
 };
 use libp2p::identity::PublicKey;
 use libp2p::{
@@ -207,7 +207,7 @@ impl SwarmContext {
 
     async fn handle_request_signed_file(
         &mut self,
-        obj: proto::SignedObject,
+        obj: SignedObject,
         _id: &proto::Hash,
         _request: &ObjectSendRequest,
         _request_id: &InboundRequestId,

@@ -9,8 +9,8 @@ use kameo::messages;
 use kameo::request::MessageSend;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::NodeConfig;
-use liberum_core::proto::{self, SignedObject, TypedObject};
-use liberum_core::proto::{PlainFileObject, ResultObject};
+use liberum_core::proto::{self, signed::SignedObject, TypedObject};
+use liberum_core::proto::{file::PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
 use liberum_core::types::TypedObjectInfo;
 use liberum_core::{parser, DaemonQueryStats, DaemonResponse};
@@ -157,7 +157,7 @@ impl Node {
     pub async fn download_file(
         &mut self,
         obj_id_str: String,
-    ) -> Result<(proto::PlainFileObject, Option<DaemonQueryStats>)> {
+    ) -> Result<(PlainFileObject, Option<DaemonQueryStats>)> {
         let obj_id = proto::Hash::try_from(obj_id_str.as_str())?;
 
         // first get the providers of the file

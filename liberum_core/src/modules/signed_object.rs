@@ -3,7 +3,7 @@ use kameo::actor::ActorRef;
 use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
     parser::{parse_typed, ObjectEnum},
-    proto::{Hash, SignedObject, TypedObject},
+    proto::{signed::SignedObject, Hash, TypedObject},
 };
 use uuid::Uuid;
 
