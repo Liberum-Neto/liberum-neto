@@ -1,5 +1,6 @@
 pub mod kademlia;
 pub mod object_sender;
+pub mod query_sender;
 use anyhow::Result;
 use liberum_core::proto::*;
 use libp2p::request_response::ResponseChannel;
@@ -12,6 +13,7 @@ use libp2p::{
     PeerId,
 };
 use object_sender::*;
+use query_sender::*;
 use tokio::sync::oneshot;
 
 use liberum_core::proto::{self, TypedObject};
@@ -25,6 +27,7 @@ use super::SwarmContext;
 pub struct LiberumNetoBehavior {
     pub kademlia: kad::Behaviour<kad::store::MemoryStore>,
     pub object_sender: request_response::cbor::Behaviour<ObjectSendRequest, ObjectResponse>,
+    pub query_sender: request_response::cbor::Behaviour<QueryRequest, QueryResponse>,
 }
 
 /// Data required to handle events from the behaviours. Mostly
@@ -72,6 +75,9 @@ impl SwarmContext {
             }
             LiberumNetoBehaviorEvent::ObjectSender(e) => {
                 self.handle_object_sender(e).await;
+            }
+            LiberumNetoBehaviorEvent::QuerySender(e) => {
+                self.handle_query_sender(e).await;
             }
         }
     }
