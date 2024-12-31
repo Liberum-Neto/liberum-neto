@@ -1,3 +1,4 @@
+use crate::vaultv3;
 use anyhow::anyhow;
 use anyhow::Result;
 use liberum_core::parser::{self, ObjectEnum};
@@ -142,6 +143,13 @@ impl SwarmContext {
         request_id: InboundRequestId,
         response_channel: ResponseChannel<ObjectResponse>,
     ) {
+        self.vault_ref
+            .ask(vaultv3::StoreObject {
+                hash: id.clone(),
+                object: obj.clone(),
+            })
+            .await
+            .unwrap();
         match self.modules.store(obj).await {
             Err(e) => {
                 error!(
@@ -150,13 +158,22 @@ impl SwarmContext {
                     request_id = request_id.to_string(),
                     "Error storing object"
                 );
-                self.respond_err(&request, response_channel);
             }
-            Ok(_b) => {
-                self.respond_ok(&request, response_channel);
-                // TODO do anything more?
+            Ok(stored) => {
+                if stored == true {
+                    self.start_providing(id.clone());
+                    self.respond_ok(&request, response_channel);
+                    return;
+                } else {
+                    self.vault_ref
+                        .ask(vaultv3::DeleteObject { hash: id })
+                        .await
+                        .unwrap();
+                }
             }
         }
+
+        self.respond_err(&request, response_channel);
     }
     /// Handle a file share response by sending the data to the pending download
     async fn handle_object_sender_response(

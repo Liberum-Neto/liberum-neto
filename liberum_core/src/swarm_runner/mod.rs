@@ -25,6 +25,7 @@ const KAD_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/kad/1.0.0")
 //const FILE_SHARE_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/file-share/1.0.0");
 const OBJECT_SENDER_PROTO_NAME: StreamProtocol =
     StreamProtocol::new("/liberum/object-sender/1.0.0");
+const QUERY_SENDER_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/query-sender/1.0.0");
 const DEFAULT_MULTIADDR_STR_IP6: &str = "/ip6/::/udp/0/quic-v1";
 const DEFAULT_MULTIADDR_STR_IP4: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 
@@ -109,7 +110,7 @@ async fn run_swarm_main(
                 query_sender::QueryRequest,
                 query_sender::QueryResponse,
             >::new(
-                [(OBJECT_SENDER_PROTO_NAME, ProtocolSupport::Full)],
+                [(QUERY_SENDER_PROTO_NAME, ProtocolSupport::Full)],
                 request_response::Config::default().with_request_timeout(Duration::from_secs(10)),
             );
             LiberumNetoBehavior {

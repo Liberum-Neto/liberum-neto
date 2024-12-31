@@ -44,7 +44,7 @@ impl Modules {
         let mut obj = object;
         let mut publish_places: HashSet<proto::Hash> = HashSet::new();
 
-        while let Some(module) = self.installed_modules.get(&obj.get_uuid()) {
+        while let Some(module) = self.installed_modules.get(&obj.uuid) {
             let (object, places) = module.publish(obj).await?;
 
             if let Some(places) = places {
@@ -76,7 +76,7 @@ impl Modules {
         };
 
         while let Some(obj) = &params.object {
-            if let Some(module) = self.installed_modules.get(&obj.get_uuid()) {
+            if let Some(module) = self.installed_modules.get(&obj.uuid) {
                 params = module.store(params).await?;
 
                 if params.signed_objects_hashes.len() == 0 {
@@ -94,7 +94,7 @@ impl Modules {
             object: Some(object),
         };
         while let Some(obj) = &params.object {
-            if let Some(module) = self.installed_modules.get(&obj.get_uuid()) {
+            if let Some(module) = self.installed_modules.get(&obj.uuid) {
                 params = module.query(params).await?;
 
                 if let Some(matches) = &params.matched_object_id {

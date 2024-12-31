@@ -1,4 +1,4 @@
-use crate::vaultv3::{self, StoreObject, Vaultv3};
+use crate::vaultv3::{self, Vaultv3};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use kameo::actor::ActorRef;
@@ -33,31 +33,14 @@ impl Module for SignedObjectModule {
 
         if let ObjectEnum::Signed(obj) = parse_typed(obj).await? {
             let mut hashes = params.signed_objects_hashes;
-            let typed_object: TypedObject = obj.clone().into();
-            let result = self
-                .vault
-                .ask(StoreObject {
-                    hash: hash,
-                    object: obj.clone().into(),
-                })
-                .await
-                .unwrap_or_default();
-            hashes.push(Hash::try_from(&typed_object)?);
-            if result {
-                return Ok(ModuleStoreParams {
-                    object: Some(obj.object),
-                    signed_objects_hashes: hashes,
-                });
-            } else {
-                // skip object exist, no parsing
-                return Ok(ModuleStoreParams {
-                    object: None,
-                    signed_objects_hashes: hashes,
-                });
-            }
-        } else {
-            return Err(anyhow!("Error parsing Signed Object"));
+            hashes.push(hash);
+
+            return Ok(ModuleStoreParams {
+                object: Some(obj.object),
+                signed_objects_hashes: hashes,
+            });
         }
+        return Err(anyhow!("Error parsing Signed Object"));
     }
 
     async fn query(&self, params: ModuleQueryParams) -> Result<ModuleQueryParams> {
@@ -73,7 +56,7 @@ impl Module for SignedObjectModule {
                     {
                         if let ObjectEnum::Signed(signed) = parse_typed(typed).await? {
                             let valid_delete =
-                                signed.verify_ed25519(del.verification_key_ed25519.try_into()?)?;
+                                signed.verify_ed25519(&del.verification_key_ed25519)?;
 
                             if valid_delete {
                                 // TODO: do smt with this
