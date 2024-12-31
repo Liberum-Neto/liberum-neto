@@ -225,7 +225,7 @@ impl Vault {
     #[message]
     async fn store_hash_type_mapping(&self, hash: Hash, type_id: Uuid) -> Result<()> {
         const INSERT_HASH_TYPE_MAPPING_QUERY: &str =
-            "INSERT INTO hash_type_mapping (hash0, hash1, hash2, hash3, type_id)
+            "INSERT OR REPLACE INTO hash_type_mapping (hash0, hash1, hash2, hash3, type_id)
              VALUES (?1, ?2, ?3, ?4, ?5)";
 
         let key_as_i64: [i64; 4] = Key::from(hash.bytes).into();
