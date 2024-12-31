@@ -54,6 +54,8 @@ pub struct BehaviourContext {
         HashMap<kad::QueryId, (proto::Hash, ResponseChannel<ObjectResponse>)>,
     pub pending_outer_delete_object:
         HashMap<OutboundRequestId, oneshot::Sender<Result<ResultObject>>>,
+
+    pub pending_outbound_queries: HashMap<OutboundRequestId, oneshot::Sender<Result<TypedObject>>>,
 }
 
 impl BehaviourContext {
@@ -68,6 +70,7 @@ impl BehaviourContext {
             pending_inner_dial: HashMap::new(),
             pending_inner_get_closest_peers: HashMap::new(),
             pending_outer_delete_object: HashMap::new(),
+            pending_outbound_queries: HashMap::new(),
         }
     }
 }

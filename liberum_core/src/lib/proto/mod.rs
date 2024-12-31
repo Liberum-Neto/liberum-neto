@@ -153,6 +153,7 @@ impl TryInto<libp2p::identity::PublicKey> for SerializablePublicKey {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Signature {
+    pub verifying_key: SerializablePublicKey,
     pub bytes: Vec<u8>,
 }
 

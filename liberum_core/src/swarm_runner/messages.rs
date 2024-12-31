@@ -7,6 +7,7 @@ use liberum_core::DaemonQueryStats;
 use libp2p::kad::RecordKey;
 
 use crate::swarm_runner::object_sender::ObjectSendRequest;
+use crate::swarm_runner::query_sender;
 use crate::vaultv3;
 
 use super::behaviour::object_sender;
@@ -207,21 +208,19 @@ impl SwarmContext {
                     }
                 } else {
                     // Send a request to the peer
-                    let query_obj: TypedObject = QueryObject {
-                        query_object: SimpleIDQuery { id: obj_id.clone() }.into(),
-                    }
-                    .into();
+
+                    let query_obj: TypedObject = SimpleIDQuery { id: obj_id.clone() }.into();
                     let query_obj_id = proto::Hash::try_from(&query_obj).unwrap();
-                    let query_id = self.swarm.behaviour_mut().object_sender.send_request(
+                    let query_id = self.swarm.behaviour_mut().query_sender.send_request(
                         &peer_id,
-                        object_sender::ObjectSendRequest {
+                        query_sender::QueryRequest {
                             object: query_obj,
                             object_id: query_obj_id,
                         },
                     );
 
                     self.behaviour
-                        .pending_inner_get_object
+                        .pending_outbound_queries
                         .insert(query_id, response_sender);
                 }
                 self.print_neighbours();
@@ -349,6 +348,18 @@ impl SwarmContext {
         }
     }
 
+    pub(crate) fn start_providing(&mut self, obj_id: proto::Hash) {
+        let query_id = self
+            .swarm
+            .behaviour_mut()
+            .kademlia
+            .start_providing(obj_id.into())
+            .unwrap();
+        let (send, _) = oneshot::channel();
+        self.behaviour
+            .pending_inner_start_providing
+            .insert(query_id, send);
+    }
     pub(crate) async fn provide_object(
         &mut self,
         object: TypedObject,
@@ -376,9 +387,9 @@ impl SwarmContext {
         }
 
         // Add the file to the providing list TODO VAULT
-        self.behaviour
-            .providing
-            .insert(calculated_obj_id, object.clone());
+        // self.behaviour
+        //     .providing
+        //     .insert(calculated_obj_id, object.clone());
 
         if let Ok(_) = self.put_object_into_vault(object).await {
             // Strat a query to be providing the file ID in kademlia

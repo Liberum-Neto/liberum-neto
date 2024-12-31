@@ -1,4 +1,4 @@
-use super::{Signature, TypedObject, UUIDTyped};
+use super::{SerializablePublicKey, Signature, TypedObject, UUIDTyped};
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use uuid::{uuid, Uuid};
@@ -19,14 +19,18 @@ impl UUIDTyped for SignedObject {
 impl SignedObject {
     pub fn sign_ed25519(object: TypedObject, keypair: libp2p::identity::Keypair) -> Result<Self> {
         let v: Vec<u8> = object.clone().try_into()?;
+        let public = SerializablePublicKey::from(keypair.public());
         let signature = Signature {
+            verifying_key: public,
             bytes: keypair.sign(v.as_slice()).map_err(|e| anyhow!(e))?,
         };
         Ok(Self { object, signature })
     }
-    pub fn verify_ed25519(&self, public: libp2p::identity::PublicKey) -> Result<bool> {
+
+    pub fn verify_ed25519(&self, public: &SerializablePublicKey) -> Result<bool> {
+        let key = libp2p::identity::PublicKey::try_decode_protobuf(&public.key)?;
         let msg: Vec<u8> = self.object.clone().try_into()?;
-        Ok(public.verify(msg.as_slice(), &self.signature.bytes.as_slice()))
+        Ok(key.verify(msg.as_slice(), &self.signature.bytes.as_slice()))
     }
 }
 

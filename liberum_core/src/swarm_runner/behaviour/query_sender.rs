@@ -90,7 +90,7 @@ impl SwarmContext {
         debug!(
             node = self.node_snapshot.name,
             request = format!("{request:?}"),
-            "received object sender request!"
+            "received query request!"
         );
 
         let id: std::result::Result<proto::Hash, anyhow::Error> =
@@ -149,7 +149,7 @@ impl SwarmContext {
                 for id in ids {
                     objects.push(self.get_object_from_vault(id.clone()).await.unwrap());
                 }
-                self.respond_to_query(vec![], response_channel);
+                self.respond_to_query(objects, response_channel);
                 // TODO do anything more?
             }
         }
@@ -166,7 +166,7 @@ impl SwarmContext {
             response = format!("{response:?}"),
             "received object sender response!"
         );
-        if let Some(sender) = self.behaviour.pending_inner_get_object.remove(&request_id) {
+        if let Some(sender) = self.behaviour.pending_outbound_queries.remove(&request_id) {
             if response.objects.len() == 0 {
                 let _ = sender.send(Err(anyhow!("No objects found for query")));
             } else {
@@ -177,7 +177,7 @@ impl SwarmContext {
             .pending_outer_delete_object
             .remove(&request_id)
         {
-            if let Some(_o) = response.objects.get(0) {
+            if response.objects.len() > 0 {
                 let _ = sender.send(Ok(ResultObject { result: Ok(()) }));
             } else {
                 let _ = sender.send(Err(anyhow!("No objects found for query")));
@@ -205,66 +205,4 @@ impl SwarmContext {
             .query_sender
             .send_response(response_channel, response);
     }
-
-    // async fn handle_query_delete_object(
-    //     &mut self,
-    //     delete_object: DeleteObjectQuery,
-    //     _id: &proto::Hash,
-    //     request: &ObjectSendRequest,
-    //     _request_id: &InboundRequestId,
-    //     response_channel: ResponseChannel<ObjectResponse>,
-    // ) -> Option<(TypedObject, ResponseChannel<ObjectResponse>)> {
-    //     let obj = self.get_object_from_vault(delete_object.id.clone()).await;
-    //     if let None = obj {
-    //         debug!(
-    //             node = self.node_snapshot.name,
-    //             obj_id = request.object_id.to_string(),
-    //             "Received Delete Object Query for file not in vault"
-    //         );
-    //         self.respond_err(&request, response_channel);
-    //         return None;
-    //     }
-
-    //     let obj = parser::parse_typed(obj.unwrap()).await.unwrap();
-    //     if let ObjectEnum::Signed(signed) = obj {
-    //         let key = delete_object.verification_key_ed25519.try_into();
-    //         if let Err(e) = key {
-    //             debug!(
-    //                 node = self.node_snapshot.name,
-    //                 err = format!("{e}"),
-    //                 "Query Delete object received invalid key"
-    //             );
-    //             self.respond_err(&request, response_channel);
-    //             return None;
-    //         }
-    //         let request_public_key: PublicKey = key.unwrap();
-
-    //         let verified = signed.verify_ed25519(request_public_key);
-    //         if let Ok(verified) = verified {
-    //             if verified {
-    //                 self.swarm
-    //                     .behaviour_mut()
-    //                     .kademlia
-    //                     .stop_providing(&request.object_id.clone().into());
-    //                 self.vault_ref
-    //                     .ask(vault::DeleteTypedObject {
-    //                         hash: delete_object.id,
-    //                     })
-    //                     .await
-    //                     .ok();
-    //                 self.respond_ok(&request, response_channel);
-    //                 return None;
-    //             } else {
-    //                 self.respond_err(&request, response_channel);
-    //                 return None;
-    //             }
-    //         } else {
-    //             self.respond_err(&request, response_channel);
-    //             return None;
-    //         }
-    //     } else {
-    //         self.respond_err(&request, response_channel);
-    //         return None;
-    //     }
-    // }
 }
