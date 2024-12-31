@@ -105,9 +105,17 @@ async fn run_swarm_main(
                 [(OBJECT_SENDER_PROTO_NAME, ProtocolSupport::Full)],
                 request_response::Config::default().with_request_timeout(Duration::from_secs(10)),
             );
+            let query_sender = request_response::cbor::Behaviour::<
+                query_sender::QueryRequest,
+                query_sender::QueryResponse,
+            >::new(
+                [(OBJECT_SENDER_PROTO_NAME, ProtocolSupport::Full)],
+                request_response::Config::default().with_request_timeout(Duration::from_secs(10)),
+            );
             LiberumNetoBehavior {
                 kademlia,
                 object_sender: obj_sender,
+                query_sender: query_sender,
             }
         })
         .inspect_err(|e| error!(err = e.to_string(), "could not create behavior"))?
