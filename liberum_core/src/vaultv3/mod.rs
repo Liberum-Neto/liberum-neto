@@ -16,7 +16,7 @@ use liberum_core::proto::TypedObject;
 use liberum_core::types::TypedObjectInfo;
 use rusqlite::params;
 use tokio_rusqlite::Connection;
-use tracing::debug;
+use tracing::{debug, error};
 
 pub struct Vaultv3 {
     db: Connection,
@@ -29,7 +29,8 @@ impl Actor for Vaultv3 {
         &mut self,
         _: kameo::actor::ActorRef<Self>,
     ) -> std::result::Result<(), kameo::error::BoxError> {
-        self.prepare_db().await?;
+        let prepare_result = self.prepare_db().await;
+        prepare_result.inspect_err(|e| error!(err = format!("{e}"), "Failed to prepare DB"))?;
 
         Ok(())
     }
@@ -127,9 +128,8 @@ impl Vaultv3 {
     async fn prepare_db(&self) -> Result<()> {
         const CREATE_TYPED_OBJECT_TABLE: &str = "
             CREATE TABLE IF NOT EXISTS typed_object (
-                hash TEXT NOT NULL,
-                data BLOB NOT NULL,
-                PRIMARY KEY hash
+                hash TEXT NOT NULL PRIMARY KEY,
+                data BLOB NOT NULL
             )
         ";
 
@@ -142,7 +142,7 @@ impl Vaultv3 {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 main_object_hash TEXT NOT NULL,
                 from_object_hash TEXT NOT NULL,
-                relation_object_hash TEXT,
+                relation_object_hash TEXT
             );
             CREATE INDEX pin_object_hash_from_idx ON pin_object (hash_from);
             CREATE INDEX pin_object_hash_to_idx ON pin_object (hash_to)
@@ -216,29 +216,37 @@ impl Vaultv3 {
 
                 Ok(cnt)
             })
-            .await?;
+            .await
+            .inspect_err(|e| error!(e = format!("{e}"), "QUERY ERROR"))?;
 
         if cnt != 0 {
             // Already stored, no need to change as objects are immutable
             return Ok(false);
         }
         let typed: TypedObject;
-        if let ObjectEnum::Signed(signed) = parse_typed(object).await? {
+
+        if let ObjectEnum::Signed(signed) = parse_typed(object)
+            .await
+            .inspect_err(|e| error!(err = format!("{e}"), "parse error"))?
+        {
             typed = signed.into();
         } else {
             return Err(anyhow!("Object was not a SignedObject"));
         }
 
         let key_as_string = key.as_base58();
-        let data: Vec<u8> = typed.try_into()?;
+        let data: Vec<u8> = typed
+            .try_into()
+            .inspect_err(|e| error!(err = format!("{e}"), "serialize error"))?;
 
         self.db
             .call(move |conn| {
-                conn.execute(INSERT_TYPED_OBJECT_QUERY, (key_as_string, data))?;
-
+                conn.execute(INSERT_TYPED_OBJECT_QUERY, (key_as_string, data))
+                    .inspect_err(|e| error!(err = format!("{e}"), "STORE ERROR 1"))?;
                 Ok(())
             })
             .await
+            .inspect_err(|e| error!(e = format!("{e}"), "STORE ERROR 2"))
             .map_err(|e| anyhow!(e))?;
         Ok(true)
     }
