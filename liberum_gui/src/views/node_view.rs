@@ -10,6 +10,25 @@ use liberum_core::types::NodeInfo;
 
 use super::{AppView, NodesListView, ViewAction, ViewContext};
 
+#[derive(Clone)]
+struct FileInfo {
+    id: String,
+    path: PathBuf,
+    size: usize,
+    pins: Vec<String>,
+}
+
+#[derive(Clone, Default)]
+struct PeerInfo {
+    id: String,
+    addr: String,
+}
+
+struct DialHistoryEntry {
+    peer: PeerInfo,
+    successful: bool,
+}
+
 pub struct NodeView {
     node_name: String,
     file_to_send_path: Option<PathBuf>,
@@ -18,20 +37,13 @@ pub struct NodeView {
     config_window_opened: bool,
     status_line: String,
     download_window_opened: bool,
-    downloaded_file_id: Option<String>,
-    downloaded_file_path: Option<PathBuf>,
-    downloaded_file_size: Option<usize>,
+    downloaded_file_info: Option<FileInfo>,
     download_destination_dialog: Option<FileDialog>,
     download_destination_path: Option<PathBuf>,
-    downloaded_object_pins: Vec<String>,
-    download_history: Vec<Result<(String, String, usize, Vec<String>)>>,
-    download_details_file_id: Option<String>,
-    download_details_file_path: Option<String>,
-    download_details_file_size: Option<usize>,
-    download_details_pins: Vec<String>,
-    dial_peer_id: String,
-    dial_addr: String,
-    dial_history: Vec<(String, String, bool)>,
+    download_history: Vec<Result<FileInfo>>,
+    download_details_file_info: Option<FileInfo>,
+    dial_peer: PeerInfo,
+    dial_history: Vec<DialHistoryEntry>,
 }
 
 impl NodeView {
@@ -44,19 +56,12 @@ impl NodeView {
             config_window_opened: false,
             status_line: String::new(),
             download_window_opened: false,
-            downloaded_file_id: None,
-            downloaded_file_path: None,
-            downloaded_file_size: None,
+            downloaded_file_info: None,
             download_destination_dialog: None,
             download_destination_path: None,
-            downloaded_object_pins: Vec::new(),
             download_history: Vec::new(),
-            download_details_file_id: None,
-            download_details_file_path: None,
-            download_details_file_size: None,
-            download_details_pins: Vec::new(),
-            dial_peer_id: String::new(),
-            dial_addr: String::new(),
+            download_details_file_info: None,
+            dial_peer: PeerInfo::default(),
             dial_history: Vec::new(),
         }
     }
@@ -195,41 +200,35 @@ impl NodeView {
             .show(ctx.egui_ctx, |ui| {
                 egui::TopBottomPanel::top("dial_controls").show_inside(ui, |ui| {
                     ui.label("PeerID:");
-                    ui.text_edit_singleline(&mut self.dial_peer_id);
+                    ui.text_edit_singleline(&mut self.dial_peer.id);
                     ui.label("Peer address:");
-                    ui.text_edit_singleline(&mut self.dial_addr);
+                    ui.text_edit_singleline(&mut self.dial_peer.addr);
 
                     ui.add_space(10.0);
 
                     if ui.button("Dial").clicked() {
                         match ctx.daemon_com.dial(
                             &self.node_name,
-                            &self.dial_peer_id,
-                            &self.dial_addr,
+                            &self.dial_peer.id,
+                            &self.dial_peer.addr,
                         ) {
                             Ok(_) => {
                                 self.status_line = format!(
                                     "Dial {} @ {} successful!",
-                                    self.dial_peer_id, self.dial_addr
+                                    self.dial_peer.id, self.dial_peer.addr
                                 );
-
-                                self.dial_history.push((
-                                    self.dial_peer_id.clone(),
-                                    self.dial_addr.clone(),
-                                    true,
-                                ));
-
-                                self.dial_peer_id = String::new();
-                                self.dial_addr = String::new();
+                                self.dial_history.push(DialHistoryEntry {
+                                    peer: self.dial_peer.clone(),
+                                    successful: true,
+                                });
+                                self.dial_peer = PeerInfo::default();
                             }
                             Err(e) => {
                                 self.status_line = e.to_string();
-
-                                self.dial_history.push((
-                                    self.dial_peer_id.clone(),
-                                    self.dial_addr.clone(),
-                                    false,
-                                ));
+                                self.dial_history.push(DialHistoryEntry {
+                                    peer: self.dial_peer.clone(),
+                                    successful: false,
+                                });
                             }
                         }
                     }
@@ -247,10 +246,10 @@ impl NodeView {
                             ui.label("Successful?");
                             ui.end_row();
 
-                            for (peer_id, peer_addr, success) in &self.dial_history {
-                                ui.label(peer_id);
-                                ui.label(peer_addr);
-                                ui.label(success.to_string());
+                            for entry in &self.dial_history {
+                                ui.label(&entry.peer.id);
+                                ui.label(&entry.peer.addr);
+                                ui.label(entry.successful.to_string());
                                 ui.end_row();
                             }
                         });
@@ -310,21 +309,37 @@ impl NodeView {
                                             &self.file_to_download_id,
                                         ) {
                                             Ok(data) => {
-                                                self.status_line = "File downloaded".to_string();
-                                                self.downloaded_file_id =
-                                                    Some(self.file_to_download_id.clone());
-                                                self.downloaded_file_path =
-                                                    self.download_destination_path.clone();
-                                                self.downloaded_file_size = Some(data.len());
+                                                let downloaded_file_info = FileInfo {
+                                                    id: self.file_to_download_id.clone(),
+                                                    path: self
+                                                        .download_destination_path
+                                                        .clone()
+                                                        .unwrap(),
+                                                    size: data.len(),
+                                                    pins: vec![
+                                                        bs58::encode(
+                                                            "hello---------------------------",
+                                                        )
+                                                        .into_string(),
+                                                        bs58::encode(
+                                                            "p2p-----------------------------",
+                                                        )
+                                                        .into_string(),
+                                                        bs58::encode(
+                                                            "world---------------------------",
+                                                        )
+                                                        .into_string(),
+                                                    ],
+                                                };
 
-                                                self.download_details_file_id =
-                                                    Some(self.file_to_download_id.clone());
-                                                self.download_details_file_path = self
-                                                    .download_destination_path
-                                                    .clone()
-                                                    .map(|path| path.to_string_lossy().to_string());
-                                                self.download_details_file_size = Some(data.len());
+                                                self.status_line = "File downloaded".to_string();
+                                                self.downloaded_file_info =
+                                                    Some(downloaded_file_info.clone());
+                                                self.download_details_file_info =
+                                                    Some(downloaded_file_info.clone());
                                                 self.download_window_opened = true;
+                                                self.download_history
+                                                    .push(Ok(downloaded_file_info));
 
                                                 match fs::write(dest_path.clone(), data) {
                                                     Ok(_) => {
@@ -335,35 +350,6 @@ impl NodeView {
                                                             format!("File saving failed, err={e}")
                                                     }
                                                 }
-
-                                                // TODO: Placeholder
-                                                self.downloaded_object_pins = vec![
-                                                    bs58::encode(
-                                                        "hello---------------------------",
-                                                    )
-                                                    .into_string(),
-                                                    bs58::encode(
-                                                        "p2p-----------------------------",
-                                                    )
-                                                    .into_string(),
-                                                    bs58::encode(
-                                                        "world---------------------------",
-                                                    )
-                                                    .into_string(),
-                                                ];
-                                                self.download_details_pins =
-                                                    self.downloaded_object_pins.clone();
-
-                                                self.download_history.push(Ok((
-                                                    self.downloaded_file_id.clone().unwrap(),
-                                                    self.downloaded_file_path
-                                                        .clone()
-                                                        .unwrap()
-                                                        .to_string_lossy()
-                                                        .to_string(),
-                                                    self.downloaded_file_size.unwrap(),
-                                                    self.downloaded_object_pins.clone(),
-                                                )));
                                             }
                                             Err(e) => self.status_line = e.to_string(),
                                         }
@@ -399,17 +385,14 @@ impl NodeView {
                             for download in &self.download_history {
                                 match download {
                                     Ok(d) => {
-                                        ui.label(d.0.clone());
-                                        ui.label(d.1.clone());
-                                        ui.label(d.2.to_string());
-                                        ui.label(d.3.len().to_string());
+                                        ui.label(d.id.clone());
+                                        ui.label(d.path.clone().display().to_string());
+                                        ui.label(d.size.to_string());
+                                        ui.label(d.pins.len().to_string());
                                         ui.label("true");
 
                                         if ui.button("Details").clicked() {
-                                            self.download_details_file_id = Some(d.0.clone());
-                                            self.download_details_file_path = Some(d.1.clone());
-                                            self.download_details_file_size = Some(d.2.clone());
-                                            self.download_details_pins = d.3.clone();
+                                            self.download_details_file_info = Some(d.clone());
                                             self.download_window_opened = true;
                                         }
                                     }
@@ -494,39 +477,30 @@ impl NodeView {
         egui::Window::new("Download info")
             .open(&mut self.download_window_opened)
             .show(ctx.egui_ctx, |ui| {
+                let download_details_file_info = match self.download_details_file_info.clone() {
+                    Some(info) => info,
+                    None => return,
+                };
+
                 ui.horizontal(|ui| {
                     ui.colored_label(Color32::from_rgb(0, 100, 200), "Object ID:");
-                    ui.label(
-                        self.download_details_file_id
-                            .clone()
-                            .unwrap_or("?".to_string()),
-                    );
+                    ui.label(download_details_file_info.id.as_str());
                 });
                 ui.horizontal(|ui| {
                     ui.colored_label(Color32::from_rgb(0, 100, 200), "Save path:");
-                    ui.label(
-                        self.download_details_file_path
-                            .clone()
-                            .unwrap_or("?".to_string()),
-                    );
+                    ui.label(&download_details_file_info.path.display().to_string());
                 });
                 ui.horizontal(|ui| {
                     ui.colored_label(Color32::from_rgb(0, 100, 200), "Object size:");
-                    ui.label(
-                        self.download_details_file_size
-                            .clone()
-                            .map(|n| n.to_string())
-                            .unwrap_or("?".to_string()),
-                    );
+                    ui.label(&download_details_file_info.size.to_string());
                 });
-
                 ui.add_space(10.0);
                 ui.colored_label(
                     Color32::from_rgb(0, 200, 100),
                     RichText::heading("Pinned objects:".into()),
                 );
 
-                if !self.downloaded_object_pins.is_empty() {
+                if !download_details_file_info.pins.is_empty() {
                     egui::Grid::new("downloaded_object_pins")
                         .num_columns(1)
                         .striped(true)
@@ -534,7 +508,7 @@ impl NodeView {
                             ui.label("Pinned object ID");
                             ui.end_row();
 
-                            for obj_id in &self.download_details_pins {
+                            for obj_id in &download_details_file_info.pins {
                                 ui.label(obj_id.to_string());
                                 ui.end_row();
                             }
