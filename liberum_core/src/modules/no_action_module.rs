@@ -1,15 +1,14 @@
 use async_trait::async_trait;
 use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
-    parser::{parse_typed, ObjectEnum},
-    proto::{queries::SimpleIDQuery, Hash, TypedObject},
+    proto::{Hash, TypedObject},
 };
 use uuid::Uuid;
 
-pub struct SimpleIDQueryModule {}
+pub struct NoActionModule {}
 
 #[async_trait]
-impl Module for SimpleIDQueryModule {
+impl Module for NoActionModule {
     async fn publish(&self, _object: TypedObject) -> (Option<TypedObject>, Option<Vec<Hash>>) {
         return (None, None);
     }
@@ -22,20 +21,13 @@ impl Module for SimpleIDQueryModule {
     }
 
     async fn query(&self, params: ModuleQueryParams) -> ModuleQueryParams {
-        if let ObjectEnum::SimpleIDQuery(obj) = parse_typed(params.object.unwrap()).await.unwrap() {
-            ModuleQueryParams {
-                matched_object_id: Some(vec![obj.id]),
-                object: None,
-            }
-        } else {
-            ModuleQueryParams {
-                matched_object_id: params.matched_object_id,
-                object: None,
-            }
+        ModuleQueryParams {
+            matched_object_id: params.matched_object_id,
+            object: None,
         }
     }
 
     fn register_module(&self) -> Vec<Uuid> {
-        return vec![SimpleIDQuery::UUID];
+        return vec![];
     }
 }

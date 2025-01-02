@@ -38,6 +38,7 @@ impl Actor for Vaultv3 {
 #[messages]
 impl Vaultv3 {
     // funkcjonalność signedObject
+    #[message]
     pub async fn store_object(
         &self,
         hash: Hash,
@@ -46,13 +47,20 @@ impl Vaultv3 {
         let key: Key = hash.bytes.into();
         self.store_signed_object(key, object).await
     }
-
+    #[message]
     pub async fn retrive_object(&self, hash: Hash) -> Result<Option<SignedObject>> {
         let key: Key = hash.bytes.into();
         self.load_signed_object(key).await
     }
 
+    #[message]
+    pub async fn delete_object(&self, hash: Hash) -> Result<bool> {
+        let key: Key = hash.bytes.into();
+        self.delete_signed_object(key).await
+    }
+
     // funkcjonalność pin'a
+    #[message]
     pub async fn store_pin(
         &self,
         main_object_hash: Hash,
@@ -72,6 +80,7 @@ impl Vaultv3 {
 
     // helper
     // jak main_object_hashes == None return all matches, if Some then return subset of input that matches
+    #[message]
     pub async fn matching_pins(
         &self,
         main_object_hashes: Option<Vec<Hash>>,
@@ -139,6 +148,26 @@ impl Vaultv3 {
             .await?;
 
         Ok(())
+    }
+
+    async fn delete_signed_object(&self, key: Key) -> Result<bool> {
+        const SELECT_TYPED_OBJECT_QUERY: &str = "
+        DELETE * FROM typed_object
+        WHERE hash = ?1
+    ";
+
+        let is_success = self
+            .db
+            .call(move |conn| {
+                let mut stmt = conn.prepare(SELECT_TYPED_OBJECT_QUERY)?;
+                let key_as_string = key.as_base58();
+                let row_affected = stmt.execute(params![key_as_string])?;
+                Ok(row_affected > 0)
+            })
+            .await
+            .map_err(|e| anyhow!(e))?;
+
+        Ok(is_success)
     }
 
     async fn load_signed_object(&self, key: Key) -> Result<Option<SignedObject>> {
