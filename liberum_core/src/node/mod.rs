@@ -135,6 +135,7 @@ impl Node {
         let (resp_send, resp_recv) = oneshot::channel();
 
         let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
+        let object: TypedObject = SignedObject::sign_ed25519(object, self.keypair.clone())?.into();
         let obj_id = proto::Hash::try_from(&object)?;
 
         self.swarm_sender
