@@ -1,3 +1,4 @@
+pub mod no_action_module;
 pub mod pin_object;
 pub mod plain_file_object;
 pub mod signed_object;
@@ -18,7 +19,7 @@ use signed_object::SignedObjectModule;
 use simple_id_query_object::SimpleIDQueryModule;
 use uuid::Uuid;
 
-use crate::vault::Vault;
+use crate::vaultv3::Vaultv3;
 
 pub struct Modules {
     installed_modules: HashMap<Uuid, Arc<Box<dyn Module>>>,
@@ -110,16 +111,12 @@ impl Modules {
 }
 
 impl Modules {
-    pub fn install_default(&mut self, vault: ActorRef<Vault>) {
+    pub fn install_default(&mut self, vault: ActorRef<Vaultv3>) {
         // this can only be done without need for more actors (this will need to be in other file)
         self.install_module(Arc::new(Box::new(SignedObjectModule {
             vault: vault.clone(),
         })));
-        self.install_module(Arc::new(Box::new(SimpleIDQueryModule {
-            vault: vault.clone(),
-        })));
-        self.install_module(Arc::new(Box::new(PlainFileObjectModule {
-            vault: vault.clone(),
-        })));
+        self.install_module(Arc::new(Box::new(SimpleIDQueryModule {})));
+        self.install_module(Arc::new(Box::new(PlainFileObjectModule {})));
     }
 }

@@ -1,6 +1,4 @@
-use crate::vault::Vault;
 use async_trait::async_trait;
-use kameo::actor::ActorRef;
 use liberum_core::proto::file::PlainFileObject;
 use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
@@ -9,9 +7,7 @@ use liberum_core::{
 };
 use uuid::Uuid;
 
-pub struct PlainFileObjectModule {
-    pub vault: ActorRef<Vault>,
-}
+pub struct PlainFileObjectModule {}
 
 #[async_trait]
 impl Module for PlainFileObjectModule {
@@ -21,7 +17,7 @@ impl Module for PlainFileObjectModule {
 
     async fn store(&self, params: ModuleStoreParams) -> ModuleStoreParams {
         if let ObjectEnum::PlainFile(_obj) = parse_typed(params.object.unwrap()).await.unwrap() {
-            // save to vault??
+            // no action
         }
 
         ModuleStoreParams {
@@ -31,10 +27,10 @@ impl Module for PlainFileObjectModule {
     }
 
     async fn query(&self, params: ModuleQueryParams) -> ModuleQueryParams {
-        if let ObjectEnum::Signed(obj) = parse_typed(params.object.unwrap()).await.unwrap() {
+        if let ObjectEnum::PlainFile(_obj) = parse_typed(params.object.unwrap()).await.unwrap() {
             ModuleQueryParams {
                 matched_object_id: params.matched_object_id,
-                object: Some(obj.object),
+                object: None, // improper object in query
             }
         } else {
             ModuleQueryParams {
