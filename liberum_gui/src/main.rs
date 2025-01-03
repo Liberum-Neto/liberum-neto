@@ -1,6 +1,8 @@
+pub mod components;
 pub mod daemon_com;
 pub mod system_observer;
 pub mod views;
+pub mod windows;
 
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
