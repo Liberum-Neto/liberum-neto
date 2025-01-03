@@ -1,14 +1,10 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::PathBuf};
 
 use anyhow::Result;
 use egui::{Align2, Color32, RichText};
 use egui_file::FileDialog;
-use liberum_core::types::NodeInfo;
 
-use crate::windows::{node_config_window::NodeConfigWindow, Window};
+use crate::windows::{node_config_window::NodeConfigWindow, node_window::NodeWindow, Window};
 
 use super::{AppView, NodesListView, ViewAction, ViewContext};
 
@@ -33,10 +29,9 @@ struct DialHistoryEntry {
 
 pub struct NodeView {
     node_name: String,
-    file_to_send_path: Option<PathBuf>,
-    file_to_send_dialog: Option<FileDialog>,
     file_to_download_id: String,
     config_window: NodeConfigWindow,
+    node_window: NodeWindow,
     status_line: String,
     download_window_opened: bool,
     downloaded_file_info: Option<FileInfo>,
@@ -52,10 +47,9 @@ impl NodeView {
     pub fn new(node_name: &str) -> Self {
         Self {
             node_name: node_name.to_string(),
-            file_to_send_path: None,
-            file_to_send_dialog: None,
             file_to_download_id: String::new(),
             config_window: NodeConfigWindow::new(node_name),
+            node_window: NodeWindow::new(node_name),
             status_line: String::new(),
             download_window_opened: false,
             downloaded_file_info: None,
@@ -75,125 +69,15 @@ impl NodeView {
     }
 
     fn show_node_window(&mut self, ctx: &mut ViewContext) {
-        egui::Window::new("Node")
-            .default_pos([32.0, 64.0])
-            .show(ctx.egui_ctx, |ui| {
-                let system_state = ctx.system_state.lock().unwrap();
-                let system_state = (*system_state).clone();
-                let system_state = match system_state {
-                    Some(s) => s,
-                    None => {
-                        ui.heading("Could not get system state");
-                        return;
-                    }
-                };
+        let update = self.node_window.draw(ctx);
 
-                let node_infos = system_state
-                    .node_infos
-                    .into_iter()
-                    .filter(|n| n.name == self.node_name)
-                    .collect::<Vec<NodeInfo>>();
+        if update.config_button_clicked {
+            self.config_window.open();
+        }
 
-                let node_info = match node_infos.first() {
-                    Some(n) => n,
-                    None => {
-                        ui.heading("No node info available");
-                        ui.label("No such node found in the system");
-                        return;
-                    }
-                };
-
-                ui.heading(format!("Node {}", node_info.name));
-
-                ui.horizontal(|ui| {
-                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Name:");
-                    ui.label(&node_info.name);
-                });
-
-                ui.horizontal(|ui| {
-                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Is running:");
-                    ui.label(&node_info.is_running.to_string());
-                });
-
-                ui.horizontal(|ui| {
-                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Addresses:");
-
-                    ui.vertical(|ui| {
-                        for addr in &node_info.config_addresses {
-                            ui.label(addr);
-                        }
-                    });
-
-                    if node_info.config_addresses.is_empty() {
-                        ui.label("No addresses");
-                    }
-                });
-
-                ui.add_space(10.0);
-
-                ui.horizontal(|ui| {
-                    if ui.button("Run").clicked() {
-                        let _ = ctx.daemon_com.run_node(&node_info.name);
-                    }
-
-                    if ui.button("Stop").clicked() {
-                        let _ = ctx.daemon_com.stop_node(&node_info.name);
-                    }
-
-                    if ui.button("Config").clicked() {
-                        self.config_window.open();
-                    }
-                });
-
-                ui.add_space(20.0);
-                ui.heading("Send files");
-
-                let file_selected_text = self
-                    .file_to_send_path
-                    .as_ref()
-                    .map(|path| path.to_str().unwrap_or("Unprintable path"))
-                    .unwrap_or("No file selected");
-
-                ui.horizontal(|ui| {
-                    ui.colored_label(Color32::from_rgb(0, 100, 200), "File selected:");
-                    ui.label(file_selected_text);
-                });
-
-                ui.horizontal(|ui| {
-                    if ui.button("Select file").clicked() {
-                        let filter = Box::new(move |path: &Path| -> bool { path.is_file() });
-                        let mut dialog = FileDialog::open_file(self.file_to_send_path.clone())
-                            .show_files_filter(filter);
-                        dialog.open();
-                        self.file_to_send_dialog = Some(dialog);
-                    }
-
-                    if let Some(dialog) = &mut self.file_to_send_dialog {
-                        if dialog.show(ctx.egui_ctx).selected() {
-                            if let Some(file_path) = dialog.path() {
-                                self.file_to_send_path = Some(file_path.to_path_buf());
-                            }
-                        }
-                    }
-
-                    if ui.button("Publish file").clicked() {
-                        match &self.file_to_send_path {
-                            Some(path) => {
-                                let result = ctx.daemon_com.publish_file(&self.node_name, &path);
-                                match result {
-                                    Ok(id) => self.status_line = format!("File published; id={id}"),
-                                    Err(e) => self.status_line = e.to_string(),
-                                };
-                            }
-                            None => {
-                                self.status_line = "Error: No file selected".to_string();
-                            }
-                        }
-                    }
-                });
-
-                ui.add_space(20.0);
-            });
+        if update.new_status_line.is_some() {
+            self.status_line = update.new_status_line.unwrap();
+        }
     }
 
     fn show_dialer_window(&mut self, ctx: &mut ViewContext) {
