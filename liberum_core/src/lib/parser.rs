@@ -19,6 +19,7 @@ pub enum ObjectEnum {
     Empty(EmptyObject),
     DeleteObject(DeleteObjectQuery),
     SimpleIDQuery(SimpleIDQuery),
+    PinQuery(PinQuery),
     Query(QueryObject),
     Result(ResultObject),
     Pin(PinObject),
@@ -38,6 +39,7 @@ impl UUIDTyped for ObjectEnum {
             ObjectEnum::Query(query_object) => query_object.get_type_uuid(),
             ObjectEnum::Result(result_object) => result_object.get_type_uuid(),
             ObjectEnum::Pin(pin_object) => pin_object.get_type_uuid(),
+            ObjectEnum::PinQuery(pin_query) => pin_query.get_type_uuid(),
         }
     }
 }
@@ -87,6 +89,11 @@ pub async fn parse_typed(object: TypedObject) -> Result<ObjectEnum> {
             debug!("Parser: Got Pin Object: {:?}", object);
             let obj = TypedObject::try_from_typed(&object)?;
             Ok(ObjectEnum::Pin(obj))
+        }
+        PinQuery::UUID => {
+            debug!("Parser: Got Pin Query: {:?}", object);
+            let obj = TypedObject::try_from_typed(&object)?;
+            Ok(ObjectEnum::PinQuery(obj))
         }
         _ => {
             debug!("Parser: Unknown object: {:?}", object);

@@ -48,3 +48,19 @@ impl UUIDTyped for DeleteObjectQuery {
         DeleteObjectQuery::UUID
     }
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PinQuery {
+    pub pinned_id: Option<Hash>,
+    pub relation: Option<Hash>,
+    pub object: TypedObject,
+}
+impl PinQuery {
+    pub const UUID: Uuid = uuid!("01942cf4-6b0b-7c82-aff3-5b5fade8d421");
+}
+
+impl UUIDTyped for PinQuery {
+    fn get_type_uuid(&self) -> Uuid {
+        PinQuery::UUID
+    }
+}

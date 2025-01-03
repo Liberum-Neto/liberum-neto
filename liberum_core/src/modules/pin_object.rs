@@ -5,7 +5,7 @@ use kameo::actor::ActorRef;
 use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
     parser::{parse_typed, ObjectEnum},
-    proto::{pins::PinObject, Hash, TypedObject},
+    proto::{pins::PinObject, queries::PinQuery, Hash, TypedObject},
 };
 use uuid::Uuid;
 
@@ -19,8 +19,28 @@ impl Module for PinObjectModule {
         &self,
         object: TypedObject,
     ) -> Result<(Option<TypedObject>, Option<Vec<Hash>>)> {
-        if let ObjectEnum::Pin(obj) = parse_typed(object).await? {
-            return Ok((Some(obj.object), Some(vec![obj.pinned_id])));
+        match parse_typed(object).await? {
+            ObjectEnum::Pin(obj) => {
+                let locations = if let Some(relation) = obj.relation {
+                    vec![obj.pinned_id, relation]
+                } else {
+                    vec![obj.pinned_id]
+                };
+
+                return Ok((Some(obj.object), Some(locations)));
+            }
+            ObjectEnum::PinQuery(query) => {
+                let mut locations = Vec::with_capacity(2);
+
+                if let Some(relation) = query.relation {
+                    locations.push(relation);
+                }
+                if let Some(pin) = query.pinned_id {
+                    locations.push(pin);
+                }
+                return Ok((Some(query.object), Some(locations)));
+            }
+            _ => (),
         }
         return Err(anyhow!("Error parsing PinObject"));
     }
@@ -46,12 +66,12 @@ impl Module for PinObjectModule {
     }
 
     async fn query(&self, params: ModuleQueryParams) -> Result<ModuleQueryParams> {
-        if let ObjectEnum::Pin(obj) = parse_typed(params.object.unwrap()).await? {
+        if let ObjectEnum::PinQuery(obj) = parse_typed(params.object.unwrap()).await? {
             let matching_pins = self
                 .vault
                 .ask(vaultv3::MatchingPins {
                     main_object_hashes: params.matched_object_id,
-                    from_object_hash: Some(obj.pinned_id),
+                    from_object_hash: obj.pinned_id,
                     relation_object_hash: obj.relation,
                 })
                 .await?;
@@ -66,6 +86,6 @@ impl Module for PinObjectModule {
     }
 
     fn register_module(&self) -> Vec<Uuid> {
-        return vec![PinObject::UUID];
+        return vec![PinObject::UUID, PinQuery::UUID];
     }
 }
