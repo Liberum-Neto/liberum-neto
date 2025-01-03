@@ -26,6 +26,10 @@ impl super::Window<NodeConfigWindowState, ()> for NodeConfigWindow {
         Self { state }
     }
 
+    fn get_state(&self) -> NodeConfigWindowState {
+        self.state.clone()
+    }
+
     fn draw(&mut self, ctx: &mut ViewContext) -> () {
         egui::Window::new("Configuration")
             .open(&mut self.state.is_opened)
