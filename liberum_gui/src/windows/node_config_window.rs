@@ -6,16 +6,27 @@ pub struct NodeConfigWindow {
 
 #[derive(Clone)]
 pub struct NodeConfigWindowState {
-    node_name: String,
-    is_opened: bool,
+    pub node_name: String,
+    pub is_opened: bool,
 }
 
-impl super::Window<NodeConfigWindowState, NodeConfigWindowState> for NodeConfigWindow {
-    fn new(state: NodeConfigWindowState) -> Self {
+impl NodeConfigWindow {
+    pub fn new(node_name: &str) -> Self {
+        Self {
+            state: NodeConfigWindowState {
+                node_name: node_name.to_string(),
+                is_opened: false,
+            },
+        }
+    }
+}
+
+impl super::Window<NodeConfigWindowState, ()> for NodeConfigWindow {
+    fn from_state(state: NodeConfigWindowState) -> Self {
         Self { state }
     }
 
-    fn draw(&mut self, ctx: &mut ViewContext) -> NodeConfigWindowState {
+    fn draw(&mut self, ctx: &mut ViewContext) -> () {
         egui::Window::new("Configuration")
             .open(&mut self.state.is_opened)
             .show(ctx.egui_ctx, |ui| {
@@ -74,8 +85,6 @@ impl super::Window<NodeConfigWindowState, NodeConfigWindowState> for NodeConfigW
                     }
                 };
             });
-
-        self.state.clone()
     }
 
     fn is_opened(&self) -> bool {

@@ -8,6 +8,8 @@ use egui::{Align2, Color32, RichText};
 use egui_file::FileDialog;
 use liberum_core::types::NodeInfo;
 
+use crate::windows::{node_config_window::NodeConfigWindow, Window};
+
 use super::{AppView, NodesListView, ViewAction, ViewContext};
 
 #[derive(Clone)]
@@ -34,7 +36,7 @@ pub struct NodeView {
     file_to_send_path: Option<PathBuf>,
     file_to_send_dialog: Option<FileDialog>,
     file_to_download_id: String,
-    config_window_opened: bool,
+    config_window: NodeConfigWindow,
     status_line: String,
     download_window_opened: bool,
     downloaded_file_info: Option<FileInfo>,
@@ -53,7 +55,7 @@ impl NodeView {
             file_to_send_path: None,
             file_to_send_dialog: None,
             file_to_download_id: String::new(),
-            config_window_opened: false,
+            config_window: NodeConfigWindow::new(node_name),
             status_line: String::new(),
             download_window_opened: false,
             downloaded_file_info: None,
@@ -139,7 +141,7 @@ impl NodeView {
                     }
 
                     if ui.button("Config").clicked() {
-                        self.config_window_opened = true;
+                        self.config_window.open();
                     }
                 });
 
@@ -413,64 +415,7 @@ impl NodeView {
     }
 
     fn show_config_window(&mut self, ctx: &mut ViewContext) {
-        egui::Window::new("Configuration")
-            .open(&mut self.config_window_opened)
-            .show(ctx.egui_ctx, |ui| {
-                let system_state = ctx.system_state.lock().unwrap();
-                let system_state = (*system_state).clone();
-                let system_state = match system_state {
-                    Some(s) => s,
-                    None => {
-                        ui.heading("Could not get system state");
-                        return;
-                    }
-                };
-
-                let node_config = system_state.node_configs.get(&self.node_name);
-
-                match node_config {
-                    Some(cfg) => {
-                        egui::Grid::new("config_grid")
-                            .num_columns(2)
-                            .striped(true)
-                            .show(ui, |ui| {
-                                ui.label("Bootstrap nodes");
-                                ui.vertical(|ui| {
-                                    for b in cfg.bootstrap_nodes.iter() {
-                                        ui.label(format!("{} @ {}", b.id, b.addr));
-                                    }
-
-                                    let mut text = String::new();
-
-                                    ui.horizontal(|ui| {
-                                        let _ = ui.text_edit_singleline(&mut text);
-                                        let _ = ui.button("Add new");
-                                    });
-                                });
-                                ui.end_row();
-                                ui.label("External addresses");
-                                ui.vertical(|ui| {
-                                    for a in cfg.external_addresses.iter() {
-                                        ui.horizontal(|ui| {
-                                            ui.label(a.to_string());
-                                            let _ = ui.button("Remove");
-                                        });
-                                    }
-
-                                    let mut text = String::new();
-
-                                    ui.horizontal(|ui| {
-                                        let _ = ui.text_edit_singleline(&mut text);
-                                        let _ = ui.button("Add new");
-                                    });
-                                });
-                            });
-                    }
-                    None => {
-                        ui.label("Config not found");
-                    }
-                };
-            });
+        self.config_window.draw(ctx);
     }
 
     fn show_download_window(&mut self, ctx: &mut ViewContext) {
