@@ -1,0 +1,180 @@
+syntax = "proto3";
+package test_protocol;
+
+
+// this is handshake, it would be much easier if this was continous or i could call service on client
+service IdentityServer {
+    rpc Identify(Identity) returns (TestScenario);
+    rpc TestReady(NodesCreated) returns (CallableNodes);
+    rpc TestPartake(stream TestPartResult) returns (stream TestPartDescriptor);
+}
+
+message DaemonQueryStats{
+    uint64 QueryDuration_in_nano = 1;
+    uint64 TotalRequest = 2;
+}
+
+
+message Identity {
+    string hostId = 1; 
+}
+
+message CallableNodes {
+    message CallableNode{
+        uint64 NodeId = 1;
+        string NodeHash = 2;
+        optional string NodeAddress = 3;
+    }
+    repeated CallableNode nodes = 1;
+}
+
+message TestScenario{
+    int64 TestInstanceId = 1;
+    repeated TestPartScenario parts = 2;
+    repeated NodeDefinition nodes = 3;
+    repeated FileContent files = 4;
+
+    message NodeDefinition {
+        uint64 NodeId = 1;
+        string Name = 2;
+        enum NodeDefinitionLevel {
+            None = 0;
+            NeedHash = 1;
+            NeedAddress = 2;
+        }
+        NodeDefinitionLevel visibility = 3;
+        optional string Address = 4;
+    }
+
+    message FileContent {
+        bytes Object = 1;
+        string Hash = 2;
+    }
+
+    message TestPartScenario{
+        sint64 PartId  = 2;
+        oneof part{
+            TestPartSimple simple = 1;
+        }
+    
+        message TestPartSimple{
+            repeated Action actions = 1;
+        }
+    }
+}
+
+
+
+
+
+
+
+message Action {
+    uint64 ActionId = 1;
+    uint64 NodeId  = 6;
+    string NodeName = 7;
+    oneof details{
+     DialNode dial = 2;
+     PublishObject publish_object = 3;
+    //  PublishMeta publishMeta = 4; //
+     GetObject get_object = 5;
+     DeleteObject delete_object = 8;
+     PublishMeta publish_meta = 9;
+    }
+
+
+    message DialNode {
+        uint64 DialedNodeId = 1;
+    }
+    message PublishObject {
+        string Hash = 2;
+    }
+    message PublishMeta {
+         oneof meta_type{
+             Tag tag = 1;
+             Link link = 2;
+         }
+         message Tag{
+             uint64 from_hash_id = 1;
+             uint64 to_hash_id = 2;
+         }
+         message Link{
+             uint64 from_hash_id = 1;
+             uint64 via_hash_id = 2;
+             oneof to {
+                 uint64 to_hash_id = 3;
+             }
+         }
+    }
+    message GetObject {
+        uint64 object_hash_id = 1;
+    }
+    message DeleteObject {
+        uint64 object_hash_id  = 1;
+    }
+
+}
+
+
+message NodesCreated{
+    repeated NodeInstance nodes = 1;
+}
+
+message NodeInstance{
+    uint64 NodeId = 1;
+    string NodeName = 4;
+    string NodeHash = 2;
+    optional string NodeAdress = 3;
+}
+
+
+message TestPartDescriptor{
+    uint64 partId = 1;
+    repeated HashIdToHash newHashes = 2;
+    message HashIdToHash{
+        uint64 hash_id = 1;
+        string hash = 2;
+    }
+}
+
+message TestPartResult{
+    repeated ActionResoult resoults = 1;
+}
+
+message ActionResoult{
+    uint64 ActionSourceId = 1;
+    string ActionStartTime = 2;
+    string ActionStopTime = 3;
+    bool IsSuccess = 4;
+    optional string Error = 9;
+
+    oneof details{
+        DialNodeResult dial = 5;
+        PublishObjectResult publish_object = 6;
+        GetObjectResult get_object = 8;
+        DeleteObjectResult delete_object = 10;
+        PublishMetaResult publish_meta = 11;
+       }
+
+    message DialNodeResult {
+    }
+    message PublishObjectResult {
+        string object_hash = 1;
+    }
+    message PublishMetaResult{
+        string object_hash = 1;
+    }
+    message GetObjectResult {
+        optional DaemonQueryStats stats = 1;
+    }
+
+    message DeleteObjectResult{
+        bool deleted_myself = 1;
+        uint64 deleted_count = 2;
+        uint64 failed_count = 3;
+    }
+}
+
+message ACK{
+uint64 Id = 1;
+}

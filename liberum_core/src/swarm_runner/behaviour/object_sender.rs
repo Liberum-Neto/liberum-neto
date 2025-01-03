@@ -368,7 +368,7 @@ impl SwarmContext {
     async fn handle_query_delete_object(
         &mut self,
         delete_object: DeleteObjectQuery,
-        id: &proto::Hash,
+        _request_full_object_id: &proto::Hash,
         request: &ObjectSendRequest,
         _request_id: &InboundRequestId,
         response_channel: ResponseChannel<ObjectResponse>,
@@ -377,7 +377,7 @@ impl SwarmContext {
         if let None = obj {
             debug!(
                 node = self.node_snapshot.name,
-                obj_id = request.object_id.to_string(),
+                obj_id = delete_object.id.to_string(),
                 "Received Delete Object Query for file not in vault"
             );
             self.respond_err(&request, response_channel);
@@ -430,7 +430,7 @@ impl SwarmContext {
     async fn handle_query_simple_id(
         &mut self,
         query: SimpleIDQuery,
-        _id: &proto::Hash,
+        _request_full_object_id: &proto::Hash,
         request: &ObjectSendRequest,
         _request_id: &InboundRequestId,
         response_channel: ResponseChannel<ObjectResponse>,

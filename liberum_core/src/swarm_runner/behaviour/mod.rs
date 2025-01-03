@@ -1,7 +1,7 @@
 pub mod kademlia;
 pub mod object_sender;
 use anyhow::Result;
-use liberum_core::proto::*;
+use liberum_core::{proto::*, DaemonQueryStats};
 use libp2p::request_response::ResponseChannel;
 use std::collections::HashMap;
 
@@ -36,8 +36,13 @@ pub struct BehaviourContext {
     pub pending_inner_start_providing: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
     pub pending_inner_send_object:
         HashMap<OutboundRequestId, oneshot::Sender<Result<ResultObject>>>,
-    pub pending_inner_get_providers:
-        HashMap<kad::QueryId, (Vec<PeerId>, oneshot::Sender<Vec<PeerId>>)>,
+    pub pending_inner_get_providers: HashMap<
+        kad::QueryId,
+        (
+            Vec<PeerId>,
+            oneshot::Sender<(Vec<PeerId>, Option<DaemonQueryStats>)>,
+        ),
+    >,
     pub pending_inner_get_object: HashMap<OutboundRequestId, oneshot::Sender<Result<TypedObject>>>,
     pub pending_inner_dial: HashMap<ConnectionId, oneshot::Sender<Result<()>>>,
     pub pending_inner_get_closest_peers:

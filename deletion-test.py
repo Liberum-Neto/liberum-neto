@@ -21,9 +21,10 @@ def find_free_port():
 
 CORE_BIN = "./target/release/liberum_core"
 CLI_BIN = "./target/release/liberum_cli"
-INIT_COUNT = 20
-NODE_COUNT = 100
-MEASURE_EVERY=10
+INIT_COUNT = 10
+DELETE_COUNT = 20
+NODE_COUNT = 30
+MEASURE_EVERY=1
 DOWNLOAD_EVERY=1
 DOWNLOAD_PERCENT=100
 FILE_NAME = os.path.dirname(os.path.realpath(__file__)) + "/test-file.txt"
@@ -94,6 +95,8 @@ for i in range (1, NODE_COUNT+1) :
     time.sleep(0.02)
     if i == INIT_COUNT:
         FILE_ID=subprocess.run([CLI_BIN, "publish-file", N_NAMES[0], FILE_NAME], stdout=subprocess.PIPE).stdout.decode().strip()
+    if i == DELETE_COUNT:
+        DELETION=subprocess.run([CLI_BIN, "delete-object", N_NAMES[0], FILE_ID], stdout=subprocess.PIPE).stdout.decode().strip()
     if i > INIT_COUNT:
         if i % MEASURE_EVERY == 0:
             results_temp = [i+INIT_COUNT,[]]
@@ -106,10 +109,10 @@ for i in range (1, NODE_COUNT+1) :
                     RESULT=subprocess.run([CLI_BIN, "-d", "download-file", N_NAMES[j], FILE_ID], stdout=subprocess.PIPE).stdout.decode().strip()
                     t = time.time()-t0
                     cmp = FILE_CONTENT == RESULT
-                    results_temp[1].append((j,cmp))
-                    find_tiems_temp[1] += t
                     if not cmp:
                         print(FILE_CONTENT, RESULT)
+                    results_temp[1].append((j,cmp))
+                    find_tiems_temp[1] += t
             if measurements > 0:
                 find_tiems_temp[1] = (find_tiems_temp[1] / measurements) * 1000.0 - AVG_CLI_TIME_NORMALIZATION
                 RESULTS.append(results_temp)
@@ -128,7 +131,7 @@ for x in range(0, len(RESULTS)):
 plt.title("Udane wyszukania, B=" + str(INIT_COUNT) + ", N=" +  str(NODE_COUNT))
 plt.ylabel("Numer węzła")
 plt.xlabel("n - ilość węzłów w sieci")
-plt.savefig('udane-wyszukania_B='+str(INIT_COUNT)+'_N='+str(NODE_COUNT)+".svg")
+plt.savefig('usuwanie-udane-wyszukania_B='+str(INIT_COUNT)+'_N='+str(NODE_COUNT)+".svg", dpi=300)
 plt.show()
 
 failed_counts = []
@@ -145,7 +148,7 @@ plt.plot(X, failed_counts, 'b')
 plt.title("Liczba nieudanch wyszukań, B=" + str(INIT_COUNT) + ", N=" +  str(NODE_COUNT))
 plt.ylabel("Liczba nieudanch wyszukań")
 plt.xlabel("n - ilość węzłów w sieci")
-plt.savefig('nieudane-wyszukania_B='+str(INIT_COUNT)+'_N='+str(NODE_COUNT)+".svg")
+plt.savefig('usuwanie-nieudane-wyszukania_B='+str(INIT_COUNT)+'_N='+str(NODE_COUNT)+".png", dpi=300)
 plt.show()
 
 X = [x[0] for x in FIND_TIMES]
@@ -155,7 +158,7 @@ plt.yscale('log')
 plt.title("Średni czas odnajdywania, B=" + str(INIT_COUNT) + ", N=" +  str(NODE_COUNT))
 plt.ylabel("Czas [ms]")
 plt.xlabel("n - ilość węzłów w sieci")
-plt.savefig('czas-wyszukania_B='+str(INIT_COUNT)+'_N='+str(NODE_COUNT)+".svg")
+plt.savefig('usuwanie-czas-wyszukania_B='+str(INIT_COUNT)+'_N='+str(NODE_COUNT)+".svg", dpi=300)
 plt.show()
 
 
