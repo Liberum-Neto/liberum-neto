@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
 use liberum_core::node_config::NodeConfig;
+use liberum_core::proto;
 use liberum_core::types::NodeInfo;
 use liberum_core::{node_config::BootstrapNode, DaemonError, DaemonRequest, DaemonResponse};
 use libp2p::Multiaddr;
@@ -796,8 +797,10 @@ impl From<&NodeInfo> for NodeInfoRow {
     }
 }
 
-impl From<&String> for TypedObjectInfoRow {
-    fn from(value: &String) -> Self {
-        Self { id: value.clone() }
+impl From<&proto::Hash> for TypedObjectInfoRow {
+    fn from(value: &proto::Hash) -> Self {
+        Self {
+            id: value.to_string(),
+        }
     }
 }
