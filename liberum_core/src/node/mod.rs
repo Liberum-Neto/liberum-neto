@@ -5,14 +5,14 @@ use crate::swarm_runner;
 use crate::vaultv3::{ListObjects, Vaultv3};
 use anyhow::{anyhow, Result};
 use kameo::mailbox::bounded::BoundedMailbox;
-use kameo::messages;
 use kameo::request::MessageSend;
 use kameo::{actor::ActorRef, message::Message, Actor};
+use kameo::{message, messages};
 use liberum_core::node_config::NodeConfig;
 use liberum_core::proto::{self, signed::SignedObject, TypedObject};
 use liberum_core::proto::{file::PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
-use liberum_core::{parser, DaemonQueryStats, DaemonResponse};
+use liberum_core::{DaemonQueryStats, DaemonResponse};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use std::{borrow::Borrow, collections::HashSet, fmt, path::PathBuf, str::FromStr};
@@ -154,10 +154,10 @@ impl Node {
     }
 
     #[message]
-    pub async fn download_file(
+    pub async fn get_object(
         &mut self,
         obj_id_str: String,
-    ) -> Result<(PlainFileObject, Option<DaemonQueryStats>)> {
+    ) -> Result<(TypedObject, Option<DaemonQueryStats>)> {
         let obj_id = proto::Hash::try_from(obj_id_str.as_str())?;
 
         // first get the providers of the file
@@ -248,22 +248,7 @@ impl Node {
                         );
                         continue;
                     }
-
-                    let mut typed = Some(obj);
-                    while let Some(obj) = typed.clone() {
-                        typed = match parser::parse_typed(obj).await {
-                            Ok(parser::ObjectEnum::Signed(signed)) => Some(signed.object),
-                            Ok(parser::ObjectEnum::PlainFile(file)) => return Ok((file, stats)),
-                            Err(e) => {
-                                debug!("{e}");
-                                continue;
-                            }
-                            Ok(_) => {
-                                debug!("Received object was not a file!");
-                                continue;
-                            }
-                        }
-                    }
+                    return Ok((obj, stats));
                 }
             }
         }
@@ -519,6 +504,11 @@ impl Node {
             deleted_count,
             failed_count,
         })
+    }
+
+    #[message]
+    pub async fn get_pinned(&mut self, _obj_id_str: String) -> Result<DaemonResponse> {
+        todo!()
     }
 }
 

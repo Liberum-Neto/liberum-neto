@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
 use liberum_core::node_config::NodeConfig;
+use liberum_core::parser::{parse_typed, ObjectEnum};
 use liberum_core::proto;
 use liberum_core::types::NodeInfo;
 use liberum_core::{node_config::BootstrapNode, DaemonError, DaemonRequest, DaemonResponse};
@@ -530,7 +531,7 @@ async fn handle_download_file(
     req: RequestSender,
     mut res: ReseponseReceiver,
 ) -> Result<()> {
-    req.send(DaemonRequest::DownloadFile {
+    req.send(DaemonRequest::GetObject {
         node_name: cmd.node_name,
         id: cmd.id,
     })
@@ -543,8 +544,28 @@ async fn handle_download_file(
         .ok_or(anyhow!("Daemon returned no response"))?;
 
     match response {
-        Ok(DaemonResponse::FileDownloaded { data, .. }) => {
-            println!("{}", String::from_utf8(data.content)?);
+        Ok(DaemonResponse::ObjectDownloaded { data, stats: _ }) => {
+            let mut typed = Some(data);
+            while let Some(obj) = typed.clone() {
+                typed = match parse_typed(obj).await {
+                    Err(e) => {
+                        debug!("{e}");
+                        continue;
+                    }
+                    Ok(obj_enum) => match obj_enum {
+                        ObjectEnum::Signed(signed) => Some(signed.object),
+                        ObjectEnum::PlainFile(file) => {
+                            println!("{}", String::from_utf8(file.content)?);
+                            return Ok(());
+                        }
+                        _ => {
+                            debug!("Received object was not a file!");
+                            bail!("Received unsupported object type");
+                        }
+                    },
+                }
+            }
+            bail!("Didn't receive a supported object type in the object cascade");
         }
         Err(DaemonError::Other(_)) => {
             println!("Failed to download file");

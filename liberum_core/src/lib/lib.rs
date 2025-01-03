@@ -7,7 +7,6 @@ pub mod types;
 
 use libp2p::futures::StreamExt;
 use node_config::NodeConfig;
-use proto::file::PlainFileObject;
 use proto::*;
 use std::{
     path::{Path, PathBuf},
@@ -56,7 +55,7 @@ pub enum DaemonRequest {
         node_name: String,
         path: PathBuf,
     },
-    DownloadFile {
+    GetObject {
         node_name: String,
         id: String,
     },
@@ -111,8 +110,8 @@ pub enum DaemonResponse {
         ids: Vec<String>,
         stats: Option<DaemonQueryStats>,
     },
-    FileDownloaded {
-        data: PlainFileObject,
+    ObjectDownloaded {
+        data: TypedObject,
         stats: Option<DaemonQueryStats>,
     }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
     PeerId {
@@ -130,6 +129,9 @@ pub enum DaemonResponse {
         deleted_count: u32,
         failed_count: u32,
     },
+    // PinnedObjects {
+    //     objects: Vec<TypedObject>
+    // }
 }
 
 /// Errors that can be returned by the daemon

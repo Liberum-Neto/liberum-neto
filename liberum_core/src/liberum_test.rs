@@ -189,16 +189,14 @@ async fn handle_simple_action(
                         path: PathBuf::from(publish_object.hash.to_string()),
                     }
                 }
-                test_protocol::action::Details::GetObject(get_object) => {
-                    DaemonRequest::DownloadFile {
-                        node_name: action.node_name,
-                        id: ctx
-                            .hash_map
-                            .get(&get_object.object_hash_id)
-                            .unwrap()
-                            .clone(),
-                    }
-                }
+                test_protocol::action::Details::GetObject(get_object) => DaemonRequest::GetObject {
+                    node_name: action.node_name,
+                    id: ctx
+                        .hash_map
+                        .get(&get_object.object_hash_id)
+                        .unwrap()
+                        .clone(),
+                },
                 test_protocol::action::Details::DeleteObject(delete_object) => {
                     DaemonRequest::DeleteObject {
                         node_name: action.node_name,
@@ -219,7 +217,7 @@ async fn handle_simple_action(
                 Ok(response) => {
                     result.is_success = true;
                     result.details = Some(match response {
-                        DaemonResponse::FileDownloaded { data: _, stats } => {
+                        DaemonResponse::ObjectDownloaded { data: _, stats } => {
                             if let Some(stats) = stats {
                                 test_protocol::action_resoult::Details::GetObject(GetObjectResult {
                                     stats: Some(DaemonQueryStats {
