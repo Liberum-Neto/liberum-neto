@@ -35,7 +35,6 @@ pub struct LiberumNetoBehavior {
 pub struct BehaviourContext {
     /// A hashmap of resources that are provided by the node. Should be replaced with
     /// an implementation of VAULT
-    pub providing: HashMap<proto::Hash, TypedObject>, // TODO VAULT sHOULD REPLACE THIS
     pub pending_inner_start_providing: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
     pub pending_inner_send_object:
         HashMap<OutboundRequestId, oneshot::Sender<Result<ResultObject>>>,
@@ -61,7 +60,6 @@ pub struct BehaviourContext {
 impl BehaviourContext {
     pub fn new() -> Self {
         BehaviourContext {
-            providing: HashMap::new(),
             pending_inner_start_providing: HashMap::new(),
             pending_outer_start_providing: HashMap::new(),
             pending_inner_send_object: HashMap::new(),

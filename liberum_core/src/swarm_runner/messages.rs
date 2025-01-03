@@ -19,8 +19,8 @@ use libp2p::PeerId;
 use libp2p::{kad, Multiaddr};
 use std::collections::hash_map;
 use tokio::sync::oneshot;
+use tracing::debug;
 use tracing::error;
-use tracing::{debug, info};
 pub enum SwarmRunnerError {}
 
 ///! The module contains messages that can be sent to the SwarmRunner
@@ -377,14 +377,6 @@ impl SwarmContext {
             return;
         }
         let obj_id_kad = kad::RecordKey::new(&calculated_obj_id.bytes);
-        if self.behaviour.providing.contains_key(&calculated_obj_id) {
-            info!(
-                node = self.node_snapshot.name,
-                obj_id = obj_id.to_string(),
-                "File is already being provided"
-            );
-            return;
-        }
 
         // Add the file to the providing list TODO VAULT
         // self.behaviour
