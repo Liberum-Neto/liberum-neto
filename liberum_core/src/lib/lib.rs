@@ -14,7 +14,7 @@ use tokio::net::UnixStream;
 use tokio::sync::mpsc;
 use tokio_util::io::ReaderStream;
 use tracing::{debug, error};
-use types::{NodeInfo, TypedObjectInfo};
+use types::NodeInfo;
 
 use anyhow::Result;
 use codec::AsymmetricMessageCodec;
@@ -111,7 +111,7 @@ pub enum DaemonResponse {
         id: String,
     },
     PublishedObjectsList {
-        object_infos: Vec<TypedObjectInfo>,
+        object_infos: Vec<String>,
     },
     ObjectDeleted {
         deleted_myself: bool,

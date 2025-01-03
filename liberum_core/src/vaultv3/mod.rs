@@ -13,7 +13,6 @@ use liberum_core::parser::parse_typed;
 use liberum_core::parser::ObjectEnum;
 use liberum_core::proto::Hash;
 use liberum_core::proto::TypedObject;
-use liberum_core::types::TypedObjectInfo;
 use rusqlite::params;
 use tokio_rusqlite::Connection;
 use tracing::{debug, error};
@@ -102,8 +101,33 @@ impl Vaultv3 {
     }
 
     #[message]
-    pub async fn list_objects(&self) -> Result<Vec<TypedObjectInfo>> {
-        todo!()
+    pub async fn list_objects(&self) -> Result<Vec<Hash>> {
+        const SELECT_OBJECTS_QUERY: &str = "
+        SELECT hash
+        FROM typed_object;
+    ";
+
+        let object_infos = self
+            .db
+            .call(|conn| {
+                let mut stmt = conn.prepare(SELECT_OBJECTS_QUERY)?;
+                let rows = stmt.query_map([], |row| {
+                    let key_str: String = row.get(0)?;
+                    let key = Hash::try_from(key_str.as_str())
+                        .expect(format!("Invalid Hash in database: {key_str}").as_str());
+                    Ok(key)
+                })?;
+
+                let mut objects = Vec::new();
+                for obj in rows {
+                    objects.push(obj?);
+                }
+
+                Ok(objects)
+            })
+            .await?;
+
+        Ok(object_infos)
     }
 }
 

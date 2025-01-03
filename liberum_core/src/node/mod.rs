@@ -12,7 +12,6 @@ use liberum_core::node_config::NodeConfig;
 use liberum_core::proto::{self, signed::SignedObject, TypedObject};
 use liberum_core::proto::{file::PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
-use liberum_core::types::TypedObjectInfo;
 use liberum_core::{parser, DaemonResponse};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
@@ -406,7 +405,7 @@ impl Node {
     }
 
     #[message]
-    pub async fn get_published_objects(&mut self) -> Result<Vec<TypedObjectInfo>> {
+    pub async fn get_published_objects(&mut self) -> Result<Vec<proto::Hash>> {
         Ok(self.vault_ref.ask(ListObjects {}).send().await?)
     }
 

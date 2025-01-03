@@ -451,7 +451,7 @@ async fn handle_get_published_objects(node_name: String, context: &AppContext) -
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to get published objects list"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
-
+    let object_infos = object_infos.into_iter().map(|id| id.to_string()).collect();
     DaemonResult::Ok(DaemonResponse::PublishedObjectsList { object_infos })
 }
 
