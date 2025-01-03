@@ -39,6 +39,7 @@ impl Module for PlainFileObjectModule {
             return Ok(ModuleQueryParams {
                 matched_object_id: params.matched_object_id,
                 object: None, // improper object in query
+                return_objects: params.return_objects,
             });
         }
         return Err(anyhow!("Error parsing Plain File Object"));

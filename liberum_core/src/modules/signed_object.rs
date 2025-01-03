@@ -5,7 +5,7 @@ use kameo::actor::ActorRef;
 use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
     parser::{parse_typed, ObjectEnum},
-    proto::{signed::SignedObject, Hash, TypedObject},
+    proto::{signed::SignedObject, Hash, ResultObject, TypedObject},
 };
 use uuid::Uuid;
 
@@ -45,8 +45,20 @@ impl Module for SignedObjectModule {
 
     async fn query(&self, params: ModuleQueryParams) -> Result<ModuleQueryParams> {
         if let ObjectEnum::Signed(obj) = parse_typed(params.object.unwrap()).await? {
-            match parse_typed(obj.object).await? {
+            match parse_typed(obj.object.clone()).await? {
                 ObjectEnum::DeleteObject(del) => {
+                    let valid_query = obj.verify_ed25519(&del.verification_key_ed25519)?;
+                    if !valid_query {
+                        // Invalid query, Signature does not match, don't delete
+                        let mut return_objects = params.return_objects;
+                        return_objects.push(ResultObject { result: Err(()) }.into());
+                        return Ok(ModuleQueryParams {
+                            matched_object_id: params.matched_object_id,
+                            object: None,
+                            return_objects,
+                        });
+                    }
+
                     if let Some(typed) = self
                         .vault
                         .ask(vaultv3::RetrieveObject {
@@ -55,24 +67,39 @@ impl Module for SignedObjectModule {
                         .await?
                     {
                         if let ObjectEnum::Signed(signed) = parse_typed(typed).await? {
-                            let valid_delete =
+                            let delete_verified =
                                 signed.verify_ed25519(&del.verification_key_ed25519)?;
 
-                            if valid_delete {
+                            if delete_verified {
                                 // TODO: do smt with this
                                 let _is_success = __self
                                     .vault
                                     .ask(vaultv3::DeleteObject { hash: del.id })
                                     .await?;
+
+                                let mut return_objects = params.return_objects;
+                                return_objects.push(ResultObject { result: Ok(()) }.into());
+                                return Ok(ModuleQueryParams {
+                                    matched_object_id: params.matched_object_id,
+                                    object: None,
+                                    return_objects,
+                                });
                             }
                         }
                     }
                 }
-                _ => {}
+                _ => {
+                    return Err(anyhow!(
+                        "Signed Object in a Query has to have a DeleteObject inside."
+                    ));
+                }
             }
+            let mut return_objects = params.return_objects;
+            return_objects.push(ResultObject { result: Err(()) }.into());
             return Ok(ModuleQueryParams {
                 matched_object_id: params.matched_object_id,
                 object: None,
+                return_objects,
             });
         } else {
             return Err(anyhow!("Error parsing Signed Object"));

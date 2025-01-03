@@ -326,10 +326,18 @@ impl SwarmContext {
                 hash: obj_id.clone(),
             })
             .send()
-            .await
-            .unwrap();
+            .await;
+        if let Err(e) = obj {
+            warn!(
+                id = obj_id.to_string(),
+                err = format!("{e}"),
+                "Object not found in vault"
+            );
+            self.stop_providing(obj_id);
+            return None;
+        }
 
-        obj
+        obj.unwrap()
     }
 
     pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {

@@ -59,6 +59,7 @@ impl Module for PinObjectModule {
             return Ok(ModuleQueryParams {
                 matched_object_id: Some(matching_pins),
                 object: Some(obj.object),
+                return_objects: params.return_objects,
             });
         }
         return Err(anyhow!("Error parsing PinObject"));

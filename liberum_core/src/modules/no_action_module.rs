@@ -28,6 +28,7 @@ impl Module for NoActionModule {
         Ok(ModuleQueryParams {
             matched_object_id: params.matched_object_id,
             object: None,
+            return_objects: params.return_objects,
         })
     }
 

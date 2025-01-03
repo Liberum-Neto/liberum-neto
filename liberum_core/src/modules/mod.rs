@@ -88,10 +88,11 @@ impl Modules {
     }
 
     // map these values into objects from vault
-    pub async fn query(&self, object: TypedObject) -> Result<Vec<proto::Hash>> {
+    pub async fn query(&self, object: TypedObject) -> Result<(Vec<proto::Hash>, Vec<TypedObject>)> {
         let mut params = ModuleQueryParams {
             matched_object_id: None,
             object: Some(object),
+            return_objects: vec![],
         };
         while let Some(obj) = &params.object {
             if let Some(module) = self.installed_modules.get(&obj.uuid) {
@@ -99,15 +100,15 @@ impl Modules {
 
                 if let Some(matches) = &params.matched_object_id {
                     if matches.len() == 0 {
-                        return Ok(matches.to_vec());
+                        return Ok((matches.to_vec(), params.return_objects));
                     }
                 }
             }
         }
         if let Some(matches) = params.matched_object_id {
-            return Ok(matches);
+            return Ok((matches, params.return_objects));
         }
-        return Ok(vec![]);
+        return Ok((vec![], params.return_objects));
     }
 }
 

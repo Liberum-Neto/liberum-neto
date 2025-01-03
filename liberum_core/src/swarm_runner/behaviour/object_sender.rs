@@ -69,11 +69,9 @@ impl SwarmContext {
                     err = format!("{error}"),
                     "Outbound failure"
                 );
-                if let Some(sender) = self.behaviour.pending_inner_get_object.remove(&request_id) {
-                    let _ = sender.send(Err(anyhow!("Outbound failure").context(error)));
-                } else if let Some(sender) = self
+                if let Some(sender) = self
                     .behaviour
-                    .pending_outer_delete_object
+                    .pending_outbound_send_object
                     .remove(&request_id)
                 {
                     let _ = sender.send(Err(anyhow!("Outbound failure").context(error)));
@@ -186,13 +184,9 @@ impl SwarmContext {
             response = format!("{response:?}"),
             "received object sender response!"
         );
-        if let Some(sender) = self.behaviour.pending_inner_get_object.remove(&request_id) {
-            let _ = sender.send(Ok(response.object));
-        } else if let Some(sender) = self.behaviour.pending_inner_send_object.remove(&request_id) {
-            self.send_result_object(response.object, sender).await;
-        } else if let Some(sender) = self
+        if let Some(sender) = self
             .behaviour
-            .pending_outer_delete_object
+            .pending_outbound_send_object
             .remove(&request_id)
         {
             self.send_result_object(response.object, sender).await;

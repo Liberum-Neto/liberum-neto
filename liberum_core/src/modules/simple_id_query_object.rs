@@ -36,6 +36,7 @@ impl Module for SimpleIDQueryModule {
             return Ok(ModuleQueryParams {
                 matched_object_id: Some(vec![obj.id]),
                 object: None,
+                return_objects: params.return_objects,
             });
         }
         return Err(anyhow!("Error parsing Simple ID Query"));

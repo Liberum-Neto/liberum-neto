@@ -1,16 +1,17 @@
 use liberum_core::proto::{
-    self, DeleteObjectQuery, QueryObject, ResultObject, SerializablePublicKey, TypedObject,
+    self, signed::SignedObject, DeleteObjectQuery, QueryObject, ResultObject,
+    SerializablePublicKey, TypedObject,
 };
 use liberum_core::proto::{self, TypedObject};
 use liberum_core::proto::{queries::*, ResultObject, SerializablePublicKey};
 use liberum_core::DaemonQueryStats;
 use libp2p::kad::RecordKey;
 
-use crate::swarm_runner::object_sender::ObjectSendRequest;
 use crate::swarm_runner::query_sender;
 use crate::vaultv3;
 
 use super::behaviour::object_sender;
+use super::query_sender::QueryRequest;
 use super::SwarmContext;
 use anyhow::anyhow;
 use anyhow::Result;
@@ -273,7 +274,7 @@ impl SwarmContext {
                 );
 
                 self.behaviour
-                    .pending_inner_send_object
+                    .pending_outbound_send_object
                     .insert(request_id, response_sender);
                 Ok(false)
             }
@@ -298,28 +299,29 @@ impl SwarmContext {
                 response_sender,
             } => {
                 let key: SerializablePublicKey = self.node_snapshot.keypair.public().into();
-                let delete_query = DeleteObjectQuery {
+                let delete_query: TypedObject = DeleteObjectQuery {
                     id: obj_id,
                     verification_key_ed25519: key,
-                };
-                let obj: TypedObject = QueryObject {
-                    query_object: delete_query.into(),
                 }
                 .into();
-                let query_id = proto::Hash::try_from(&obj)?;
 
-                let request = ObjectSendRequest {
-                    object: obj,
+                let query_obj: TypedObject =
+                    SignedObject::sign_ed25519(delete_query, self.node_snapshot.keypair.clone())?
+                        .into();
+
+                let query_id = proto::Hash::try_from(&query_obj)?;
+                let request = QueryRequest {
+                    object: query_obj,
                     object_id: query_id,
                 };
 
                 let qid = self
                     .swarm
                     .behaviour_mut()
-                    .object_sender
+                    .query_sender
                     .send_request(&peer, request);
                 self.behaviour
-                    .pending_outer_delete_object
+                    .pending_outbound_delete_object
                     .insert(qid, response_sender);
                 Ok(false)
             }
@@ -360,6 +362,14 @@ impl SwarmContext {
             .pending_inner_start_providing
             .insert(query_id, send);
     }
+
+    pub(crate) fn stop_providing(&mut self, obj_id: proto::Hash) {
+        self.swarm
+            .behaviour_mut()
+            .kademlia
+            .stop_providing(&obj_id.into());
+    }
+
     pub(crate) async fn provide_object(
         &mut self,
         object: TypedObject,

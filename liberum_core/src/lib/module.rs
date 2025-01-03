@@ -13,6 +13,7 @@ pub struct ModuleQueryParams {
     // if none then from all match with filter
     // if some then return subset of matched before
     pub matched_object_id: Option<Vec<Hash>>,
+    pub return_objects: Vec<TypedObject>,
 }
 
 #[async_trait]

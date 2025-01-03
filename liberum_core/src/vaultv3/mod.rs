@@ -181,7 +181,7 @@ impl Vaultv3 {
 
     async fn delete_signed_object(&self, key: Key) -> Result<bool> {
         const SELECT_TYPED_OBJECT_QUERY: &str = "
-        DELETE * FROM typed_object
+        DELETE FROM typed_object
         WHERE hash = ?1
     ";
 

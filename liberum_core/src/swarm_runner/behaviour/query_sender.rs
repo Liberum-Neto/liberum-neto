@@ -60,11 +60,11 @@ impl SwarmContext {
                     err = format!("{error}"),
                     "Outbound failure"
                 );
-                if let Some(sender) = self.behaviour.pending_inner_get_object.remove(&request_id) {
+                if let Some(sender) = self.behaviour.pending_outbound_queries.remove(&request_id) {
                     let _ = sender.send(Err(anyhow!("Outbound failure").context(error)));
                 } else if let Some(sender) = self
                     .behaviour
-                    .pending_outer_delete_object
+                    .pending_outbound_delete_object
                     .remove(&request_id)
                 {
                     let _ = sender.send(Err(anyhow!("Outbound failure").context(error)));
@@ -144,12 +144,16 @@ impl SwarmContext {
                 );
                 self.respond_to_query(vec![], response_channel);
             }
-            Ok(ids) => {
+            Ok((ids, mut return_objects)) => {
                 let mut objects: Vec<TypedObject> = Vec::new();
                 for id in ids {
-                    objects.push(self.get_object_from_vault(id.clone()).await.unwrap());
+                    let obj = self.get_object_from_vault(id.clone()).await;
+                    if let Some(obj) = obj {
+                        objects.push(obj);
+                    }
                 }
-                self.respond_to_query(objects, response_channel);
+                return_objects.extend(objects);
+                self.respond_to_query(return_objects, response_channel);
                 // TODO do anything more?
             }
         }
@@ -174,7 +178,7 @@ impl SwarmContext {
             }
         } else if let Some(sender) = self
             .behaviour
-            .pending_outer_delete_object
+            .pending_outbound_delete_object
             .remove(&request_id)
         {
             if response.objects.len() > 0 {
