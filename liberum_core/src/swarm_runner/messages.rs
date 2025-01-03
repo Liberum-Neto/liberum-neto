@@ -1,9 +1,7 @@
 use liberum_core::proto::{
-    self, signed::SignedObject, DeleteObjectQuery, QueryObject, ResultObject,
-    SerializablePublicKey, TypedObject,
+    self, queries::*, signed::SignedObject, ResultObject, SerializablePublicKey, TypedObject,
 };
-use liberum_core::proto::{self, TypedObject};
-use liberum_core::proto::{queries::*, ResultObject, SerializablePublicKey};
+
 use liberum_core::DaemonQueryStats;
 use libp2p::kad::RecordKey;
 

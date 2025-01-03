@@ -31,7 +31,9 @@ pub mod connection;
 pub mod node;
 pub mod swarm_runner;
 pub mod test_runner;
-pub mod vault;
+// pub mod vault;
+pub mod modules;
+pub mod vaultv3;
 
 pub mod test_protocol {
     tonic::include_proto!("test_protocol");
@@ -207,7 +209,7 @@ async fn handle_simple_action(
                             .clone(),
                     }
                 }
-                test_protocol::action::Details::PublishMeta(publish_meta) => todo!(),
+                test_protocol::action::Details::PublishMeta(_publish_meta) => todo!(),
             };
 
             let daemon_request = daemon_request(request, ctx.app_context.clone()).await;

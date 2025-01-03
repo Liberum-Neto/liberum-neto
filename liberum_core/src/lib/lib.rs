@@ -7,8 +7,8 @@ pub mod types;
 
 use libp2p::futures::StreamExt;
 use node_config::NodeConfig;
+use proto::file::PlainFileObject;
 use proto::*;
-use proto::{file::PlainFileObject, *};
 use std::{
     path::{Path, PathBuf},
     time::Duration,
