@@ -25,7 +25,7 @@ struct MyApp {
 impl MyApp {
     fn new(system_observer: Rc<RefCell<SystemObserver>>, daemon_com: DaemonCom) -> Self {
         Self {
-            current_view: Box::new(NodesListView::default()),
+            current_view: Box::new(NodesListView::new()),
             system_state: system_observer.borrow().system_state.clone(),
             system_observer: system_observer.clone(),
             daemon_com,

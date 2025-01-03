@@ -472,7 +472,7 @@ impl NodeView {
                 ui.horizontal(|ui| {
                     if ui.button("Back to nodes list").clicked() {
                         action = ViewAction::SwitchView {
-                            view: Box::new(NodesListView::default()),
+                            view: Box::new(NodesListView::new()),
                         }
                     }
 
