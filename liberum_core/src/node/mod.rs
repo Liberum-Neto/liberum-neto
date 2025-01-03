@@ -411,7 +411,7 @@ impl Node {
     }
 
     #[message]
-    pub async fn get_published_objects(&mut self) -> Result<Vec<TypedObjectInfo>> {
+    pub async fn get_published_objects(&mut self) -> Result<Vec<proto::Hash>> {
         Ok(self.vault_ref.ask(ListObjects {}).send().await?)
     }
 

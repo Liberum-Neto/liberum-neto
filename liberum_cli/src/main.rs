@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
 use liberum_core::node_config::NodeConfig;
-use liberum_core::types::{NodeInfo, TypedObjectInfo};
+use liberum_core::types::NodeInfo;
 use liberum_core::{node_config::BootstrapNode, DaemonError, DaemonRequest, DaemonResponse};
 use libp2p::Multiaddr;
 use std::path::Path;
@@ -184,7 +184,6 @@ struct NodeInfoRow {
 #[derive(Tabled)]
 struct TypedObjectInfoRow {
     pub id: String,
-    pub type_id: String,
 }
 
 struct HandlerContext {
@@ -797,11 +796,8 @@ impl From<&NodeInfo> for NodeInfoRow {
     }
 }
 
-impl From<&TypedObjectInfo> for TypedObjectInfoRow {
-    fn from(value: &TypedObjectInfo) -> Self {
-        Self {
-            id: value.id.clone(),
-            type_id: value.type_id.to_string(),
-        }
+impl From<&String> for TypedObjectInfoRow {
+    fn from(value: &String) -> Self {
+        Self { id: value.clone() }
     }
 }
