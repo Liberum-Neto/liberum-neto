@@ -1,9 +1,10 @@
 pub mod behaviour;
 pub mod messages;
 
+use crate::modules::Modules;
 use crate::node::NodeSnapshot;
 use crate::node::{self, Node};
-use crate::vault::Vault;
+use crate::vaultv3::Vaultv3;
 use anyhow::anyhow;
 use anyhow::Result;
 use behaviour::*;
@@ -24,6 +25,7 @@ const KAD_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/kad/1.0.0")
 //const FILE_SHARE_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/file-share/1.0.0");
 const OBJECT_SENDER_PROTO_NAME: StreamProtocol =
     StreamProtocol::new("/liberum/object-sender/1.0.0");
+const QUERY_SENDER_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/query-sender/1.0.0");
 const DEFAULT_MULTIADDR_STR_IP6: &str = "/ip6/::/udp/0/quic-v1";
 const DEFAULT_MULTIADDR_STR_IP4: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 
@@ -39,15 +41,16 @@ const DEFAULT_MULTIADDR_STR_IP4: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 struct SwarmContext {
     swarm: Swarm<LiberumNetoBehavior>,
     _node_actor: ActorRef<Node>,
-    vault_ref: ActorRef<Vault>,
+    vault_ref: ActorRef<Vaultv3>,
     node_snapshot: NodeSnapshot,
     behaviour: BehaviourContext,
+    modules: Modules,
 }
 
 /// Prepares the sender to send messages to the swarm
 pub async fn run_swarm(
     node_ref: ActorRef<Node>,
-    vault_ref: ActorRef<Vault>,
+    vault_ref: ActorRef<Vaultv3>,
 ) -> mpsc::Sender<SwarmRunnerMessage> {
     let (sender, receiver) = mpsc::channel::<SwarmRunnerMessage>(16);
     tokio::spawn(run_swarm_task(node_ref, vault_ref, receiver));
@@ -57,7 +60,7 @@ pub async fn run_swarm(
 /// Task that runs the swarm and handles errors which can't be propagated outside of a task
 async fn run_swarm_task(
     node_ref: ActorRef<Node>,
-    vault_ref: ActorRef<Vault>,
+    vault_ref: ActorRef<Vaultv3>,
     receiver: mpsc::Receiver<SwarmRunnerMessage>,
 ) {
     if let Err(e) = run_swarm_main(node_ref.clone(), vault_ref, receiver).await {
@@ -69,7 +72,7 @@ async fn run_swarm_task(
 /// The main function that runs the swarm
 async fn run_swarm_main(
     node_ref: ActorRef<Node>,
-    vault_ref: ActorRef<Vault>,
+    vault_ref: ActorRef<Vaultv3>,
     mut receiver: mpsc::Receiver<SwarmRunnerMessage>,
 ) -> Result<()> {
     // It must be guaranteed not to ever fail. Swarm can't start without this data.
@@ -103,9 +106,17 @@ async fn run_swarm_main(
                 [(OBJECT_SENDER_PROTO_NAME, ProtocolSupport::Full)],
                 request_response::Config::default().with_request_timeout(Duration::from_secs(10)),
             );
+            let query_sender = request_response::cbor::Behaviour::<
+                query_sender::QueryRequest,
+                query_sender::QueryResponse,
+            >::new(
+                [(QUERY_SENDER_PROTO_NAME, ProtocolSupport::Full)],
+                request_response::Config::default().with_request_timeout(Duration::from_secs(10)),
+            );
             LiberumNetoBehavior {
                 kademlia,
                 object_sender: obj_sender,
+                query_sender: query_sender,
             }
         })
         .inspect_err(|e| error!(err = e.to_string(), "could not create behavior"))?
@@ -118,7 +129,9 @@ async fn run_swarm_main(
         vault_ref,
         swarm: swarm,
         behaviour: BehaviourContext::new(),
+        modules: Modules::new(),
     };
+    context.modules.install_default(context.vault_ref.clone());
 
     let swarm_default_addr_ip6 =
         Multiaddr::from_str(DEFAULT_MULTIADDR_STR_IP6).inspect_err(|e| {

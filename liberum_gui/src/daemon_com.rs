@@ -1,7 +1,10 @@
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Result};
-use liberum_core::{DaemonRequest, DaemonResponse, DaemonResult};
+use liberum_core::{
+    parser::{parse_typed, ObjectEnum},
+    DaemonRequest, DaemonResponse, DaemonResult,
+};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, error, info};
 
@@ -147,7 +150,7 @@ impl DaemonCom {
     pub fn download_file(&mut self, node_name: &str, file_id: &str) -> Result<Vec<u8>> {
         self.rt.block_on(async {
             self.to_daemon_sender
-                .send(DaemonRequest::DownloadFile {
+                .send(DaemonRequest::GetObject {
                     node_name: node_name.to_string(),
                     id: file_id.to_string(),
                 })
@@ -156,7 +159,28 @@ impl DaemonCom {
             match self.from_daemon_receiver.recv().await {
                 Some(r) => {
                     match r {
-                        Ok(DaemonResponse::FileDownloaded { data, .. }) => return Ok(data.content),
+                        Ok(DaemonResponse::ObjectDownloaded { data, stats: _ }) => {
+                            let mut typed = Some(data);
+                            while let Some(obj) = typed.clone() {
+                                typed = match parse_typed(obj).await {
+                                    Err(e) => {
+                                        debug!("{e}");
+                                        continue;
+                                    }
+                                    Ok(obj_enum) => match obj_enum {
+                                        ObjectEnum::Signed(signed) => Some(signed.object),
+                                        ObjectEnum::PlainFile(file) => {
+                                            return Ok(file.content);
+                                        }
+                                        _ => {
+                                            debug!("Received object was not a file!");
+                                            bail!("Received unsupported object type");
+                                        }
+                                    },
+                                }
+                            }
+                            bail!("Didn't receive a supported object type in the object cascade");
+                        }
                         Err(e) => {
                             error!(err = e.to_string(), "Error ocurred while downloading file!");
                             bail!("Error occured while publishing file: {}", e.to_string());

@@ -1,10 +1,10 @@
 use crate::{
     swarm_runner::{object_sender, SwarmContext},
-    vault::{LoadObject, StoreObject},
+    vaultv3::{RetrieveObject, StoreObject},
 };
 use anyhow::Result;
 use kameo::request::MessageSend;
-use liberum_core::{parser::ObjectEnum, proto, DaemonQueryStats};
+use liberum_core::{proto, DaemonQueryStats};
 use libp2p::{
     kad::{
         store::RecordStore, AddProviderError, AddProviderOk, Event, GetClosestPeersResult,
@@ -322,20 +322,22 @@ impl SwarmContext {
     ) -> Option<proto::TypedObject> {
         let obj = self
             .vault_ref
-            .ask(LoadObject {
+            .ask(RetrieveObject {
                 hash: obj_id.clone(),
             })
             .send()
-            .await
-            .unwrap();
-
-        match obj {
-            Some(obj) => match obj {
-                ObjectEnum::Typed(typed) => Some(typed),
-                _ => None,
-            },
-            None => None,
+            .await;
+        if let Err(e) = obj {
+            warn!(
+                id = obj_id.to_string(),
+                err = format!("{e}"),
+                "Object not found in vault"
+            );
+            self.stop_providing(obj_id);
+            return None;
         }
+
+        obj.unwrap()
     }
 
     pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {
@@ -344,7 +346,7 @@ impl SwarmContext {
         self.vault_ref
             .ask(StoreObject {
                 hash: obj_id,
-                object: ObjectEnum::Typed(obj),
+                object: obj,
             })
             .send()
             .await?;

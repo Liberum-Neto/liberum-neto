@@ -31,7 +31,9 @@ pub mod connection;
 pub mod node;
 pub mod swarm_runner;
 pub mod test_runner;
-pub mod vault;
+// pub mod vault;
+pub mod modules;
+pub mod vaultv3;
 
 pub mod test_protocol {
     tonic::include_proto!("test_protocol");
@@ -187,16 +189,14 @@ async fn handle_simple_action(
                         path: PathBuf::from(publish_object.hash.to_string()),
                     }
                 }
-                test_protocol::action::Details::GetObject(get_object) => {
-                    DaemonRequest::DownloadFile {
-                        node_name: action.node_name,
-                        id: ctx
-                            .hash_map
-                            .get(&get_object.object_hash_id)
-                            .unwrap()
-                            .clone(),
-                    }
-                }
+                test_protocol::action::Details::GetObject(get_object) => DaemonRequest::GetObject {
+                    node_name: action.node_name,
+                    id: ctx
+                        .hash_map
+                        .get(&get_object.object_hash_id)
+                        .unwrap()
+                        .clone(),
+                },
                 test_protocol::action::Details::DeleteObject(delete_object) => {
                     DaemonRequest::DeleteObject {
                         node_name: action.node_name,
@@ -207,7 +207,7 @@ async fn handle_simple_action(
                             .clone(),
                     }
                 }
-                test_protocol::action::Details::PublishMeta(publish_meta) => todo!(),
+                test_protocol::action::Details::PublishMeta(_publish_meta) => todo!(),
             };
 
             let daemon_request = daemon_request(request, ctx.app_context.clone()).await;
@@ -217,7 +217,7 @@ async fn handle_simple_action(
                 Ok(response) => {
                     result.is_success = true;
                     result.details = Some(match response {
-                        DaemonResponse::FileDownloaded { data: _, stats } => {
+                        DaemonResponse::ObjectDownloaded { data: _, stats } => {
                             if let Some(stats) = stats {
                                 test_protocol::action_resoult::Details::GetObject(GetObjectResult {
                                     stats: Some(DaemonQueryStats {

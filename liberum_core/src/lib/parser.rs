@@ -1,5 +1,10 @@
+use crate::proto::file::*;
+use crate::proto::group::*;
+use crate::proto::queries::*;
+use crate::proto::signed::*;
 use crate::proto::*;
 use anyhow::Result;
+use pins::PinObject;
 use serde::{Deserialize, Serialize};
 use strum_macros::Display;
 use tracing::debug;
@@ -14,9 +19,12 @@ pub enum ObjectEnum {
     Empty(EmptyObject),
     DeleteObject(DeleteObjectQuery),
     SimpleIDQuery(SimpleIDQuery),
+    PinQuery(PinQuery),
     Query(QueryObject),
     Result(ResultObject),
+    Pin(PinObject),
 }
+
 impl UUIDTyped for ObjectEnum {
     // TODO couldn't we do this better? Is it possible to force a member of an enum to implement a trait??
     fn get_type_uuid(&self) -> Uuid {
@@ -30,6 +38,8 @@ impl UUIDTyped for ObjectEnum {
             ObjectEnum::SimpleIDQuery(simple_idquery) => simple_idquery.get_type_uuid(),
             ObjectEnum::Query(query_object) => query_object.get_type_uuid(),
             ObjectEnum::Result(result_object) => result_object.get_type_uuid(),
+            ObjectEnum::Pin(pin_object) => pin_object.get_type_uuid(),
+            ObjectEnum::PinQuery(pin_query) => pin_query.get_type_uuid(),
         }
     }
 }
@@ -74,6 +84,16 @@ pub async fn parse_typed(object: TypedObject) -> Result<ObjectEnum> {
             debug!("Parser: Got Delete Object Query object: {:?}", object);
             let obj = TypedObject::try_from_typed(&object)?;
             Ok(ObjectEnum::DeleteObject(obj))
+        }
+        PinObject::UUID => {
+            debug!("Parser: Got Pin Object: {:?}", object);
+            let obj = TypedObject::try_from_typed(&object)?;
+            Ok(ObjectEnum::Pin(obj))
+        }
+        PinQuery::UUID => {
+            debug!("Parser: Got Pin Query: {:?}", object);
+            let obj = TypedObject::try_from_typed(&object)?;
+            Ok(ObjectEnum::PinQuery(obj))
         }
         _ => {
             debug!("Parser: Unknown object: {:?}", object);

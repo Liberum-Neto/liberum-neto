@@ -1,6 +1,11 @@
-use std::{fmt::Display, path::Path};
+pub mod file;
+pub mod group;
+pub mod pins;
+pub mod queries;
+pub mod signed;
 
-use anyhow::bail;
+use std::fmt::Display;
+
 use anyhow::{anyhow, Error, Result};
 use libp2p::identity::PublicKey;
 use libp2p::kad::RecordKey;
@@ -11,10 +16,6 @@ use uuid::{uuid, Uuid};
 pub struct Hash {
     pub bytes: [u8; 32],
 }
-pub type UserId = Hash;
-pub type GroupId = Hash;
-pub type ObjectId = Hash;
-pub type Content = Vec<u8>;
 
 pub trait UUIDTyped {
     fn get_type_uuid(&self) -> Uuid;
@@ -106,35 +107,6 @@ impl Into<libp2p::kad::RecordKey> for Hash {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct GroupAccessToken {
-    pub binding: GroupAccessBinding,
-    pub group_owner_signature: Signature,
-}
-
-pub type UnixTimestamp = u64;
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct GroupAccessBinding {
-    pub group: GroupId,
-    pub recipient: UserId,
-    pub revocation_date: UnixTimestamp,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct UserGroup {
-    pub definition: GroupDefinition,
-    pub signature: Signature,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct GroupDefinition {
-    pub id: GroupId,
-    pub owner: UserId,
-    pub parent: GroupId,
-    pub parent_membership_proof: GroupAccessToken,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq)]
 pub struct TypedObject {
     pub uuid: Uuid,
@@ -162,10 +134,6 @@ impl TryInto<Vec<u8>> for TypedObject {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Signature {
-    pub bytes: Vec<u8>,
-}
-#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SerializablePublicKey {
     pub key: Vec<u8>,
 }
@@ -184,79 +152,9 @@ impl TryInto<libp2p::identity::PublicKey> for SerializablePublicKey {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SignedObject {
-    pub object: TypedObject,
-    pub signature: Signature,
-}
-impl SignedObject {
-    pub const UUID: Uuid = uuid!("0193a7bf-fb8f-7fdc-8be6-02d3a3cc7eb1");
-}
-impl UUIDTyped for SignedObject {
-    fn get_type_uuid(&self) -> Uuid {
-        SignedObject::UUID
-    }
-}
-impl SignedObject {
-    pub fn sign_ed25519(object: TypedObject, keypair: libp2p::identity::Keypair) -> Result<Self> {
-        let v: Vec<u8> = object.clone().try_into()?;
-        let signature = Signature {
-            bytes: keypair.sign(v.as_slice()).map_err(|e| anyhow!(e))?,
-        };
-        Ok(Self { object, signature })
-    }
-    pub fn verify_ed25519(&self, public: libp2p::identity::PublicKey) -> Result<bool> {
-        let msg: Vec<u8> = self.object.clone().try_into()?;
-        Ok(public.verify(msg.as_slice(), &self.signature.bytes.as_slice()))
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct GroupObject {
-    pub group: GroupId,
-    pub object: SignedObject,
-}
-impl GroupObject {
-    pub const UUID: Uuid = uuid!("0193a7c0-1cb7-72e8-97cd-e84c15925233");
-}
-impl UUIDTyped for GroupObject {
-    fn get_type_uuid(&self) -> Uuid {
-        GroupObject::UUID
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PlainFileObject {
-    pub name: String,
-    pub content: Content,
-}
-impl PlainFileObject {
-    pub const UUID: Uuid = uuid!("0193a7c0-3ad3-707c-897b-f23b30400c69");
-}
-impl UUIDTyped for PlainFileObject {
-    fn get_type_uuid(&self) -> Uuid {
-        PlainFileObject::UUID
-    }
-}
-
-impl PlainFileObject {
-    pub async fn try_from_path(path: &Path) -> Result<Self> {
-        let name = {
-            let name = path.file_name();
-            if let None = name {
-                bail!("Invalid filename! {}", path.to_string_lossy())
-            }
-            let name = name.unwrap().to_str();
-            if let None = name {
-                bail!("Invalid filename! {},", path.to_string_lossy())
-            }
-            name.unwrap().to_string()
-        };
-
-        Ok(PlainFileObject {
-            name,
-            content: tokio::fs::read(path).await?,
-        })
-    }
+pub struct Signature {
+    pub verifying_key: SerializablePublicKey,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -267,53 +165,6 @@ impl EmptyObject {
 impl UUIDTyped for EmptyObject {
     fn get_type_uuid(&self) -> Uuid {
         EmptyObject::UUID
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct QueryObject {
-    pub query_object: TypedObject,
-}
-impl QueryObject {
-    pub const UUID: Uuid = uuid!("0193a7c0-800f-7bba-9524-0244e86fd5dc");
-}
-impl UUIDTyped for QueryObject {
-    fn get_type_uuid(&self) -> Uuid {
-        QueryObject::UUID
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SimpleIDQuery {
-    pub id: ObjectId,
-}
-impl SimpleIDQuery {
-    pub const UUID: Uuid = uuid!("0193a7c0-9cb7-7184-844e-42b5a1bf999e");
-}
-impl UUIDTyped for SimpleIDQuery {
-    fn get_type_uuid(&self) -> Uuid {
-        SimpleIDQuery::UUID
-    }
-}
-impl From<SimpleIDQuery> for QueryObject {
-    fn from(obj: SimpleIDQuery) -> Self {
-        QueryObject {
-            query_object: obj.into(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DeleteObjectQuery {
-    pub id: ObjectId,
-    pub verification_key_ed25519: SerializablePublicKey,
-}
-impl DeleteObjectQuery {
-    pub const UUID: Uuid = uuid!("0193b1a3-0b17-73a4-941c-5c79ac9a3780");
-}
-impl UUIDTyped for DeleteObjectQuery {
-    fn get_type_uuid(&self) -> Uuid {
-        DeleteObjectQuery::UUID
     }
 }
 

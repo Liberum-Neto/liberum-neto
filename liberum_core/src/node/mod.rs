@@ -2,18 +2,17 @@ pub mod manager;
 pub mod store;
 
 use crate::swarm_runner;
-use crate::vault::{ListTypedObjects, Vault};
+use crate::vaultv3::{ListObjects, Vaultv3};
 use anyhow::{anyhow, Result};
 use kameo::mailbox::bounded::BoundedMailbox;
-use kameo::messages;
 use kameo::request::MessageSend;
 use kameo::{actor::ActorRef, message::Message, Actor};
+use kameo::{message, messages};
 use liberum_core::node_config::NodeConfig;
-use liberum_core::proto::{self, SignedObject, TypedObject};
-use liberum_core::proto::{PlainFileObject, ResultObject};
+use liberum_core::proto::{self, signed::SignedObject, TypedObject};
+use liberum_core::proto::{file::PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
-use liberum_core::types::TypedObjectInfo;
-use liberum_core::{parser, DaemonQueryStats, DaemonResponse};
+use liberum_core::{DaemonQueryStats, DaemonResponse};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
 use std::{borrow::Borrow, collections::HashSet, fmt, path::PathBuf, str::FromStr};
@@ -28,7 +27,7 @@ pub struct Node {
     pub keypair: Keypair,
     pub config: NodeConfig,
     pub manager_ref: ActorRef<NodeManager>,
-    pub vault_ref: ActorRef<Vault>,
+    pub vault_ref: ActorRef<Vaultv3>,
     // These fields are mandatory, but may be set only after spawning the node, so unwrapping them should be safe from
     // all of the methods:
     pub self_actor_ref: Option<ActorRef<Self>>,
@@ -135,6 +134,7 @@ impl Node {
         let (resp_send, resp_recv) = oneshot::channel();
 
         let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
+        let object: TypedObject = SignedObject::sign_ed25519(object, self.keypair.clone())?.into();
         let obj_id = proto::Hash::try_from(&object)?;
 
         self.swarm_sender
@@ -154,10 +154,10 @@ impl Node {
     }
 
     #[message]
-    pub async fn download_file(
+    pub async fn get_object(
         &mut self,
         obj_id_str: String,
-    ) -> Result<(proto::PlainFileObject, Option<DaemonQueryStats>)> {
+    ) -> Result<(TypedObject, Option<DaemonQueryStats>)> {
         let obj_id = proto::Hash::try_from(obj_id_str.as_str())?;
 
         // first get the providers of the file
@@ -248,22 +248,7 @@ impl Node {
                         );
                         continue;
                     }
-
-                    let mut typed = Some(obj);
-                    while let Some(obj) = typed.clone() {
-                        typed = match parser::parse_typed(obj).await {
-                            Ok(parser::ObjectEnum::Signed(signed)) => Some(signed.object),
-                            Ok(parser::ObjectEnum::PlainFile(file)) => return Ok((file, stats)),
-                            Err(e) => {
-                                debug!("{e}");
-                                continue;
-                            }
-                            Ok(_) => {
-                                debug!("Received object was not a file!");
-                                continue;
-                            }
-                        }
-                    }
+                    return Ok((obj, stats));
                 }
             }
         }
@@ -410,8 +395,8 @@ impl Node {
     }
 
     #[message]
-    pub async fn get_published_objects(&mut self) -> Result<Vec<TypedObjectInfo>> {
-        Ok(self.vault_ref.ask(ListTypedObjects).send().await?)
+    pub async fn get_published_objects(&mut self) -> Result<Vec<proto::Hash>> {
+        Ok(self.vault_ref.ask(ListObjects {}).send().await?)
     }
 
     #[message]
@@ -520,6 +505,11 @@ impl Node {
             failed_count,
         })
     }
+
+    #[message]
+    pub async fn get_pinned(&mut self, _obj_id_str: String) -> Result<DaemonResponse> {
+        todo!()
+    }
 }
 
 impl Node {
@@ -569,7 +559,7 @@ pub struct NodeBuilder {
     keypair: Option<Keypair>,
     config: Option<NodeConfig>,
     manager_ref: Option<ActorRef<NodeManager>>,
-    vault_ref: Option<ActorRef<Vault>>,
+    vault_ref: Option<ActorRef<Vaultv3>>,
     self_actor_ref: Option<ActorRef<Node>>,
     swarm_sender: Option<Sender<SwarmRunnerMessage>>,
 }
@@ -609,7 +599,7 @@ impl NodeBuilder {
         self
     }
 
-    pub fn vault_ref(mut self, vault_ref: ActorRef<Vault>) -> Self {
+    pub fn vault_ref(mut self, vault_ref: ActorRef<Vaultv3>) -> Self {
         self.vault_ref = Some(vault_ref);
         self
     }

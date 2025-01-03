@@ -1,12 +1,7 @@
-use crate::vaultv3;
 use anyhow::anyhow;
-use anyhow::Result;
-use liberum_core::parser::{self, ObjectEnum};
-use liberum_core::proto::{self, ResultObject, TypedObject, UUIDTyped};
-
+use liberum_core::proto::{self, ResultObject, TypedObject};
 use libp2p::request_response::{self, InboundRequestId, OutboundRequestId, ResponseChannel};
 use serde::{Deserialize, Serialize};
-use tokio::sync::oneshot;
 use tracing::{debug, error};
 
 use super::super::SwarmContext;
@@ -19,7 +14,7 @@ use super::super::SwarmContext;
 
 /// A request to the file_share protocol
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq)]
-pub struct ObjectSendRequest {
+pub struct QueryRequest {
     pub object: TypedObject,
     pub object_id: proto::Hash,
 }
@@ -27,15 +22,14 @@ pub struct ObjectSendRequest {
 /// A response from the file_share protocol. Should be replaced with a stream
 /// in the future, probably using the VAULT and OBJECTS
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq)]
-pub struct ObjectResponse {
-    pub object: TypedObject,
-    pub object_id: proto::Hash,
+pub struct QueryResponse {
+    pub objects: Vec<(TypedObject, proto::Hash)>,
 }
 
 impl SwarmContext {
-    pub(crate) async fn handle_object_sender(
+    pub(crate) async fn handle_query_sender(
         &mut self,
-        event: request_response::Event<ObjectSendRequest, ObjectResponse>,
+        event: request_response::Event<QueryRequest, QueryResponse>,
     ) {
         match event {
             request_response::Event::Message { message, .. } => match message {
@@ -45,17 +39,14 @@ impl SwarmContext {
                     channel,
                     ..
                 } => {
-                    self.handle_object_sender_request(request_id, request, channel)
+                    self.handle_query_request(request_id, request, channel)
                         .await
                 }
 
                 request_response::Message::Response {
                     request_id,
                     response,
-                } => {
-                    self.handle_object_sender_response(request_id, response)
-                        .await
-                }
+                } => self.handle_query_response(request_id, response).await,
             },
             request_response::Event::OutboundFailure {
                 peer,
@@ -69,9 +60,11 @@ impl SwarmContext {
                     err = format!("{error}"),
                     "Outbound failure"
                 );
-                if let Some(sender) = self
+                if let Some(sender) = self.behaviour.pending_outbound_queries.remove(&request_id) {
+                    let _ = sender.send(Err(anyhow!("Outbound failure").context(error)));
+                } else if let Some(sender) = self
                     .behaviour
-                    .pending_outbound_send_object
+                    .pending_outbound_delete_object
                     .remove(&request_id)
                 {
                     let _ = sender.send(Err(anyhow!("Outbound failure").context(error)));
@@ -88,16 +81,16 @@ impl SwarmContext {
 /// Methods on SwarmContext for handling file sharing
 impl SwarmContext {
     /// Handle a object_send request depending on the type of the data which ID is requested
-    async fn handle_object_sender_request(
+    async fn handle_query_request(
         &mut self,
         request_id: InboundRequestId,
-        request: ObjectSendRequest,
-        response_channel: ResponseChannel<ObjectResponse>,
+        request: QueryRequest,
+        response_channel: ResponseChannel<QueryResponse>,
     ) {
         debug!(
             node = self.node_snapshot.name,
             request = format!("{request:?}"),
-            "received object sender request!"
+            "received query request!"
         );
 
         let id: std::result::Result<proto::Hash, anyhow::Error> =
@@ -109,7 +102,7 @@ impl SwarmContext {
                 err = format!("{e}"),
                 "Can't hash received object to verify hash"
             );
-            self.respond_err(&request, response_channel);
+            self.respond_to_query(vec![], response_channel);
             return;
         }
         let id = id.expect("To not be err, as it was checked earlier");
@@ -123,7 +116,7 @@ impl SwarmContext {
             )
         }
 
-        self.handle_request_typed(
+        self.handle_query_request_typed(
             request.object.clone(),
             id,
             request,
@@ -133,22 +126,15 @@ impl SwarmContext {
         .await
     }
 
-    async fn handle_request_typed(
+    async fn handle_query_request_typed(
         &mut self,
         obj: proto::TypedObject,
         id: proto::Hash,
-        request: ObjectSendRequest,
+        _request: QueryRequest,
         request_id: InboundRequestId,
-        response_channel: ResponseChannel<ObjectResponse>,
+        response_channel: ResponseChannel<QueryResponse>,
     ) {
-        self.vault_ref
-            .ask(vaultv3::StoreObject {
-                hash: id.clone(),
-                object: obj.clone(),
-            })
-            .await
-            .unwrap();
-        match self.modules.store(obj).await {
+        match self.modules.query(obj).await {
             Err(e) => {
                 error!(
                     err = format!("{e}"),
@@ -156,90 +142,71 @@ impl SwarmContext {
                     request_id = request_id.to_string(),
                     "Error storing object"
                 );
+                self.respond_to_query(vec![], response_channel);
             }
-            Ok(stored) => {
-                if stored == true {
-                    self.start_providing(id.clone());
-                    self.respond_ok(&request, response_channel);
-                    return;
-                } else {
-                    self.vault_ref
-                        .ask(vaultv3::DeleteObject { hash: id })
-                        .await
-                        .unwrap();
+            Ok((ids, mut return_objects)) => {
+                let mut objects: Vec<TypedObject> = Vec::new();
+                for id in ids {
+                    let obj = self.get_object_from_vault(id.clone()).await;
+                    if let Some(obj) = obj {
+                        objects.push(obj);
+                    }
                 }
+                return_objects.extend(objects);
+                self.respond_to_query(return_objects, response_channel);
+                // TODO do anything more?
             }
         }
-
-        self.respond_err(&request, response_channel);
     }
+
     /// Handle a file share response by sending the data to the pending download
-    async fn handle_object_sender_response(
+    async fn handle_query_response(
         &mut self,
         request_id: OutboundRequestId,
-        response: ObjectResponse,
+        response: QueryResponse,
     ) {
         debug!(
             node = self.node_snapshot.name,
             response = format!("{response:?}"),
             "received object sender response!"
         );
-        if let Some(sender) = self
+        if let Some(sender) = self.behaviour.pending_outbound_queries.remove(&request_id) {
+            if response.objects.len() == 0 {
+                let _ = sender.send(Err(anyhow!("No objects found for query")));
+            } else {
+                let _ = sender.send(Ok(response.objects[0].to_owned().0)); // TODO Should send all objects, not just one
+            }
+        } else if let Some(sender) = self
             .behaviour
-            .pending_outbound_send_object
+            .pending_outbound_delete_object
             .remove(&request_id)
         {
-            self.send_result_object(response.object, sender).await;
+            if response.objects.len() > 0 {
+                let _ = sender.send(Ok(ResultObject { result: Ok(()) }));
+            } else {
+                let _ = sender.send(Err(anyhow!("No objects found for query")));
+            }
         }
     }
 
-    fn respond_err(
+    fn respond_to_query(
         &mut self,
-        request: &ObjectSendRequest,
-        response_channel: ResponseChannel<ObjectResponse>,
+        objects: Vec<TypedObject>,
+        response_channel: ResponseChannel<QueryResponse>,
     ) {
-        let _ = self.swarm.behaviour_mut().object_sender.send_response(
-            response_channel,
-            ObjectResponse {
-                object: proto::ResultObject { result: Err(()) }.into(),
-                object_id: request.object_id.clone(),
-            },
-        );
-    }
-    fn respond_ok(
-        &mut self,
-        request: &ObjectSendRequest,
-        response_channel: ResponseChannel<ObjectResponse>,
-    ) {
-        let _ = self.swarm.behaviour_mut().object_sender.send_response(
-            response_channel,
-            ObjectResponse {
-                object: proto::ResultObject { result: Ok(()) }.into(),
-                object_id: request.object_id.clone(),
-            },
-        );
-    }
+        let objects = objects
+            .into_iter()
+            .map(|obj| {
+                let hash = proto::Hash::try_from(&obj).unwrap();
+                (obj, hash)
+            })
+            .collect(); // TODO Decide on how to handle Hash errors
 
-    async fn send_result_object(
-        &mut self,
-        object: TypedObject,
-        sender: oneshot::Sender<Result<ResultObject>>,
-    ) {
-        let r = parser::parse_typed(object).await;
-        match r {
-            Ok(obj) => {
-                if let ObjectEnum::Result(obj) = obj {
-                    let _ = sender.send(Ok(obj));
-                } else {
-                    let _ = sender.send(Err(anyhow!(
-                        "Unsupported object type {}",
-                        obj.get_type_uuid()
-                    )));
-                }
-            }
-            Err(e) => {
-                let _ = sender.send(Err(anyhow!("Failed to parse result object").context(e)));
-            }
-        }
+        let response = QueryResponse { objects };
+        let _ = self
+            .swarm
+            .behaviour_mut()
+            .query_sender
+            .send_response(response_channel, response);
     }
 }

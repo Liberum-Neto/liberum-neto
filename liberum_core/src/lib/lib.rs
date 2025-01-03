@@ -1,4 +1,5 @@
 pub mod codec;
+pub mod module;
 pub mod node_config;
 pub mod parser;
 pub mod proto;
@@ -16,7 +17,7 @@ use tokio::net::UnixStream;
 use tokio::sync::mpsc;
 use tokio_util::io::ReaderStream;
 use tracing::{debug, error};
-use types::{NodeInfo, TypedObjectInfo};
+use types::NodeInfo;
 
 use anyhow::Result;
 use codec::AsymmetricMessageCodec;
@@ -54,7 +55,7 @@ pub enum DaemonRequest {
         node_name: String,
         path: PathBuf,
     },
-    DownloadFile {
+    GetObject {
         node_name: String,
         id: String,
     },
@@ -109,8 +110,8 @@ pub enum DaemonResponse {
         ids: Vec<String>,
         stats: Option<DaemonQueryStats>,
     },
-    FileDownloaded {
-        data: PlainFileObject,
+    ObjectDownloaded {
+        data: TypedObject,
         stats: Option<DaemonQueryStats>,
     }, // TODO ideally the data should not be a Vec<u8> but some kind of a stream to save it to disk instead of downloading the whole file in memory
     PeerId {
@@ -121,13 +122,16 @@ pub enum DaemonResponse {
         id: String,
     },
     PublishedObjectsList {
-        object_infos: Vec<TypedObjectInfo>,
+        object_infos: Vec<Hash>,
     },
     ObjectDeleted {
         deleted_myself: bool,
         deleted_count: u32,
         failed_count: u32,
     },
+    // PinnedObjects {
+    //     objects: Vec<TypedObject>
+    // }
 }
 
 /// Errors that can be returned by the daemon

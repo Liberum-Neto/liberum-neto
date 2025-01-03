@@ -1,13 +1,15 @@
 use liberum_core::proto::{
-    self, DeleteObjectQuery, QueryObject, ResultObject, SerializablePublicKey, TypedObject,
+    self, queries::*, signed::SignedObject, ResultObject, SerializablePublicKey, TypedObject,
 };
+
 use liberum_core::DaemonQueryStats;
 use libp2p::kad::RecordKey;
 
-use crate::swarm_runner::object_sender::ObjectSendRequest;
-use crate::vault;
+use crate::swarm_runner::query_sender;
+use crate::vaultv3;
 
 use super::behaviour::object_sender;
+use super::query_sender::QueryRequest;
 use super::SwarmContext;
 use anyhow::anyhow;
 use anyhow::Result;
@@ -16,8 +18,8 @@ use libp2p::PeerId;
 use libp2p::{kad, Multiaddr};
 use std::collections::hash_map;
 use tokio::sync::oneshot;
+use tracing::debug;
 use tracing::error;
-use tracing::{debug, info};
 pub enum SwarmRunnerError {}
 
 ///! The module contains messages that can be sent to the SwarmRunner
@@ -205,21 +207,19 @@ impl SwarmContext {
                     }
                 } else {
                     // Send a request to the peer
-                    let query_obj: TypedObject = proto::QueryObject {
-                        query_object: proto::SimpleIDQuery { id: obj_id.clone() }.into(),
-                    }
-                    .into();
+
+                    let query_obj: TypedObject = SimpleIDQuery { id: obj_id.clone() }.into();
                     let query_obj_id = proto::Hash::try_from(&query_obj).unwrap();
-                    let query_id = self.swarm.behaviour_mut().object_sender.send_request(
+                    let query_id = self.swarm.behaviour_mut().query_sender.send_request(
                         &peer_id,
-                        object_sender::ObjectSendRequest {
+                        query_sender::QueryRequest {
                             object: query_obj,
                             object_id: query_obj_id,
                         },
                     );
 
                     self.behaviour
-                        .pending_inner_get_object
+                        .pending_outbound_queries
                         .insert(query_id, response_sender);
                 }
                 self.print_neighbours();
@@ -272,7 +272,7 @@ impl SwarmContext {
                 );
 
                 self.behaviour
-                    .pending_inner_send_object
+                    .pending_outbound_send_object
                     .insert(request_id, response_sender);
                 Ok(false)
             }
@@ -297,28 +297,29 @@ impl SwarmContext {
                 response_sender,
             } => {
                 let key: SerializablePublicKey = self.node_snapshot.keypair.public().into();
-                let delete_query = DeleteObjectQuery {
+                let delete_query: TypedObject = DeleteObjectQuery {
                     id: obj_id,
                     verification_key_ed25519: key,
-                };
-                let obj: TypedObject = QueryObject {
-                    query_object: delete_query.into(),
                 }
                 .into();
-                let query_id = proto::Hash::try_from(&obj)?;
 
-                let request = ObjectSendRequest {
-                    object: obj,
+                let query_obj: TypedObject =
+                    SignedObject::sign_ed25519(delete_query, self.node_snapshot.keypair.clone())?
+                        .into();
+
+                let query_id = proto::Hash::try_from(&query_obj)?;
+                let request = QueryRequest {
+                    object: query_obj,
                     object_id: query_id,
                 };
 
                 let qid = self
                     .swarm
                     .behaviour_mut()
-                    .object_sender
+                    .query_sender
                     .send_request(&peer, request);
                 self.behaviour
-                    .pending_outer_delete_object
+                    .pending_outbound_delete_object
                     .insert(qid, response_sender);
                 Ok(false)
             }
@@ -333,7 +334,7 @@ impl SwarmContext {
                     .stop_providing(&RecordKey::from(obj_id.bytes.to_vec()));
                 let r = self
                     .vault_ref
-                    .ask(vault::DeleteTypedObject { hash: obj_id })
+                    .ask(vaultv3::DeleteObject { hash: obj_id })
                     .await;
                 if let Ok(_) = r {
                     response_sender.send(Ok(())).unwrap();
@@ -345,6 +346,26 @@ impl SwarmContext {
                 Ok(false)
             }
         }
+    }
+
+    pub(crate) fn start_providing(&mut self, obj_id: proto::Hash) {
+        let query_id = self
+            .swarm
+            .behaviour_mut()
+            .kademlia
+            .start_providing(obj_id.into())
+            .unwrap();
+        let (send, _) = oneshot::channel();
+        self.behaviour
+            .pending_inner_start_providing
+            .insert(query_id, send);
+    }
+
+    pub(crate) fn stop_providing(&mut self, obj_id: proto::Hash) {
+        self.swarm
+            .behaviour_mut()
+            .kademlia
+            .stop_providing(&obj_id.into());
     }
 
     pub(crate) async fn provide_object(
@@ -364,19 +385,11 @@ impl SwarmContext {
             return;
         }
         let obj_id_kad = kad::RecordKey::new(&calculated_obj_id.bytes);
-        if self.behaviour.providing.contains_key(&calculated_obj_id) {
-            info!(
-                node = self.node_snapshot.name,
-                obj_id = obj_id.to_string(),
-                "File is already being provided"
-            );
-            return;
-        }
 
         // Add the file to the providing list TODO VAULT
-        self.behaviour
-            .providing
-            .insert(calculated_obj_id, object.clone());
+        // self.behaviour
+        //     .providing
+        //     .insert(calculated_obj_id, object.clone());
 
         if let Ok(_) = self.put_object_into_vault(object).await {
             // Strat a query to be providing the file ID in kademlia

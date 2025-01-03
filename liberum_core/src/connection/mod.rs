@@ -1,20 +1,7 @@
 use crate::node;
-use crate::node::manager::GetNode;
-use crate::node::manager::IsNodeRunning;
-use crate::node::manager::NodeManager;
-use crate::node::store::ListNodes;
-use crate::node::store::LoadNode;
-use crate::node::store::NodeStore;
-use crate::node::DeleteObject;
-use crate::node::DialPeer;
-use crate::node::DownloadFile;
-use crate::node::GetAddresses;
-use crate::node::GetProviders;
-use crate::node::GetPublishedObjects;
-use crate::node::Node;
-use crate::node::NodeSnapshot;
-use crate::node::ProvideFile;
-use crate::node::PublishFile;
+use crate::node::manager::*;
+use crate::node::store::*;
+use crate::node::*;
 use anyhow::Result;
 use futures::SinkExt;
 use futures::StreamExt;
@@ -121,7 +108,7 @@ pub async fn handle_message(message: DaemonRequest, context: &AppContext) -> Dae
         DaemonRequest::ProvideFile { node_name, path } => {
             handle_provide_file(&node_name, path, context).await
         }
-        DaemonRequest::DownloadFile { node_name, id } => {
+        DaemonRequest::GetObject { node_name, id } => {
             handle_download_file(node_name, id, context).await
         }
         DaemonRequest::GetProviders { node_name, id } => {
@@ -402,13 +389,13 @@ async fn handle_download_file(node_name: String, id: String, context: &AppContex
     let node = get_node(&node_name, context).await?;
 
     let resp = node
-        .ask(DownloadFile { obj_id_str: id })
+        .ask(GetObject { obj_id_str: id })
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
-    Ok(DaemonResponse::FileDownloaded {
+    Ok(DaemonResponse::ObjectDownloaded {
         data: resp.0,
         stats: resp.1,
     })
@@ -460,7 +447,6 @@ async fn handle_get_published_objects(node_name: String, context: &AppContext) -
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to get published objects list"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
-
     DaemonResult::Ok(DaemonResponse::PublishedObjectsList { object_infos })
 }
 
