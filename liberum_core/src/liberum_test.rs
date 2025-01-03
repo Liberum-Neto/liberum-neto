@@ -121,7 +121,7 @@ pub(crate) async fn run_test(
                     .insert(hash_map_entry.hash_id, hash_map_entry.hash);
             }
         }
-        info!("Running testpart {:?}",descriptor.part_id);
+        info!("Running testpart {:?}", descriptor.part_id);
 
         let part = &ctx.read().await.scenario.parts[descriptor.part_id as usize];
 
@@ -198,7 +198,14 @@ async fn handle_simple_action(
                     }
                 }
                 test_protocol::action::Details::DeleteObject(delete_object) => {
-                    DaemonRequest::DeleteObject { node_name: action.node_name, object_id: ctx.hash_map.get(&delete_object.object_hash_id).unwrap().clone() }
+                    DaemonRequest::DeleteObject {
+                        node_name: action.node_name,
+                        object_id: ctx
+                            .hash_map
+                            .get(&delete_object.object_hash_id)
+                            .unwrap()
+                            .clone(),
+                    }
                 }
                 test_protocol::action::Details::PublishMeta(publish_meta) => todo!(),
             };
