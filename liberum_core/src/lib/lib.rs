@@ -111,7 +111,7 @@ pub enum DaemonResponse {
         id: String,
     },
     PublishedObjectsList {
-        object_infos: Vec<String>,
+        object_infos: Vec<Hash>,
     },
     ObjectDeleted {
         deleted_myself: bool,
