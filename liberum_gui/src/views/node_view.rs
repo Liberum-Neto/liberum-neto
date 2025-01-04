@@ -1,10 +1,13 @@
-use crate::windows::{
-    dialer_window::DialerWindow, download_window::DownloadWindow,
-    downloader_window::DownloaderWindow, node_config_window::NodeConfigWindow,
-    node_window::NodeWindow, Window,
+use crate::{
+    components::status_bar::StatusBar,
+    windows::{
+        dialer_window::DialerWindow, download_window::DownloadWindow,
+        downloader_window::DownloaderWindow, node_config_window::NodeConfigWindow,
+        node_window::NodeWindow, Window,
+    },
 };
 
-use super::{AppView, NodesListView, ViewAction, ViewContext};
+use super::{AppView, ViewAction, ViewContext};
 
 pub struct NodeView {
     node_name: String,
@@ -88,15 +91,7 @@ impl NodeView {
             .frame(egui::Frame::default().inner_margin(16.0))
             .show_separator_line(false)
             .show(ctx.egui_ctx, |ui| {
-                ui.horizontal(|ui| {
-                    if ui.button("Back to nodes list").clicked() {
-                        action = ViewAction::SwitchView {
-                            view: Box::new(NodesListView::new()),
-                        }
-                    }
-
-                    ui.label(&self.status_line);
-                });
+                ui.add(StatusBar::status(&self.status_line, &mut action))
             });
 
         action
