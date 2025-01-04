@@ -94,6 +94,10 @@ pub enum DaemonRequest {
         node_name: String,
         object_id: String,
     },
+    GetPinned {
+        node_name: String,
+        object_id: String,
+    },
 }
 
 /// Messages that are sent from the daemon as a reponse
@@ -147,9 +151,9 @@ pub enum DaemonResponse {
         deleted_count: u32,
         failed_count: u32,
     },
-    // PinnedObjects {
-    //     objects: Vec<TypedObject>
-    // }
+    PinnedObjects {
+        objects: Vec<TypedObject>,
+    },
 }
 
 /// Errors that can be returned by the daemon

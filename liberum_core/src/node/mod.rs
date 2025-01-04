@@ -298,9 +298,7 @@ impl Node {
         // a new behaviour kademlia could talk to, which would provide streams of data.
         // (Maybe could be implemented on the existing request_response if it would be generalised more?)
         let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
-        let object: TypedObject = SignedObject::sign_ed25519(object, self.keypair.clone())
-            .unwrap()
-            .into();
+        let object: TypedObject = SignedObject::sign_ed25519(object, self.keypair.clone())?.into();
         self.publish_object_inner(object).await
     }
 
@@ -353,8 +351,27 @@ impl Node {
 
         let kad_k_parameter: i32 = 20;
         let mut successes = 0;
-        let peers = self.get_closest_peers(&obj_id).await?;
+        let places = self.modules.publish(object.clone()).await?;
+        let mut peers = HashSet::new();
+        for place in places {
+            let p = self.get_closest_peers(&place).await?;
+            peers.extend(p);
+        }
+
         for peer in &peers {
+            if *peer == self.get_peer_id()? {
+                let (snd, _) = oneshot::channel();
+                self.swarm_sender
+                    .as_mut()
+                    .unwrap()
+                    .send(SwarmRunnerMessage::ProvideObject {
+                        object: object.clone(),
+                        obj_id: obj_id.clone(),
+                        response_sender: snd,
+                    })
+                    .await?;
+            }
+
             let (send, recv) = oneshot::channel();
             self.swarm_sender
                 .as_mut()
@@ -504,7 +521,9 @@ impl Node {
             }
         }
 
-        todo!()
+        return Ok(DaemonResponse::QueryFinished {
+            result: responses.into_iter().collect(),
+        });
     }
 }
 

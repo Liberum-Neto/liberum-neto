@@ -2,7 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
-    proto::{Hash, TypedObject},
+    proto::{EmptyObject, Hash, TypedObject},
 };
 use uuid::Uuid;
 
@@ -33,6 +33,6 @@ impl Module for NoActionModule {
     }
 
     fn register_module(&self) -> Vec<Uuid> {
-        return vec![];
+        return vec![EmptyObject::UUID];
     }
 }

@@ -9,6 +9,9 @@ use kameo::actor::ActorRef;
 use kameo::request::MessageSend;
 use liberum_core::codec::AsymmetricMessageCodec;
 use liberum_core::node_config::NodeConfig;
+use liberum_core::proto;
+use liberum_core::proto::queries::PinQuery;
+use liberum_core::proto::EmptyObject;
 use liberum_core::proto::TypedObject;
 use liberum_core::types::NodeInfo;
 use liberum_core::DaemonError;
@@ -140,6 +143,10 @@ pub async fn handle_message(message: DaemonRequest, context: &AppContext) -> Dae
         DaemonRequest::QueryObject { node_name, object } => {
             handle_query_object(node_name, object, context).await
         }
+        DaemonRequest::GetPinned {
+            node_name,
+            object_id,
+        } => handle_get_pinned(node_name, object_id, context).await,
     }
 }
 
@@ -404,11 +411,8 @@ async fn handle_download_file(node_name: String, id: String, context: &AppContex
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle download file"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
-
-    Ok(DaemonResponse::ObjectDownloaded {
-        data: resp.0,
-        stats: resp.1,
-    })
+    let (data, stats) = resp;
+    Ok(DaemonResponse::ObjectDownloaded { data, stats })
 }
 
 async fn handle_dial(
@@ -522,6 +526,34 @@ async fn handle_query_object(
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish object"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+    Ok(resp)
+}
+
+async fn handle_get_pinned(
+    node_name: String,
+    object_id: String,
+    context: &AppContext,
+) -> DaemonResult {
+    let node = get_node(&node_name, context).await?;
+    let id = proto::Hash::try_from(object_id);
+    if let Err(e) = id {
+        return DaemonResult::Err(DaemonError::Other(format!("Invalid ID: {e:?}")));
+    }
+    let id = id.unwrap();
+
+    let query = PinQuery {
+        pinned_id: Some(id),
+        relation: None,
+        object: EmptyObject {}.into(),
+    }
+    .into();
+
+    let resp = node
+        .ask(node::SendQuery { object: query })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle get pinned"))
         .map_err(|e| DaemonError::Other(e.to_string()))?;
     Ok(resp)
 }

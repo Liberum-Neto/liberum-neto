@@ -15,6 +15,8 @@ use liberum_core::{
     module::{Module, ModuleQueryParams, ModuleStoreParams},
     proto::{self, TypedObject},
 };
+use no_action_module::NoActionModule;
+use pin_object::PinObjectModule;
 use plain_file_object::PlainFileObjectModule;
 use signed_object::SignedObjectModule;
 use simple_id_query_object::SimpleIDQueryModule;
@@ -120,5 +122,9 @@ impl Modules {
         })));
         self.install_module(Arc::new(Box::new(SimpleIDQueryModule {})));
         self.install_module(Arc::new(Box::new(PlainFileObjectModule {})));
+        self.install_module(Arc::new(Box::new(PinObjectModule {
+            vault: vault.clone(),
+        })));
+        self.install_module(Arc::new(Box::new(NoActionModule {})));
     }
 }

@@ -51,6 +51,7 @@ enum Command {
     PublishFile(PublishFile),
     GetPublishedObjects(GetPublishedObjects),
     DeleteObject(DeleteObject),
+    GetPinned(GetPinned),
 }
 
 #[derive(Parser)]
@@ -180,6 +181,14 @@ struct DeleteObject {
     object_id: String,
 }
 
+#[derive(Parser)]
+struct GetPinned {
+    #[arg()]
+    node_name: String,
+    #[arg()]
+    id: String,
+}
+
 #[derive(Tabled)]
 struct NodeInfoRow {
     pub name: String,
@@ -252,6 +261,7 @@ async fn handle_command(
         Command::PublishFile(cmd) => handle_publish_file(cmd, req, res).await,
         Command::GetPublishedObjects(cmd) => handle_get_published_objects(ctx, cmd, req, res).await,
         Command::DeleteObject(cmd) => handle_delete_object(cmd, req, res).await,
+        Command::GetPinned(cmd) => handle_get_pinned(cmd, req, res).await,
     }
 }
 
@@ -551,39 +561,47 @@ async fn handle_download_file(
 
     match response {
         Ok(DaemonResponse::ObjectDownloaded { data, stats: _ }) => {
-            let mut typed = Some(data);
-            while let Some(obj) = typed.clone() {
-                typed = match parse_typed(obj).await {
-                    Err(e) => {
-                        debug!("{e}");
-                        continue;
-                    }
-                    Ok(obj_enum) => match obj_enum {
-                        ObjectEnum::Signed(signed) => Some(signed.object),
-                        ObjectEnum::PlainFile(file) => {
-                            println!("{}", String::from_utf8(file.content)?);
-                            return Ok(());
-                        }
-                        _ => {
-                            debug!("Received object was not a file!");
-                            bail!("Received unsupported object type");
-                        }
-                    },
-                }
-            }
-            bail!("Didn't receive a supported object type in the object cascade");
+            return print_typed_object(data).await;
         }
         Err(DaemonError::Other(_)) => {
             println!("Failed to download file");
+            bail!("Failed to download file");
         }
         _ => {
             bail!("Daemon returned wrong response");
         }
     }
-
+}
+async fn print_typed_object(typed: TypedObject) -> Result<()> {
+    let mut typed = Some(typed);
+    while let Some(obj) = typed.clone() {
+        typed = match parse_typed(obj).await {
+            Err(e) => {
+                debug!("{e}");
+                continue;
+            }
+            Ok(obj_enum) => match obj_enum {
+                ObjectEnum::Signed(signed) => Some(signed.object),
+                ObjectEnum::PlainFile(file) => {
+                    println!("\n{}", String::from_utf8(file.content)?);
+                    return Ok(());
+                }
+                ObjectEnum::Pin(pin) => {
+                    println!(
+                        "=== Pin: id:{}, relation:{:?} ===",
+                        pin.pinned_id, pin.relation
+                    );
+                    Some(pin.object)
+                }
+                _ => {
+                    debug!("Received object was not a file!");
+                    bail!("Received unsupported object type");
+                }
+            },
+        }
+    }
     Ok(())
 }
-
 async fn handle_get_providers(
     cmd: GetProviders,
     req: RequestSender,
@@ -676,14 +694,9 @@ async fn handle_publish_file(
     mut res: ReseponseReceiver,
 ) -> Result<()> {
     let node_name = cmd.node_name;
-    if cmd.pins.is_none() && cmd.relations.is_none() {
-        req.send(DaemonRequest::PublishFile {
-            node_name,
-            path: cmd.path,
-        })
-        .await
-        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
-    } else {
+    let mut optional_pins = None;
+
+    if !cmd.pins.is_none() || !cmd.relations.is_none() {
         let pins = cmd.pins.unwrap_or(vec![]);
         let relations = cmd.relations.unwrap_or(vec![]);
         let mut pin_pairs = Vec::new();
@@ -708,19 +721,24 @@ async fn handle_publish_file(
             }
             pin_pairs.push((pin, rel));
         }
-
-        let object: TypedObject = PlainFileObject::try_from_path(&cmd.path).await?.into();
-        let object = PinObject::add_pins(object, pin_pairs);
-        req.send(DaemonRequest::SignAndPublishObject { node_name, object })
-            .await
-            .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+        optional_pins = Some(pin_pairs);
     }
+
+    let mut object: TypedObject = PlainFileObject::try_from_path(&cmd.path).await?.into();
+    if let Some(pins) = optional_pins {
+        object = PinObject::add_pins(object, pins);
+    }
+
+    req.send(DaemonRequest::SignAndPublishObject { node_name, object })
+        .await
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+
     let resp = res
         .recv()
         .await
         .ok_or(anyhow!("Daemon returned no response"))?;
     match resp {
-        Ok(DaemonResponse::FilePublished { id }) => {
+        Ok(DaemonResponse::ObjectPublished { id }) => {
             info!(id = id, "File published");
             println!("{id}");
             return Ok(());
@@ -810,6 +828,43 @@ async fn handle_delete_object(
         Err(e) => {
             println!("Error deleting object: {e}");
             bail!("Error deleting object");
+        }
+        _ => {
+            bail!("Daemon returned wrong response");
+        }
+    }
+    Ok(())
+}
+
+async fn handle_get_pinned(
+    cmd: GetPinned,
+    req: RequestSender,
+    mut res: ReseponseReceiver,
+) -> Result<()> {
+    req.send(DaemonRequest::GetPinned {
+        node_name: cmd.node_name,
+        object_id: cmd.id,
+    })
+    .await?;
+    let resp = res
+        .recv()
+        .await
+        .ok_or(anyhow!("Daemon returned no response"))?;
+    match resp {
+        Ok(DaemonResponse::QueryFinished { result }) => {
+            println!("Received {} objects", result.len());
+            let i = 1;
+            for r in result {
+                println!("Object {i}, id={}:", proto::Hash::try_from(&r)?);
+
+                let _ = print_typed_object(r)
+                    .await
+                    .inspect_err(|e| println!("Received invalid object: {e:?}"));
+            }
+        }
+        Err(e) => {
+            println!("Error during query: {e}");
+            bail!("Error during query");
         }
         _ => {
             bail!("Daemon returned wrong response");
