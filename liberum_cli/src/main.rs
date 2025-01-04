@@ -2,7 +2,9 @@ use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
 use liberum_core::node_config::NodeConfig;
 use liberum_core::parser::{parse_typed, ObjectEnum};
-use liberum_core::proto;
+use liberum_core::proto::file::PlainFileObject;
+use liberum_core::proto::pins::PinObject;
+use liberum_core::proto::{self, TypedObject};
 use liberum_core::types::NodeInfo;
 use liberum_core::{node_config::BootstrapNode, DaemonError, DaemonRequest, DaemonResponse};
 use libp2p::Multiaddr;
@@ -158,6 +160,10 @@ struct PublishFile {
     node_name: String,
     #[arg()]
     path: PathBuf,
+    #[arg(short, long)]
+    pins: Option<Vec<String>>,
+    #[arg(short, long)]
+    relations: Option<Vec<Option<String>>>,
 }
 
 #[derive(Parser)]
@@ -669,13 +675,46 @@ async fn handle_publish_file(
     req: RequestSender,
     mut res: ReseponseReceiver,
 ) -> Result<()> {
-    req.send(DaemonRequest::PublishFile {
-        node_name: cmd.node_name,
-        path: cmd.path,
-    })
-    .await
-    .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+    let node_name = cmd.node_name;
+    if cmd.pins.is_none() && cmd.relations.is_none() {
+        req.send(DaemonRequest::PublishFile {
+            node_name,
+            path: cmd.path,
+        })
+        .await
+        .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+    } else {
+        let pins = cmd.pins.unwrap_or(vec![]);
+        let relations = cmd.relations.unwrap_or(vec![]);
+        let mut pin_pairs = Vec::new();
 
+        if pins.len() < relations.len() {
+            println!("Number of relations has to be <= number of pins. A relation can only exist in pair with a pin.");
+            return Err(anyhow!("Number of relations has to be <= number of pins. A relation can only exist in pair with a pin."));
+        }
+
+        for i in 0..pins.len() {
+            let pin = &pins[i];
+            let pin = proto::Hash::try_from(pin)?;
+            let rel;
+            if let Some(r) = relations.get(i) {
+                if let Some(s) = r {
+                    rel = Some(proto::Hash::try_from(s)?);
+                } else {
+                    rel = None;
+                }
+            } else {
+                rel = None;
+            }
+            pin_pairs.push((pin, rel));
+        }
+
+        let object: TypedObject = PlainFileObject::try_from_path(&cmd.path).await?.into();
+        let object = PinObject::add_pins(object, pin_pairs);
+        req.send(DaemonRequest::SignAndPublishObject { node_name, object })
+            .await
+            .inspect_err(|e| error!(err = e.to_string(), "Failed to send message"))?;
+    }
     let resp = res
         .recv()
         .await

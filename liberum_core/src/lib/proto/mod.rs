@@ -112,6 +112,18 @@ impl TryFrom<&str> for Hash {
         bs58::decode(value).into_vec()?.as_slice().try_into()
     }
 }
+impl TryFrom<String> for Hash {
+    type Error = Error;
+    fn try_from(value: String) -> Result<Self> {
+        Self::try_from(value.as_str())
+    }
+}
+impl TryFrom<&String> for Hash {
+    type Error = Error;
+    fn try_from(value: &String) -> Result<Self> {
+        Self::try_from(value.as_str())
+    }
+}
 impl Into<libp2p::kad::RecordKey> for Hash {
     fn into(self) -> libp2p::kad::RecordKey {
         RecordKey::new(&self.bytes)
