@@ -71,6 +71,14 @@ pub enum DaemonRequest {
         peer_id: String,
         addr: String,
     },
+    PublishObject {
+        node_name: String,
+        object: TypedObject,
+    },
+    QueryObject {
+        node_name: String,
+        object: TypedObject,
+    },
     PublishFile {
         node_name: String,
         path: PathBuf,
@@ -120,6 +128,12 @@ pub enum DaemonResponse {
     Dialed,
     FilePublished {
         id: String,
+    },
+    ObjectPublished {
+        id: String,
+    },
+    QueryFinished {
+        result: Vec<TypedObject>,
     },
     PublishedObjectsList {
         object_infos: Vec<Hash>,

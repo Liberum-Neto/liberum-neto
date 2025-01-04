@@ -17,6 +17,7 @@ use libp2p::{identity, kad, Multiaddr, StreamProtocol, SwarmBuilder};
 use libp2p::{kad::store::MemoryStore, request_response, swarm::SwarmEvent, Swarm};
 use messages::*;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::warn;
@@ -44,16 +45,17 @@ struct SwarmContext {
     vault_ref: ActorRef<Vaultv3>,
     node_snapshot: NodeSnapshot,
     behaviour: BehaviourContext,
-    modules: Modules,
+    modules: Arc<Modules>,
 }
 
 /// Prepares the sender to send messages to the swarm
 pub async fn run_swarm(
     node_ref: ActorRef<Node>,
     vault_ref: ActorRef<Vaultv3>,
+    modules: Arc<Modules>,
 ) -> mpsc::Sender<SwarmRunnerMessage> {
     let (sender, receiver) = mpsc::channel::<SwarmRunnerMessage>(16);
-    tokio::spawn(run_swarm_task(node_ref, vault_ref, receiver));
+    tokio::spawn(run_swarm_task(node_ref, vault_ref, modules, receiver));
     sender
 }
 
@@ -61,9 +63,10 @@ pub async fn run_swarm(
 async fn run_swarm_task(
     node_ref: ActorRef<Node>,
     vault_ref: ActorRef<Vaultv3>,
+    modules: Arc<Modules>,
     receiver: mpsc::Receiver<SwarmRunnerMessage>,
 ) {
-    if let Err(e) = run_swarm_main(node_ref.clone(), vault_ref, receiver).await {
+    if let Err(e) = run_swarm_main(node_ref.clone(), vault_ref, modules, receiver).await {
         error!(err = format!("{e:?}"), "Swarm run error");
         node_ref.ask(node::SwarmDied).send().await.unwrap();
     }
@@ -73,6 +76,7 @@ async fn run_swarm_task(
 async fn run_swarm_main(
     node_ref: ActorRef<Node>,
     vault_ref: ActorRef<Vaultv3>,
+    modules: Arc<Modules>,
     mut receiver: mpsc::Receiver<SwarmRunnerMessage>,
 ) -> Result<()> {
     // It must be guaranteed not to ever fail. Swarm can't start without this data.
@@ -129,9 +133,8 @@ async fn run_swarm_main(
         vault_ref,
         swarm: swarm,
         behaviour: BehaviourContext::new(),
-        modules: Modules::new(),
+        modules: modules,
     };
-    context.modules.install_default(context.vault_ref.clone());
 
     let swarm_default_addr_ip6 =
         Multiaddr::from_str(DEFAULT_MULTIADDR_STR_IP6).inspect_err(|e| {

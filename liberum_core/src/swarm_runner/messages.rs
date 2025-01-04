@@ -93,6 +93,12 @@ pub enum SwarmRunnerMessage {
         obj_id: proto::Hash,
         response_sender: oneshot::Sender<Result<()>>,
     },
+    SendQuery {
+        object: TypedObject,
+        obj_id: proto::Hash,
+        peer_id: PeerId,
+        response_sender: oneshot::Sender<Result<Vec<TypedObject>>>,
+    },
 }
 
 /// Methods on SwarmContext for handling SwarmRunner messages
@@ -343,6 +349,26 @@ impl SwarmContext {
                         .send(Err(anyhow!("Failed to remove from vault")))
                         .unwrap();
                 }
+                Ok(false)
+            }
+            SwarmRunnerMessage::SendQuery {
+                object,
+                obj_id,
+                peer_id,
+                response_sender,
+            } => {
+                let request = QueryRequest {
+                    object,
+                    object_id: obj_id,
+                };
+                let request_id = self
+                    .swarm
+                    .behaviour_mut()
+                    .query_sender
+                    .send_request(&peer_id, request);
+                self.behaviour
+                    .pending_outbound_queries
+                    .insert(request_id, response_sender);
                 Ok(false)
             }
         }

@@ -9,6 +9,7 @@ use kameo::actor::ActorRef;
 use kameo::request::MessageSend;
 use liberum_core::codec::AsymmetricMessageCodec;
 use liberum_core::node_config::NodeConfig;
+use liberum_core::proto::TypedObject;
 use liberum_core::types::NodeInfo;
 use liberum_core::DaemonError;
 use liberum_core::DaemonRequest;
@@ -130,6 +131,12 @@ pub async fn handle_message(message: DaemonRequest, context: &AppContext) -> Dae
             node_name,
             object_id,
         } => handle_delete_object(node_name, object_id, context).await,
+        DaemonRequest::PublishObject { node_name, object } => {
+            handle_publish_object(node_name, object, context).await
+        }
+        DaemonRequest::QueryObject { node_name, object } => {
+            handle_query_object(node_name, object, context).await
+        }
     }
 }
 
@@ -465,4 +472,39 @@ async fn handle_delete_object(
         .map_err(|e| DaemonError::Other(e.to_string()))?;
 
     DaemonResult::Ok(result)
+}
+
+async fn handle_publish_object(
+    node_name: String,
+    object: TypedObject,
+    context: &AppContext,
+) -> DaemonResult {
+    let node = get_node(&node_name, context).await?;
+
+    let resp_id = node
+        .ask(PublishObject { object })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish object"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    Ok(DaemonResponse::ObjectPublished { id: resp_id })
+}
+
+async fn handle_query_object(
+    node_name: String,
+    query_object: TypedObject,
+    context: &AppContext,
+) -> DaemonResult {
+    let node = get_node(&node_name, context).await?;
+
+    let resp = node
+        .ask(node::SendQuery {
+            object: query_object,
+        })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish object"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+    Ok(resp)
 }

@@ -33,6 +33,17 @@ where
     }
 }
 
+impl PartialEq for TypedObject {
+    fn eq(&self, other: &Self) -> bool {
+        let hash = Hash::try_from(self);
+        let other_hash = Hash::try_from(other);
+        if let (Ok(hash), Ok(other_hash)) = (hash, other_hash) {
+            return hash == other_hash;
+        }
+        false
+    }
+}
+
 impl TypedObject {
     pub fn try_from_typed<T>(value: &TypedObject) -> Result<T>
     where
@@ -107,7 +118,7 @@ impl Into<libp2p::kad::RecordKey> for Hash {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq)]
 pub struct TypedObject {
     pub uuid: Uuid,
     pub data: Vec<u8>,
