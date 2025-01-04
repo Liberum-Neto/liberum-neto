@@ -25,4 +25,8 @@ impl AppView for NodesListView {
 
         update.unwrap().view_action
     }
+
+    fn unique_state_id(&self) -> String {
+        "node_list_view".to_string()
+    }
 }

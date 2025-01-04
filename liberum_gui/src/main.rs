@@ -4,7 +4,7 @@ pub mod system_observer;
 pub mod views;
 pub mod windows;
 
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use daemon_com::DaemonCom;
@@ -20,6 +20,7 @@ struct MyApp {
     system_state: Arc<Mutex<Option<SystemState>>>,
     system_observer: Rc<RefCell<SystemObserver>>,
     daemon_com: DaemonCom,
+    views_states: HashMap<String, Box<dyn Any>>,
 }
 
 impl MyApp {
@@ -29,6 +30,7 @@ impl MyApp {
             system_state: system_observer.borrow().system_state.clone(),
             system_observer: system_observer.clone(),
             daemon_com,
+            views_states: HashMap::new(),
         }
     }
 }
@@ -52,9 +54,19 @@ impl eframe::App for MyApp {
         match action {
             ViewAction::Stay => {}
             ViewAction::SwitchView { view } => {
-                self.current_view.teardown(&mut view_ctx);
+                let state_to_save = self.current_view.teardown(&mut view_ctx);
+                if let Some(state_to_save) = state_to_save {
+                    self.views_states
+                        .insert(self.current_view.unique_state_id(), state_to_save);
+                }
+
                 self.current_view = view;
-                self.current_view.setup(&mut view_ctx);
+
+                let state_to_load = self
+                    .views_states
+                    .remove(&self.current_view.unique_state_id());
+
+                self.current_view.setup(&mut view_ctx, state_to_load);
             }
         }
     }

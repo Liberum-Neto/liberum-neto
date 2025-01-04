@@ -4,6 +4,7 @@ pub mod nodes_list_view;
 pub use node_view::NodeView;
 pub use nodes_list_view::NodesListView;
 
+use std::any::Any;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -14,9 +15,12 @@ use crate::system_observer::SystemObserver;
 use crate::{daemon_com::DaemonCom, system_observer::SystemState};
 
 pub trait AppView {
-    fn setup(&mut self, _: &mut ViewContext) {}
+    fn setup(&mut self, _: &mut ViewContext, _: Option<Box<dyn Any>>) {}
     fn draw(&mut self, ctx: &mut ViewContext) -> ViewAction;
-    fn teardown(&mut self, _: &mut ViewContext) {}
+    fn teardown(&mut self, _: &mut ViewContext) -> Option<Box<dyn Any>> {
+        None
+    }
+    fn unique_state_id(&self) -> String;
 }
 
 pub enum ViewAction {

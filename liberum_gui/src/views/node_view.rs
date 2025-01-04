@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crate::{
     components::status_bar::StatusBar,
     windows::{
@@ -16,6 +18,10 @@ pub struct NodeView {
     dialer_window: DialerWindow,
     downloader_window: DownloaderWindow,
     download_window: Option<DownloadWindow>,
+    status_line: String,
+}
+
+struct NodeViewState {
     status_line: String,
 }
 
@@ -103,10 +109,15 @@ impl NodeView {
 }
 
 impl AppView for NodeView {
-    fn setup(&mut self, ctx: &mut ViewContext) {
+    fn setup(&mut self, ctx: &mut ViewContext, init_state: Option<Box<dyn Any>>) {
         ctx.system_observer
             .borrow_mut()
             .add_observed_config(&self.node_name);
+
+        if let Some(init_state) = init_state {
+            let node_view_state = init_state.downcast::<NodeViewState>().unwrap();
+            self.status_line = node_view_state.status_line;
+        }
     }
 
     fn draw(&mut self, mut ctx: &mut ViewContext) -> ViewAction {
@@ -119,9 +130,17 @@ impl AppView for NodeView {
         self.show_status_bar(&mut ctx)
     }
 
-    fn teardown(&mut self, ctx: &mut ViewContext) {
+    fn teardown(&mut self, ctx: &mut ViewContext) -> Option<Box<dyn Any>> {
         ctx.system_observer
             .borrow_mut()
             .remove_observed_config(&self.node_name);
+
+        Some(Box::new(NodeViewState {
+            status_line: self.status_line.clone(),
+        }))
+    }
+
+    fn unique_state_id(&self) -> String {
+        format!("node_view_{}", self.node_name)
     }
 }
