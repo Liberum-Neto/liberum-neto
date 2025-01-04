@@ -61,7 +61,7 @@ pub enum SwarmRunnerMessage {
     GetObject {
         obj_id: proto::Hash,
         peer_id: PeerId,
-        response_sender: oneshot::Sender<Result<TypedObject>>,
+        response_sender: oneshot::Sender<Result<Vec<TypedObject>>>,
     },
     /// Publish a file in the network. This will ask up to `k` nodes near the
     /// published ID to store the file. The nodes will announce to be providers
@@ -199,7 +199,7 @@ impl SwarmContext {
                     // Should be implemented using a VAULT
                     let object = self.get_object_from_vault(obj_id.clone()).await;
                     if let Some(object) = object {
-                        let _ = response_sender.send(Ok(object));
+                        let _ = response_sender.send(Ok(vec![object]));
                         return Ok(false);
                     } else {
                         let _ = response_sender.send(Err(anyhow!("Object not found")));

@@ -53,7 +53,8 @@ pub struct BehaviourContext {
     pub pending_outbound_delete_object:
         HashMap<OutboundRequestId, oneshot::Sender<Result<ResultObject>>>,
 
-    pub pending_outbound_queries: HashMap<OutboundRequestId, oneshot::Sender<Result<TypedObject>>>,
+    pub pending_outbound_queries:
+        HashMap<OutboundRequestId, oneshot::Sender<Result<Vec<TypedObject>>>>,
 }
 
 impl BehaviourContext {

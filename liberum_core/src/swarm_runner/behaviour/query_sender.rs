@@ -174,7 +174,11 @@ impl SwarmContext {
             if response.objects.len() == 0 {
                 let _ = sender.send(Err(anyhow!("No objects found for query")));
             } else {
-                let _ = sender.send(Ok(response.objects[0].to_owned().0)); // TODO Should send all objects, not just one
+                let _ = sender.send(Ok(response
+                    .objects
+                    .into_iter()
+                    .map(|pair| pair.0)
+                    .collect())); // TODO Should send all objects, not just one
             }
         } else if let Some(sender) = self
             .behaviour

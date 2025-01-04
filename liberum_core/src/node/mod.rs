@@ -5,9 +5,9 @@ use crate::swarm_runner;
 use crate::vaultv3::{ListObjects, Vaultv3};
 use anyhow::{anyhow, Result};
 use kameo::mailbox::bounded::BoundedMailbox;
+use kameo::messages;
 use kameo::request::MessageSend;
 use kameo::{actor::ActorRef, message::Message, Actor};
-use kameo::{message, messages};
 use liberum_core::node_config::NodeConfig;
 use liberum_core::proto::{self, signed::SignedObject, TypedObject};
 use liberum_core::proto::{file::PlainFileObject, ResultObject};
@@ -131,26 +131,9 @@ impl Node {
     /// the ID of the file using which it can be found.
     #[message]
     pub async fn provide_file(&mut self, path: PathBuf) -> Result<String> {
-        let (resp_send, resp_recv) = oneshot::channel();
-
         let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
         let object: TypedObject = SignedObject::sign_ed25519(object, self.keypair.clone())?.into();
-        let obj_id = proto::Hash::try_from(&object)?;
-
-        self.swarm_sender
-            .as_mut()
-            .unwrap()
-            .send(SwarmRunnerMessage::ProvideObject {
-                object,
-                obj_id: obj_id.clone(),
-                response_sender: resp_send,
-            })
-            .await?;
-
-        resp_recv.await??;
-        let obj_id_str = obj_id.to_string();
-
-        Ok(obj_id_str)
+        self.provide_object_inner(object).await
     }
 
     #[message]
@@ -237,6 +220,7 @@ impl Node {
                 }
 
                 Ok(Ok(obj)) => {
+                    let obj = obj[0].to_owned();
                     let calculated_obj_id = proto::Hash::try_from(&obj)?;
                     if obj_id != calculated_obj_id {
                         debug!(
@@ -300,6 +284,9 @@ impl Node {
 
     #[message]
     pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
+        self.publish_file_inner(path).await
+    }
+    async fn publish_file_inner(&mut self, path: PathBuf) -> Result<String> {
         // The file has to be read to the memory to be published. There is no other way without
         // a new behaviour kademlia could talk to, which would provide streams of data.
         // (Maybe could be implemented on the existing request_response if it would be generalised more?)
@@ -307,9 +294,38 @@ impl Node {
         let object: TypedObject = SignedObject::sign_ed25519(object, self.keypair.clone())
             .unwrap()
             .into();
+        self.publish_object_inner(object).await
+    }
+
+    #[message]
+    pub async fn provide_object(&mut self, object: proto::TypedObject) -> Result<String> {
+        self.provide_object_inner(object).await
+    }
+    async fn provide_object_inner(&mut self, object: proto::TypedObject) -> Result<String> {
+        let obj_id = proto::Hash::try_from(&object)?;
+        let obj_id_str = obj_id.to_string();
+
+        let (resp_send, _) = oneshot::channel();
+        let _ = self
+            .swarm_sender
+            .as_mut()
+            .unwrap()
+            .send(SwarmRunnerMessage::ProvideObject {
+                object,
+                obj_id: obj_id,
+                response_sender: resp_send,
+            })
+            .await?;
+
+        Ok(obj_id_str)
+    }
+    #[message]
+    pub async fn publish_object(&mut self, object: TypedObject) -> Result<String> {
+        self.publish_object_inner(object).await
+    }
+    async fn publish_object_inner(&mut self, object: TypedObject) -> Result<String> {
         let obj_id = proto::Hash::try_from(&object)?;
         let obj_id_str = bs58::encode(&obj_id.bytes).into_string();
-
         let (resp_send, resp_recv) = oneshot::channel();
         self.swarm_sender
             .as_mut()
@@ -372,26 +388,6 @@ impl Node {
             return Ok(obj_id_str);
         }
         Err(anyhow!("Could not publish file"))
-    }
-
-    #[message]
-    pub async fn provide_object(&mut self, object: proto::TypedObject) -> Result<String> {
-        let obj_id = proto::Hash::try_from(&object)?;
-        let obj_id_str = obj_id.to_string();
-
-        let (resp_send, _) = oneshot::channel();
-        let _ = self
-            .swarm_sender
-            .as_mut()
-            .unwrap()
-            .send(SwarmRunnerMessage::ProvideObject {
-                object,
-                obj_id: obj_id,
-                response_sender: resp_send,
-            })
-            .await?;
-
-        Ok(obj_id_str)
     }
 
     #[message]
