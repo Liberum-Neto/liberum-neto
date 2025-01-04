@@ -4,7 +4,10 @@ use anyhow::Result;
 use egui::{Align2, Color32, RichText};
 use egui_file::FileDialog;
 
-use crate::windows::{node_config_window::NodeConfigWindow, node_window::NodeWindow, Window};
+use crate::windows::{
+    dialer_window::DialerWindow, node_config_window::NodeConfigWindow, node_window::NodeWindow,
+    Window,
+};
 
 use super::{AppView, NodesListView, ViewAction, ViewContext};
 
@@ -16,22 +19,12 @@ struct FileInfo {
     pins: Vec<String>,
 }
 
-#[derive(Clone, Default)]
-struct PeerInfo {
-    id: String,
-    addr: String,
-}
-
-struct DialHistoryEntry {
-    peer: PeerInfo,
-    successful: bool,
-}
-
 pub struct NodeView {
     node_name: String,
     file_to_download_id: String,
     config_window: NodeConfigWindow,
     node_window: NodeWindow,
+    dialer_window: DialerWindow,
     status_line: String,
     download_window_opened: bool,
     downloaded_file_info: Option<FileInfo>,
@@ -39,8 +32,6 @@ pub struct NodeView {
     download_destination_path: Option<PathBuf>,
     download_history: Vec<Result<FileInfo>>,
     download_details_file_info: Option<FileInfo>,
-    dial_peer: PeerInfo,
-    dial_history: Vec<DialHistoryEntry>,
 }
 
 impl NodeView {
@@ -50,6 +41,7 @@ impl NodeView {
             file_to_download_id: String::new(),
             config_window: NodeConfigWindow::new(node_name),
             node_window: NodeWindow::new(node_name),
+            dialer_window: DialerWindow::new(node_name),
             status_line: String::new(),
             download_window_opened: false,
             downloaded_file_info: None,
@@ -57,8 +49,6 @@ impl NodeView {
             download_destination_path: None,
             download_history: Vec::new(),
             download_details_file_info: None,
-            dial_peer: PeerInfo::default(),
-            dial_history: Vec::new(),
         }
     }
 
@@ -75,72 +65,17 @@ impl NodeView {
             self.config_window.open();
         }
 
-        if update.new_status_line.is_some() {
-            self.status_line = update.new_status_line.unwrap();
+        if let Some(new_status_line) = update.new_status_line {
+            self.status_line = new_status_line;
         }
     }
 
     fn show_dialer_window(&mut self, ctx: &mut ViewContext) {
-        egui::Window::new("Dialer")
-            .anchor(Align2::RIGHT_TOP, [-16.0, 16.0])
-            .show(ctx.egui_ctx, |ui| {
-                egui::TopBottomPanel::top("dial_controls").show_inside(ui, |ui| {
-                    ui.label("PeerID:");
-                    ui.text_edit_singleline(&mut self.dial_peer.id);
-                    ui.label("Peer address:");
-                    ui.text_edit_singleline(&mut self.dial_peer.addr);
+        let update = self.dialer_window.draw(ctx);
 
-                    ui.add_space(10.0);
-
-                    if ui.button("Dial").clicked() {
-                        match ctx.daemon_com.dial(
-                            &self.node_name,
-                            &self.dial_peer.id,
-                            &self.dial_peer.addr,
-                        ) {
-                            Ok(_) => {
-                                self.status_line = format!(
-                                    "Dial {} @ {} successful!",
-                                    self.dial_peer.id, self.dial_peer.addr
-                                );
-                                self.dial_history.push(DialHistoryEntry {
-                                    peer: self.dial_peer.clone(),
-                                    successful: true,
-                                });
-                                self.dial_peer = PeerInfo::default();
-                            }
-                            Err(e) => {
-                                self.status_line = e.to_string();
-                                self.dial_history.push(DialHistoryEntry {
-                                    peer: self.dial_peer.clone(),
-                                    successful: false,
-                                });
-                            }
-                        }
-                    }
-
-                    ui.add_space(10.0);
-                });
-
-                if !self.dial_history.is_empty() {
-                    egui::Grid::new("dial_history")
-                        .num_columns(3)
-                        .striped(true)
-                        .show(ui, |ui| {
-                            ui.label("Peer ID");
-                            ui.label("Peer address");
-                            ui.label("Successful?");
-                            ui.end_row();
-
-                            for entry in &self.dial_history {
-                                ui.label(&entry.peer.id);
-                                ui.label(&entry.peer.addr);
-                                ui.label(entry.successful.to_string());
-                                ui.end_row();
-                            }
-                        });
-                }
-            });
+        if let Some(new_status_line) = update.new_status_line {
+            self.status_line = new_status_line;
+        }
     }
 
     fn show_downloader_window(&mut self, ctx: &mut ViewContext) {
