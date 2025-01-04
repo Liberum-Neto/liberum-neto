@@ -1,5 +1,6 @@
 use crate::views::ViewContext;
 
+pub mod dialer_window;
 pub mod node_config_window;
 pub mod node_list_window;
 pub mod node_window;
