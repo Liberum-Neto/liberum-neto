@@ -71,7 +71,11 @@ pub enum DaemonRequest {
         peer_id: String,
         addr: String,
     },
-    PublishObject {
+    SignAndProvideObject {
+        node_name: String,
+        object: TypedObject,
+    },
+    SignAndPublishObject {
         node_name: String,
         object: TypedObject,
     },

@@ -131,7 +131,10 @@ pub async fn handle_message(message: DaemonRequest, context: &AppContext) -> Dae
             node_name,
             object_id,
         } => handle_delete_object(node_name, object_id, context).await,
-        DaemonRequest::PublishObject { node_name, object } => {
+        DaemonRequest::SignAndProvideObject { node_name, object } => {
+            handle_provide_object(node_name, object, context).await
+        }
+        DaemonRequest::SignAndPublishObject { node_name, object } => {
             handle_publish_object(node_name, object, context).await
         }
         DaemonRequest::QueryObject { node_name, object } => {
@@ -473,7 +476,22 @@ async fn handle_delete_object(
 
     DaemonResult::Ok(result)
 }
+async fn handle_provide_object(
+    node_name: String,
+    object: TypedObject,
+    context: &AppContext,
+) -> DaemonResult {
+    let node = get_node(&node_name, context).await?;
 
+    let resp_id = node
+        .ask(SignAndProvideObject { object })
+        .send()
+        .await
+        .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish object"))
+        .map_err(|e| DaemonError::Other(e.to_string()))?;
+
+    Ok(DaemonResponse::ObjectPublished { id: resp_id })
+}
 async fn handle_publish_object(
     node_name: String,
     object: TypedObject,
@@ -482,7 +500,7 @@ async fn handle_publish_object(
     let node = get_node(&node_name, context).await?;
 
     let resp_id = node
-        .ask(PublishObject { object })
+        .ask(SignAndPublishObject { object })
         .send()
         .await
         .inspect_err(|e| debug!(err = e.to_string(), "Failed to handle publish object"))

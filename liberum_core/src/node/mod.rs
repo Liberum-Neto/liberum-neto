@@ -305,7 +305,8 @@ impl Node {
     }
 
     #[message]
-    pub async fn provide_object(&mut self, object: proto::TypedObject) -> Result<String> {
+    pub async fn sign_and_provide_object(&mut self, object: proto::TypedObject) -> Result<String> {
+        let object = SignedObject::sign_ed25519(object, self.keypair.clone())?.into();
         self.provide_object_inner(object).await
     }
     async fn provide_object_inner(&mut self, object: proto::TypedObject) -> Result<String> {
@@ -327,7 +328,8 @@ impl Node {
         Ok(obj_id_str)
     }
     #[message]
-    pub async fn publish_object(&mut self, object: TypedObject) -> Result<String> {
+    pub async fn sign_and_publish_object(&mut self, object: TypedObject) -> Result<String> {
+        let object = SignedObject::sign_ed25519(object, self.keypair.clone())?.into();
         self.publish_object_inner(object).await
     }
 
