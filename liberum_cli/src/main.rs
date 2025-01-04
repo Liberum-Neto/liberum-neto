@@ -583,7 +583,7 @@ async fn print_typed_object(typed: TypedObject) -> Result<()> {
             Ok(obj_enum) => match obj_enum {
                 ObjectEnum::Signed(signed) => Some(signed.object),
                 ObjectEnum::PlainFile(file) => {
-                    println!("\n{}", String::from_utf8(file.content)?);
+                    println!("{}", String::from_utf8(file.content)?);
                     return Ok(());
                 }
                 ObjectEnum::Pin(pin) => {
