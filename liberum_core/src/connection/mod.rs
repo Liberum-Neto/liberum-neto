@@ -9,6 +9,7 @@ use kameo::actor::ActorRef;
 use kameo::request::MessageSend;
 use liberum_core::codec::AsymmetricMessageCodec;
 use liberum_core::node_config::NodeConfig;
+use liberum_core::proto::queries::PinQuery;
 use liberum_core::proto::TypedObject;
 use liberum_core::types::NodeInfo;
 use liberum_core::DaemonError;
@@ -515,7 +516,6 @@ async fn handle_query_object(
     context: &AppContext,
 ) -> DaemonResult {
     let node = get_node(&node_name, context).await?;
-
     let resp = node
         .ask(node::SendQuery {
             object: query_object,

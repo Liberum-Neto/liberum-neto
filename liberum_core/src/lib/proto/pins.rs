@@ -17,15 +17,24 @@ impl UUIDTyped for PinObject {
         PinObject::UUID
     }
 }
-
-pub fn add_pins(mut object: TypedObject, pins: Vec<(Hash, Option<Hash>)>) -> TypedObject {
-    for pin in pins {
-        object = PinObject {
-            pinned_id: pin.0,
-            relation: pin.1,
-            object: object,
+impl PinObject {
+    pub fn extend(self, pinned_id: Hash, relation: Option<Hash>) -> Self {
+        PinObject {
+            pinned_id,
+            relation,
+            object: self.into(),
         }
-        .into();
     }
-    object
+
+    pub fn add_pins(mut object: TypedObject, pins: Vec<(Hash, Option<Hash>)>) -> TypedObject {
+        for pin in pins {
+            object = PinObject {
+                pinned_id: pin.0,
+                relation: pin.1,
+                object: object,
+            }
+            .into();
+        }
+        object
+    }
 }

@@ -64,3 +64,27 @@ impl UUIDTyped for PinQuery {
         PinQuery::UUID
     }
 }
+
+impl PinQuery {
+    pub fn extend(self, pinned_id: Option<Hash>, relation: Option<Hash>) -> Self {
+        PinQuery {
+            pinned_id: pinned_id,
+            relation: relation,
+            object: self.into(),
+        }
+    }
+    pub fn pin_all(
+        mut object: TypedObject,
+        pins: Vec<(Option<Hash>, Option<Hash>)>,
+    ) -> TypedObject {
+        for pin in pins {
+            object = PinQuery {
+                pinned_id: pin.0,
+                relation: pin.1,
+                object: object,
+            }
+            .into();
+        }
+        object
+    }
+}
