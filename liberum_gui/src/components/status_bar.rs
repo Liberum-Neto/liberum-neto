@@ -1,24 +1,23 @@
 use egui::Widget;
 
-use crate::views::{NodesListView, ViewAction};
+use crate::views::{AppView, ViewAction};
 
 pub struct StatusBar<'a> {
     status: Option<String>,
     view_action: &'a mut ViewAction,
+    prev_view: Box<dyn AppView>,
 }
 
 impl<'a> StatusBar<'a> {
-    pub fn empty(view_action: &'a mut ViewAction) -> StatusBar<'a> {
-        return StatusBar {
-            status: None,
-            view_action,
-        };
-    }
-
-    pub fn status(status: &str, view_action: &'a mut ViewAction) -> StatusBar<'a> {
+    pub fn status(
+        status: &str,
+        view_action: &'a mut ViewAction,
+        prev_view: Box<dyn AppView>,
+    ) -> StatusBar<'a> {
         StatusBar {
             status: Some(status.to_string()),
             view_action,
+            prev_view,
         }
     }
 }
@@ -32,7 +31,7 @@ impl<'a> Widget for StatusBar<'a> {
             .horizontal(|ui| {
                 if ui.button("Back to nodes list").clicked() {
                     action = ViewAction::SwitchView {
-                        view: Box::new(NodesListView::new()),
+                        view: self.prev_view,
                     }
                 }
 

@@ -7,7 +7,7 @@ use crate::{
     },
 };
 
-use super::{AppView, ViewAction, ViewContext};
+use super::{AppView, NodesListView, ViewAction, ViewContext};
 
 pub struct NodeView {
     node_name: String,
@@ -91,7 +91,11 @@ impl NodeView {
             .frame(egui::Frame::default().inner_margin(16.0))
             .show_separator_line(false)
             .show(ctx.egui_ctx, |ui| {
-                ui.add(StatusBar::status(&self.status_line, &mut action))
+                ui.add(StatusBar::status(
+                    &self.status_line,
+                    &mut action,
+                    Box::new(NodesListView::new()),
+                ))
             });
 
         action
