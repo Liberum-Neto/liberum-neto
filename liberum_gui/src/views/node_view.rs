@@ -72,11 +72,15 @@ impl NodeView {
         }
 
         if let Some(file_info) = update.file_downloaded {
-            self.download_window = Some(DownloadWindow::new(file_info))
+            let mut download_window = DownloadWindow::new(file_info);
+            download_window.open();
+            self.download_window = Some(download_window);
         }
 
         if let Some(file_info) = update.display_file_info {
-            self.download_window = Some(DownloadWindow::new(file_info))
+            let mut download_window = DownloadWindow::new(file_info);
+            download_window.open();
+            self.download_window = Some(download_window);
         }
     }
 
