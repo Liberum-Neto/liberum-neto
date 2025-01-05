@@ -1,11 +1,15 @@
-use core::error;
+use core::{error, hash};
 use std::{
     collections::HashMap, fs::File, io::Write, iter::zip, panic, path::PathBuf, str::FromStr,
     sync::Arc, time::Duration, usize,
 };
 
 use connection::AppContext;
-use liberum_core::{node_config::NodeConfig, DaemonError, DaemonRequest, DaemonResponse};
+use liberum_core::{
+    node_config::NodeConfig,
+    proto::{self, pins::PinObject, queries::PinQuery, EmptyObject, Hash, TypedObject},
+    DaemonError, DaemonRequest, DaemonResponse,
+};
 use libp2p::Multiaddr;
 use node::store::NodeStore;
 use tokio::{sync::RwLock, time::sleep};
@@ -20,7 +24,9 @@ use crate::test_protocol::test_scenario::node_definition::NodeDefinitionLevel;
 use crate::test_protocol::test_scenario::test_part_scenario::Part::Simple;
 
 use test_protocol::{
-    action_resoult::{Details, DialNodeResult, GetObjectResult, PublishObjectResult},
+    action_resoult::{
+        Details, DialNodeResult, GetObjectResult, PublishObjectResult, QueryPinsResult,
+    },
     callable_nodes::CallableNode,
     identity_server_client::IdentityServerClient,
     Action, ActionResoult, DaemonQueryStats, Identity, NodeInstance, NodesCreated, TestPartResult,
@@ -207,7 +213,68 @@ async fn handle_simple_action(
                             .clone(),
                     }
                 }
-                test_protocol::action::Details::PublishMeta(_publish_meta) => todo!(),
+                test_protocol::action::Details::PublishMeta(publish_meta) => {
+                    let mut obj: TypedObject = EmptyObject {}.into();
+                    for pin in &publish_meta.pins {
+                        let pin_to = ctx.hash_map.get(&pin.pin_to).unwrap().clone();
+                        let pin_to = Hash::try_from(pin_to).unwrap();
+
+                        let relation = if let Some(hash_id) = pin.retation {
+                            if hash_id == 0 {
+                                None
+                            } else {
+                                Some(ctx.hash_map.get(&hash_id).unwrap().clone())
+                            }
+                        } else {
+                            None
+                        };
+                        let relation = relation.map(|rel| Hash::try_from(&rel).unwrap());
+
+                        obj = PinObject {
+                            object: obj.into(),
+                            pinned_id: pin_to,
+                            relation: relation,
+                        }
+                        .into();
+                    }
+
+                    DaemonRequest::SignAndPublishObject {
+                        node_name: action.node_name,
+                        object: obj,
+                    }
+                }
+                test_protocol::action::Details::QueryPins(query_pins) => {
+                    let mut obj: TypedObject = EmptyObject {}.into();
+                    for pin in &query_pins.pins {
+                        let pin_to: Option<proto::Hash> = pin
+                            .pin_to
+                            .map(|rel| ctx.hash_map.get(&rel).unwrap().clone())
+                            .map(|hash_str| proto::Hash::try_from(hash_str).unwrap());
+
+                        let relation = if let Some(hash_id) = pin.retation {
+                            if hash_id == 0 {
+                                None
+                            } else {
+                                Some(ctx.hash_map.get(&hash_id).unwrap().clone())
+                            }
+                        } else {
+                            None
+                        };
+                        let relation = relation.map(|rel| Hash::try_from(&rel).unwrap());
+
+                        obj = PinQuery {
+                            object: obj.into(),
+                            pinned_id: pin_to,
+                            relation: relation,
+                        }
+                        .into();
+                    }
+
+                    DaemonRequest::QueryObject {
+                        node_name: action.node_name.clone(),
+                        object: obj,
+                    }
+                }
             };
 
             let daemon_request = daemon_request(request, ctx.app_context.clone()).await;
@@ -248,6 +315,18 @@ async fn handle_simple_action(
                                 )
                             }
                         }
+                        DaemonResponse::QueryFinished { result } => {
+                            test_protocol::action_resoult::Details::QueryPins(QueryPinsResult {
+                                matches: result.len() as u64,
+                            })
+                        }
+                        DaemonResponse::ObjectPublished { id } => {
+                            test_protocol::action_resoult::Details::PublishMeta(
+                                test_protocol::action_resoult::PublishMetaResult {
+                                    object_hash: id,
+                                },
+                            )
+                        }
                         _ => panic!(),
                     })
                 }
@@ -277,6 +356,11 @@ async fn handle_simple_action(
                             }
                             test_protocol::action::Details::GetObject(_) => {
                                 Details::GetObject(GetObjectResult { stats: None })
+                            }
+                            test_protocol::action::Details::QueryPins(query_pins) => {
+                                Details::QueryPins(QueryPinsResult {
+                                    ..Default::default()
+                                })
                             }
                         });
                     }
