@@ -327,6 +327,17 @@ async fn handle_simple_action(
                                 },
                             )
                         }
+                        DaemonResponse::ObjectDeleted {
+                            deleted_myself,
+                            deleted_count,
+                            failed_count,
+                        } => test_protocol::action_resoult::Details::DeleteObject(
+                            test_protocol::action_resoult::DeleteObjectResult {
+                                deleted_myself,
+                                deleted_count: deleted_count as u64,
+                                failed_count: failed_count as u64,
+                            },
+                        ),
                         _ => panic!(),
                     })
                 }
@@ -452,9 +463,10 @@ async fn handle_create_nodes(
                     node_name: node.name.clone(),
                     new_cfg: NodeConfig {
                         bootstrap_nodes: Vec::new(),
-                        external_addresses: vec![
-                            Multiaddr::from_str("/ip4/0.0.0.0/udp/0/quic-v1").unwrap()
-                        ],
+                        external_addresses: vec![Multiaddr::from_str(
+                            &(node.address.clone().unwrap().clone()),
+                        )
+                        .unwrap()],
                     },
                 },
             ));
