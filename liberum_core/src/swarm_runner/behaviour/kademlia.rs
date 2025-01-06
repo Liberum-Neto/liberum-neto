@@ -7,9 +7,9 @@ use kameo::request::MessageSend;
 use liberum_core::{proto, DaemonQueryStats};
 use libp2p::{
     kad::{
-        store::RecordStore, AddProviderError, AddProviderOk, Event, GetClosestPeersResult,
-        GetProvidersError, GetProvidersOk, InboundRequest, ProgressStep, ProviderRecord, QueryId,
-        QueryResult, QueryStats, RecordKey,
+        store::RecordStore, AddProviderError, AddProviderOk, BootstrapOk, Event,
+        GetClosestPeersResult, GetProvidersError, GetProvidersOk, InboundRequest, ProgressStep,
+        ProviderRecord, QueryId, QueryResult, QueryStats, RecordKey,
     },
     PeerId,
 };
@@ -64,6 +64,16 @@ impl SwarmContext {
             QueryResult::GetProviders(result) => {
                 self.handle_outbound_query_progressed_get_providers(id, result, stats, step)
                     .await;
+            }
+            QueryResult::Bootstrap(result) => {
+                debug!(
+                    result = format!("{:?}", result),
+                    node = self.node_snapshot.name,
+                    "Bootstrap query finished"
+                );
+                if result.is_ok() {
+                    self.bootstrapped = true;
+                }
             }
             _ => {}
         }

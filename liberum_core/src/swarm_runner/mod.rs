@@ -20,6 +20,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use tracing::warn;
 use tracing::{debug, error, info};
 const KAD_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/kad/1.0.0");
@@ -46,6 +47,7 @@ struct SwarmContext {
     node_snapshot: NodeSnapshot,
     behaviour: BehaviourContext,
     modules: Arc<Modules>,
+    bootstrapped: bool,
 }
 
 /// Prepares the sender to send messages to the swarm
@@ -134,6 +136,7 @@ async fn run_swarm_main(
         swarm: swarm,
         behaviour: BehaviourContext::new(),
         modules: modules,
+        bootstrapped: false,
     };
 
     let swarm_default_addr_ip6 =
@@ -187,15 +190,21 @@ async fn run_swarm_main(
             .add_address(&node.id, node.addr.clone());
         debug!("Bootstrap node: {}", serde_json::to_string(&node)?);
     }
-    context
+    let qid = context
         .swarm
         .behaviour_mut()
         .kademlia
         .bootstrap()
         .inspect_err(|e| {
-            warn!(err = e.to_string(), "Could not bootstrap the swarm");
+            warn!(err = e.to_string(), "No known peers");
         })
         .ok();
+
+    if let Some(_) = qid {
+        let (s, r) = oneshot::channel();
+        context.behaviour.pending_bootstrap = Some(s);
+        let _ = r.await;
+    }
 
     loop {
         tokio::select! {
