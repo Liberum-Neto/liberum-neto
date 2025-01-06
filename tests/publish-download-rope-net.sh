@@ -25,7 +25,7 @@ N_NAMES=()
 N_IDS=()
 N_ADDRESSES=()
 
-# set +x
+set +x
 printf "${BLUE}Skipping test logs for creating $NODE_COUNT nodes...${NC}\n"
 for (( i = 1; i <= $NODE_COUNT; i++ )); do
     {
@@ -35,10 +35,10 @@ for (( i = 1; i <= $NODE_COUNT; i++ )); do
     $CLI_BIN new-node $N --id-seed $i &> /dev/null
     $CLI_BIN config-node $N add-external-addr $N_ADDR &> /dev/null
     if [[ $i -gt 1 ]]; then
-        MAX_N=$(( $i - 2 ))
-        BNODE=$(shuf -i 0-$MAX_N -n 1)
-        echo "Connecting $i with $BNODE"
-        $CLI_BIN config-node $N add-bootstrap-node "${N_IDS[$(( $BNODE ))]}" "${N_ADDRESSES[$(( $BNODE ))]}" &> /dev/null
+        # MAX_N=$(( $i - 2 ))
+        # BNODE=$(shuf -i 0-$MAX_N -n 1)
+        # echo "Connecting $i with $BNODE"
+        $CLI_BIN config-node $N add-bootstrap-node "${N_IDS[$(( $i - 2 ))]}" "${N_ADDRESSES[$(( $i - 2 ))]}" &> /dev/null
     fi
     $CLI_BIN start-node $N &> /dev/null
 
@@ -50,10 +50,7 @@ for (( i = 1; i <= $NODE_COUNT; i++ )); do
 done
 
 printf "${BLUE}Nodes created${NC}\n"
-# set -x
-
-# wait for nodes to connect
-#sleep 0.5
+set -x
 
 # create and provide file
 echo "${FILE_CONTENT}" > "$FILE_NAME"

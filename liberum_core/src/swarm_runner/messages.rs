@@ -157,9 +157,9 @@ impl SwarmContext {
                                 warn!(err = e.to_string(), "No known peers");
                             })
                             .ok();
-                        if let Some(_) = qid {
+                        if let Some(qid) = qid {
                             let (s, r) = oneshot::channel();
-                            self.behaviour.pending_bootstrap = Some(s);
+                            self.behaviour.pending_bootstraps.insert(qid, s);
                             let _ = r.await;
                         }
                     }

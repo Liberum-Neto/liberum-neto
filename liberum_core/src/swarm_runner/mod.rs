@@ -21,8 +21,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use tracing::warn;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 const KAD_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/kad/1.0.0");
 //const FILE_SHARE_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/file-share/1.0.0");
 const OBJECT_SENDER_PROTO_NAME: StreamProtocol =
@@ -55,20 +54,41 @@ pub async fn run_swarm(
     node_ref: ActorRef<Node>,
     vault_ref: ActorRef<Vaultv3>,
     modules: Arc<Modules>,
+    node_snapshot: NodeSnapshot,
 ) -> mpsc::Sender<SwarmRunnerMessage> {
     let (sender, receiver) = mpsc::channel::<SwarmRunnerMessage>(16);
-    tokio::spawn(run_swarm_task(node_ref, vault_ref, modules, receiver));
+    let (ready_sender, ready_receiver) = oneshot::channel();
+    tokio::spawn(run_swarm_task(
+        node_ref,
+        node_snapshot,
+        vault_ref,
+        modules,
+        receiver,
+        ready_sender,
+    ));
+    let _ = ready_receiver.await;
     sender
 }
 
 /// Task that runs the swarm and handles errors which can't be propagated outside of a task
 async fn run_swarm_task(
     node_ref: ActorRef<Node>,
+    node_snapshot: NodeSnapshot,
     vault_ref: ActorRef<Vaultv3>,
     modules: Arc<Modules>,
     receiver: mpsc::Receiver<SwarmRunnerMessage>,
+    ready_sender: oneshot::Sender<()>,
 ) {
-    if let Err(e) = run_swarm_main(node_ref.clone(), vault_ref, modules, receiver).await {
+    if let Err(e) = run_swarm_main(
+        node_ref.clone(),
+        node_snapshot,
+        vault_ref,
+        modules,
+        receiver,
+        ready_sender,
+    )
+    .await
+    {
         error!(err = format!("{e:?}"), "Swarm run error");
         node_ref.ask(node::SwarmDied).send().await.unwrap();
     }
@@ -77,20 +97,12 @@ async fn run_swarm_task(
 /// The main function that runs the swarm
 async fn run_swarm_main(
     node_ref: ActorRef<Node>,
+    node_snapshot: NodeSnapshot,
     vault_ref: ActorRef<Vaultv3>,
     modules: Arc<Modules>,
     mut receiver: mpsc::Receiver<SwarmRunnerMessage>,
+    ready_sender: oneshot::Sender<()>,
 ) -> Result<()> {
-    // It must be guaranteed not to ever fail. Swarm can't start without this data.
-    // If it fails then it's a bug
-
-    // Get the node data
-    let node_snapshot = node_ref
-        .ask(node::GetSnapshot {})
-        .send()
-        .await
-        .inspect_err(|e| error!(err = e.to_string(), "Swarm can't get node snapshot!"))?;
-
     // Create a new swarm using the node data
     let keypair = node_snapshot.keypair.clone();
     let id = identity::PeerId::from_public_key(&keypair.public());
@@ -196,14 +208,15 @@ async fn run_swarm_main(
         .kademlia
         .bootstrap()
         .inspect_err(|e| {
-            warn!(err = e.to_string(), "No known peers");
-        })
-        .ok();
-
-    if let Some(_) = qid {
-        let (s, r) = oneshot::channel();
-        context.behaviour.pending_bootstrap = Some(s);
-        let _ = r.await;
+            warn!(err = e.to_string(), "Bootstrapping: No known peers");
+        });
+    if let Ok(qid) = qid {
+        context
+            .behaviour
+            .pending_bootstraps
+            .insert(qid, ready_sender);
+    } else {
+        ready_sender.send(()).unwrap();
     }
 
     loop {

@@ -55,7 +55,7 @@ pub struct BehaviourContext {
 
     pub pending_outbound_queries:
         HashMap<OutboundRequestId, oneshot::Sender<Result<Vec<TypedObject>>>>,
-    pub pending_bootstrap: Option<oneshot::Sender<Result<()>>>,
+    pub pending_bootstraps: HashMap<kad::QueryId, oneshot::Sender<()>>,
 }
 
 impl BehaviourContext {
@@ -69,7 +69,7 @@ impl BehaviourContext {
             pending_inner_get_closest_peers: HashMap::new(),
             pending_outbound_delete_object: HashMap::new(),
             pending_outbound_queries: HashMap::new(),
-            pending_bootstrap: None,
+            pending_bootstraps: HashMap::new(),
         }
     }
 }
