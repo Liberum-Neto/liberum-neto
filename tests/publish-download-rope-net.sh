@@ -39,7 +39,7 @@ for (( i = 1; i <= $NODE_COUNT; i++ )); do
     fi
     $CLI_BIN -d start-node $N &> /dev/null
 
-    ID=$($CLI_BIN -d get-peer-id $N 2> /dev/null)
+    ID=$($CLI_BIN get-peer-id $N 2> /dev/null)
     N_NAMES+=("$N")
     N_IDS+=("$ID")
     N_ADDRESSES+=("$N_ADDR")
