@@ -111,7 +111,7 @@ pub(crate) async fn run_test(
         File::create(&PathBuf::from(file.hash.to_string()).as_path())?.write(&file.object)?;
     }
 
-    let (result_tx, result_rx) = tokio::sync::mpsc::channel::<TestPartResult>(128);
+    let (result_tx, result_rx) = tokio::sync::mpsc::channel::<TestPartResult>(4096);
 
     let mut part_stream = client
         .test_partake(tokio_stream::wrappers::ReceiverStream::new(result_rx))

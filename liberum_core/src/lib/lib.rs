@@ -178,8 +178,8 @@ pub async fn connect(
     let encoder: AsymmetricMessageCodec<DaemonRequest, DaemonResult> =
         AsymmetricMessageCodec::new();
     let mut daemon_socket = encoder.framed(socket);
-    let (daemon_sender, mut daemon_receiver) = mpsc::channel::<DaemonRequest>(16);
-    let (ui_sender, ui_receiver) = mpsc::channel::<DaemonResult>(16);
+    let (daemon_sender, mut daemon_receiver) = mpsc::channel::<DaemonRequest>(4096);
+    let (ui_sender, ui_receiver) = mpsc::channel::<DaemonResult>(4096);
 
     tokio::spawn(async move {
         loop {

@@ -121,7 +121,7 @@ impl Node {
             })
             .await?;
 
-        let received = recv.await?;
+        let received = tokio::time::timeout(Duration::from_secs(60), recv).await??;
         let peers: Vec<PeerId> = received
             .0
             .into_iter()
@@ -163,7 +163,7 @@ impl Node {
             })
             .await?;
 
-        let resp = resp_recv.await?;
+        let resp = tokio::time::timeout(Duration::from_secs(60), resp_recv).await??;
         let (providers, stats) = resp;
         if providers.is_empty() {
             return Err(anyhow!("Could not find provider for file {obj_id_str}.").into());
@@ -206,7 +206,7 @@ impl Node {
                 continue;
             }
 
-            match obj_receiver.await {
+            match tokio::time::timeout(Duration::from_secs(60), obj_receiver).await? {
                 Err(e) => {
                     debug!(
                         node = self.name,
@@ -264,7 +264,7 @@ impl Node {
             })
             .await?;
 
-        let addrs = recv.await??;
+        let addrs = tokio::time::timeout(Duration::from_secs(60), recv).await???;
         Ok(addrs)
     }
 
@@ -311,7 +311,7 @@ impl Node {
         let obj_id = proto::Hash::try_from(&object)?;
         let obj_id_str = obj_id.to_string();
 
-        let (resp_send, _) = oneshot::channel();
+        let (resp_send, mut resp_recv) = oneshot::channel();
         let _ = self
             .swarm_sender
             .as_mut()
@@ -322,7 +322,7 @@ impl Node {
                 response_sender: resp_send,
             })
             .await?;
-
+        resp_recv.close();
         Ok(obj_id_str)
     }
     #[message]
@@ -341,7 +341,7 @@ impl Node {
                 response_sender: snd,
             })
             .await?;
-        let peers = rcv.await?;
+        let peers = tokio::time::timeout(DIAL_TIMEOUT, rcv).await??;
         Ok(peers)
     }
 
@@ -360,7 +360,7 @@ impl Node {
 
         for peer in &peers {
             if *peer == self.get_peer_id()? {
-                let (snd, _) = oneshot::channel();
+                let (snd, mut rcv) = oneshot::channel();
                 self.swarm_sender
                     .as_mut()
                     .unwrap()
@@ -370,6 +370,7 @@ impl Node {
                         response_sender: snd,
                     })
                     .await?;
+                rcv.close();
             }
 
             let (send, recv) = oneshot::channel();
@@ -385,7 +386,7 @@ impl Node {
                 })
                 .await?;
 
-            if let Ok(obj) = recv.await {
+            if let Ok(obj) = tokio::time::timeout(Duration::from_secs(60), recv).await? {
                 match obj {
                     Ok(ResultObject { result: Ok(_) }) => {
                         successes += 1;
@@ -439,7 +440,7 @@ impl Node {
                         response_sender: send,
                     })
                     .await?;
-                let resp = recv.await;
+                let resp = tokio::time::timeout(Duration::from_secs(60), recv).await?;
                 if let Err(_) = resp {
                     warn!(
                         node = self.name,
@@ -459,7 +460,7 @@ impl Node {
                     response_sender: send,
                 })
                 .await?;
-            let rec = recv.await;
+            let rec = tokio::time::timeout(Duration::from_secs(60), recv).await?;
             match rec {
                 Err(e) => {
                     debug!(
@@ -516,7 +517,7 @@ impl Node {
                     response_sender: snd,
                 })
                 .await?;
-            if let Ok(resp) = rcv.await? {
+            if let Ok(resp) = tokio::time::timeout(Duration::from_secs(60), rcv).await?? {
                 responses.extend(resp);
             }
         }

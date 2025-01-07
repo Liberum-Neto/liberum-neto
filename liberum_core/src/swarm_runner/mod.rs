@@ -56,7 +56,7 @@ pub async fn run_swarm(
     modules: Arc<Modules>,
     node_snapshot: NodeSnapshot,
 ) -> mpsc::Sender<SwarmRunnerMessage> {
-    let (sender, receiver) = mpsc::channel::<SwarmRunnerMessage>(16);
+    let (sender, receiver) = mpsc::channel::<SwarmRunnerMessage>(4096);
     let (ready_sender, ready_receiver) = oneshot::channel();
     tokio::spawn(run_swarm_task(
         node_ref,
@@ -66,7 +66,7 @@ pub async fn run_swarm(
         receiver,
         ready_sender,
     ));
-    let _ = ready_receiver.await;
+    let _ = tokio::time::timeout(Duration::from_secs(60), ready_receiver).await;
     sender
 }
 

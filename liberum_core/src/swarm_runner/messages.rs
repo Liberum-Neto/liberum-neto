@@ -160,7 +160,8 @@ impl SwarmContext {
                         if let Some(qid) = qid {
                             let (s, r) = oneshot::channel();
                             self.behaviour.pending_bootstraps.insert(qid, s);
-                            let _ = r.await;
+                            let _ =
+                                tokio::time::timeout(std::time::Duration::from_secs(60), r).await?;
                         }
                     }
                 } else {
@@ -396,10 +397,11 @@ impl SwarmContext {
             .kademlia
             .start_providing(obj_id.into())
             .unwrap();
-        let (send, _) = oneshot::channel();
+        let (send, mut recv) = oneshot::channel();
         self.behaviour
             .pending_inner_start_providing
             .insert(query_id, send);
+        recv.close();
     }
 
     pub(crate) fn stop_providing(&mut self, obj_id: proto::Hash) {
