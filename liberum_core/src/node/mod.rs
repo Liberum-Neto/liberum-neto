@@ -538,6 +538,7 @@ impl Node {
                 self.self_actor_ref.as_mut().unwrap().clone(),
                 self.vault_ref.clone(),
                 self.modules.clone(),
+                NodeSnapshot::from(self.borrow()),
             )
             .await,
         );

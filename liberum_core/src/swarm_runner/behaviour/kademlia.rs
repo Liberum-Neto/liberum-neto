@@ -5,6 +5,7 @@ use crate::{
 use anyhow::Result;
 use kameo::request::MessageSend;
 use liberum_core::{proto, DaemonQueryStats};
+use libp2p::kad::BootstrapOk;
 use libp2p::{
     kad::{
         store::RecordStore, AddProviderError, AddProviderOk, Event, GetClosestPeersResult,
@@ -13,7 +14,6 @@ use libp2p::{
     },
     PeerId,
 };
-
 use tracing::{debug, error, info, warn};
 
 ///! The module contains methods to handle Kademlia events
@@ -65,6 +65,33 @@ impl SwarmContext {
                 self.handle_outbound_query_progressed_get_providers(id, result, stats, step)
                     .await;
             }
+            QueryResult::Bootstrap(result) => match result {
+                Ok(ok) => {
+                    if ok.num_remaining == 0 {
+                        info!(
+                            result = format!("{:?}", ok),
+                            node = self.node_snapshot.name,
+                            "Bootstrap finished"
+                        );
+                        self.bootstrapped = true;
+                        let sender = self.behaviour.pending_bootstraps.remove(&id);
+                        if let Some(sender) = sender {
+                            let _ = sender.send(());
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        node = self.node_snapshot.name,
+                        err = format!("{e:?}"),
+                        "Bootstrap failed"
+                    );
+                    let sender = self.behaviour.pending_bootstraps.remove(&id);
+                    if let Some(sender) = sender {
+                        let _ = sender.send(());
+                    }
+                }
+            },
             _ => {}
         }
     }

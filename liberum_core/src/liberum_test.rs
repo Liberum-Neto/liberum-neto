@@ -1,4 +1,4 @@
-use core::{error, hash};
+use core::error;
 use std::{
     collections::HashMap, fs::File, io::Write, iter::zip, panic, path::PathBuf, str::FromStr,
     sync::Arc, time::Duration, usize,
@@ -368,7 +368,7 @@ async fn handle_simple_action(
                             test_protocol::action::Details::GetObject(_) => {
                                 Details::GetObject(GetObjectResult { stats: None })
                             }
-                            test_protocol::action::Details::QueryPins(query_pins) => {
+                            test_protocol::action::Details::QueryPins(_query_pins) => {
                                 Details::QueryPins(QueryPinsResult {
                                     ..Default::default()
                                 })

@@ -5,7 +5,7 @@ source "$SCRIPT_DIR"/lib/asserts.sh
 CORE_BIN=$1
 CLI_BIN=$2
 
-NODE_COUNT=10
+NODE_COUNT=100
 
 FILE_NAME="$PWD/test-file.txt"
 FILE_CONTENT="Hello, World!"
@@ -30,14 +30,17 @@ printf "${BLUE}Skipping test logs for creating $NODE_COUNT nodes...${NC}\n"
 for (( i = 1; i <= $NODE_COUNT; i++ )); do
     {
     N="test_n$i"
-    N_ADDR="${NODE_ADDR_PREFIX}$(($i + 52136))${NODE_ADDR_SUFFIX}"
+    N_ADDR="${NODE_ADDR_PREFIX}$(($i + 53136))${NODE_ADDR_SUFFIX}"
 
-    $CLI_BIN -d new-node $N --id-seed $i &> /dev/null
-    $CLI_BIN -d config-node $N add-external-addr $N_ADDR &> /dev/null
+    $CLI_BIN new-node $N --id-seed $i &> /dev/null
+    $CLI_BIN config-node $N add-external-addr $N_ADDR &> /dev/null
     if [[ $i -gt 1 ]]; then
-        $CLI_BIN -d config-node $N add-bootstrap-node "${N_IDS[$(($i - 2))]}" "${N_ADDRESSES[$(($i - 2))]}" &> /dev/null
+        # MAX_N=$(( $i - 2 ))
+        # BNODE=$(shuf -i 0-$MAX_N -n 1)
+        # echo "Connecting $i with $BNODE"
+        $CLI_BIN config-node $N add-bootstrap-node "${N_IDS[$(( $i - 2 ))]}" "${N_ADDRESSES[$(( $i - 2 ))]}" &> /dev/null
     fi
-    $CLI_BIN -d start-node $N &> /dev/null
+    $CLI_BIN start-node $N &> /dev/null
 
     ID=$($CLI_BIN get-peer-id $N 2> /dev/null)
     N_NAMES+=("$N")
@@ -49,12 +52,9 @@ done
 printf "${BLUE}Nodes created${NC}\n"
 set -x
 
-# wait for nodes to connect
-sleep 0.5
-
 # create and provide file
 echo "${FILE_CONTENT}" > "$FILE_NAME"
-FILE_ID=$($CLI_BIN publish-file ${N_NAMES[0]} "$FILE_NAME" 2> /dev/null)
+FILE_ID=$($CLI_BIN provide-file ${N_NAMES[0]} "$FILE_NAME" 2> /dev/null)
 
 init_asserts
 
@@ -66,7 +66,7 @@ should_be_equal "$RESULT" "$FILE_CONTENT"
 set +x
 echo "${BLUE}Skipping test logs for stopping nodes${NC}\n"
 for (( i = 1; i <= $NODE_COUNT; i++ )); do
-    $CLI_BIN -d stop-node ${N_NAMES[$i]} &> /dev/null
+    $CLI_BIN stop-node ${N_NAMES[$i]} &> /dev/null
 done
 echo "${BLUE}Nodes stopped${NC}\n"
 set -x

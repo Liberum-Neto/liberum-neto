@@ -18,8 +18,7 @@ use libp2p::PeerId;
 use libp2p::{kad, Multiaddr};
 use std::collections::hash_map;
 use tokio::sync::oneshot;
-use tracing::debug;
-use tracing::error;
+use tracing::{debug, error, warn};
 pub enum SwarmRunnerError {}
 
 ///! The module contains messages that can be sent to the SwarmRunner
@@ -146,6 +145,22 @@ impl SwarmContext {
                         }
                         Err(err) => {
                             let _ = response_sender.send(Err(anyhow!(err)));
+                        }
+                    }
+                    if !self.bootstrapped {
+                        let qid = self
+                            .swarm
+                            .behaviour_mut()
+                            .kademlia
+                            .bootstrap()
+                            .inspect_err(|e| {
+                                warn!(err = e.to_string(), "No known peers");
+                            })
+                            .ok();
+                        if let Some(qid) = qid {
+                            let (s, r) = oneshot::channel();
+                            self.behaviour.pending_bootstraps.insert(qid, s);
+                            let _ = r.await;
                         }
                     }
                 } else {
