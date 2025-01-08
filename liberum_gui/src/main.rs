@@ -85,7 +85,7 @@ fn main() -> Result<()> {
     let update_loop_handle = system_observer.borrow_mut().run_update_loop();
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default(),
+        viewport: egui::ViewportBuilder::default().with_inner_size([1280.0, 720.0]),
         ..Default::default()
     };
 

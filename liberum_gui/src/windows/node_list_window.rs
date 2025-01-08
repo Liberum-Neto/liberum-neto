@@ -72,37 +72,57 @@ impl Window<NodeListWindowState, NodeListWindowUpdate> for NodeListWindow {
 
                 ui.add_space(20.0);
 
-                egui::Grid::new("config_grid")
-                    .num_columns(3)
-                    .striped(true)
-                    .show(ui, |ui| {
-                        state.node_infos.iter().for_each(|n| {
-                            ui.colored_label(
-                                Color32::from_rgb(0, 100, 200),
-                                format!("Node: {}", n.name),
-                            );
-
-                            ui.label(format!("Is running: {}", n.is_running));
-
-                            ui.horizontal(|ui| {
-                                if ui.button("Run").clicked() {
-                                    let _ = view_ctx.daemon_com.run_node(&n.name);
-                                }
-
-                                if ui.button("Stop").clicked() {
-                                    let _ = view_ctx.daemon_com.stop_node(&n.name);
-                                }
-
-                                if ui.button("Show").clicked() {
-                                    node_list_window_update.view_action = ViewAction::SwitchView {
-                                        view: Box::new(NodeView::new(&n.name)),
-                                    };
-                                }
-                            });
-
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    egui::Grid::new("config_grid")
+                        .num_columns(5)
+                        .striped(true)
+                        .show(ui, |ui| {
+                            ui.label("Name");
+                            ui.label("PeerId");
+                            ui.label("Running addresses");
+                            ui.label("Status");
+                            ui.label("Control");
                             ui.end_row();
+
+                            state.node_infos.iter().for_each(|n| {
+                                ui.colored_label(
+                                    Color32::from_rgb(0, 100, 200),
+                                    format!("Node: {}", n.name),
+                                );
+
+                                ui.label(&n.peer_id);
+                                ui.label(n.running_addresses.join("\n"));
+
+                                match n.is_running {
+                                    true => {
+                                        ui.label("Online");
+                                    }
+                                    false => {
+                                        ui.label("Offline");
+                                    }
+                                }
+
+                                ui.horizontal(|ui| {
+                                    if ui.button("Run").clicked() {
+                                        let _ = view_ctx.daemon_com.run_node(&n.name);
+                                    }
+
+                                    if ui.button("Stop").clicked() {
+                                        let _ = view_ctx.daemon_com.stop_node(&n.name);
+                                    }
+
+                                    if ui.button("Show").clicked() {
+                                        node_list_window_update.view_action =
+                                            ViewAction::SwitchView {
+                                                view: Box::new(NodeView::new(&n.name)),
+                                            };
+                                    }
+                                });
+
+                                ui.end_row();
+                            });
                         });
-                    });
+                });
             });
 
         node_list_window_update

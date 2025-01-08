@@ -101,7 +101,7 @@ impl Window<NodeWindowState, NodeWindowUpdate> for NodeWindow {
                 });
 
                 ui.horizontal(|ui| {
-                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Addresses:");
+                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Config addresses:");
 
                     ui.vertical(|ui| {
                         for addr in &node_info.config_addresses {
@@ -110,6 +110,20 @@ impl Window<NodeWindowState, NodeWindowUpdate> for NodeWindow {
                     });
 
                     if node_info.config_addresses.is_empty() {
+                        ui.label("No addresses");
+                    }
+                });
+
+                ui.horizontal(|ui| {
+                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Running addresses:");
+
+                    ui.vertical(|ui| {
+                        for addr in &node_info.running_addresses {
+                            ui.label(addr);
+                        }
+                    });
+
+                    if node_info.running_addresses.is_empty() {
                         ui.label("No addresses");
                     }
                 });
