@@ -10,6 +10,7 @@ use kameo::messages;
 use kameo::request::MessageSend;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::NodeConfig;
+use liberum_core::parser::{parse_typed, ObjectEnum};
 use liberum_core::proto::{self, signed::SignedObject, TypedObject};
 use liberum_core::proto::{file::PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
@@ -480,9 +481,19 @@ impl Node {
                         );
                         failed_count += 1;
                     }
-                    Ok(r) => match r.result {
-                        Ok(_) => deleted_count += 1,
-                        Err(_) => failed_count += 1,
+                    Ok(r) => match r.get(0) {
+                        Some(o) => match parse_typed(o.clone()).await {
+                            Ok(ObjectEnum::Result(t)) => match t.result {
+                                Ok(_) => {
+                                    deleted_count += 1;
+                                }
+                                Err(_) => {
+                                    failed_count += 1;
+                                }
+                            },
+                            _ => failed_count += 1,
+                        },
+                        _ => failed_count += 1,
                     },
                 },
             }

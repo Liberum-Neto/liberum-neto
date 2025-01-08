@@ -159,7 +159,6 @@ impl SwarmContext {
         }
     }
 
-    /// Handle a file share response by sending the data to the pending download
     async fn handle_query_response(
         &mut self,
         request_id: OutboundRequestId,
@@ -179,16 +178,6 @@ impl SwarmContext {
                     .into_iter()
                     .map(|pair| pair.0)
                     .collect())); // TODO Should send all objects, not just one
-            }
-        } else if let Some(sender) = self
-            .behaviour
-            .pending_outbound_delete_object
-            .remove(&request_id)
-        {
-            if response.objects.len() > 0 {
-                let _ = sender.send(Ok(ResultObject { result: Ok(()) }));
-            } else {
-                let _ = sender.send(Err(anyhow!("No objects found for query")));
             }
         }
     }

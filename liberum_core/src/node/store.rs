@@ -37,11 +37,11 @@ impl NodeStore {
     #[message]
     pub async fn load_node(&self, name: String) -> Result<NodeSnapshot, NodeStoreError> {
         let node_dir_path = self.resolve_node_dir_path(&name);
-        debug!(
-            name = name,
-            path = node_dir_path.display().to_string(),
-            "loading node"
-        );
+        // debug!(
+        //     name = name,
+        //     path = node_dir_path.display().to_string(),
+        //     "loading node"
+        // );
 
         if !node_dir_path.exists() {
             debug!(

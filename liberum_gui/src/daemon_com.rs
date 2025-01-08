@@ -6,6 +6,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, error, info};
 
 use crate::windows::PlainFileInfo;
+use crate::windows::DeleteInfo;
 
 pub struct DaemonCom {
     pub rt: tokio::runtime::Runtime,
@@ -249,7 +250,53 @@ impl DaemonCom {
                     error!("Failed to receive response");
                     bail!("Failed to receive response from the daemon");
                 }
+
             };
+        })
+    }
+
+    pub fn delete_file(&mut self, node_name: &str, file_id: &str) -> Result<DeleteInfo> {
+        self.rt.block_on(async {
+            self.to_daemon_sender
+                .send(DaemonRequest::DeleteObject {
+                    node_name: node_name.to_string(),
+                    object_id: file_id.to_string(),
+                })
+                .await?;
+
+            match self.from_daemon_receiver.recv().await {
+                Some(r) => {
+                    match r {
+
+                        Ok(DaemonResponse::ObjectDeleted {
+                            deleted_myself,
+                            deleted_count,
+                            failed_count,
+                        }) => {
+                            return Ok(DeleteInfo {
+                                id: file_id.to_string(),
+                                deleted_locally: deleted_myself,
+                                number_of_successes: deleted_count,
+                                number_of_failures: failed_count,
+                            });
+                        }
+                        Err(e) => {
+                            error!(err = e.to_string(), "Error ocurred while deleting file!");
+                            bail!("Error occured while deleting file: {}", e.to_string());
+
+                        }
+                        _ => {
+                            error!("Unexpected response type");
+                            bail!("Unexpected response type");
+                        }
+                    };
+                }
+                None => {
+                    error!("Failed to receive response");
+                    bail!("Failed to receive response from the daemon");
+                }
+
+            };   
         })
     }
 }

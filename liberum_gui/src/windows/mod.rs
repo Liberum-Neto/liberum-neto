@@ -9,6 +9,7 @@ use tracing::debug;
 
 use crate::views::ViewContext;
 
+pub mod delete_window;
 pub mod dialer_window;
 pub mod download_window;
 pub mod downloader_window;
@@ -34,6 +35,13 @@ pub struct FileInfo {
     path: PathBuf,
     size: usize,
     pins: Vec<String>,
+}
+#[derive(Clone)]
+pub struct DeleteInfo {
+    pub id: String,
+    pub deleted_locally: bool,
+    pub number_of_successes: u32,
+    pub number_of_failures: u32,
 }
 
 #[derive(Clone)]

@@ -3,7 +3,7 @@ use std::any::Any;
 use crate::{
     components::status_bar::StatusBar,
     windows::{
-        dialer_window::DialerWindow, download_window::DownloadWindow,
+        delete_window::DeleterWindow, dialer_window::DialerWindow, download_window::DownloadWindow,
         downloader_window::DownloaderWindow, node_config_window::NodeConfigWindow,
         node_window::NodeWindow, search_result_window::SearchResultWindow,
         search_window::SearchWindow, Window,
@@ -21,6 +21,7 @@ pub struct NodeView {
     download_window: Option<DownloadWindow>,
     search_window: SearchWindow,
     search_result_window: Option<SearchResultWindow>,
+    delete_window: DeleterWindow,
     status_line: String,
 }
 
@@ -39,6 +40,7 @@ impl NodeView {
             download_window: None,
             search_window: SearchWindow::new(node_name),
             search_result_window: None,
+            delete_window: DeleterWindow::new(node_name),
             status_line: String::new(),
         }
     }
@@ -118,11 +120,9 @@ impl NodeView {
 
     fn show_search_window(&mut self, ctx: &mut ViewContext) {
         let update = self.search_window.draw(ctx);
-
         if let Some(new_status_line) = update.new_status_line {
             self.status_line = new_status_line;
         }
-
         if let Some(search_result) = update.search_result {
             self.search_result_window = Some(SearchResultWindow::new(search_result));
         }
@@ -131,6 +131,15 @@ impl NodeView {
     fn show_search_result_window(&mut self, ctx: &mut ViewContext) {
         if let Some(search_result_window) = &mut self.search_result_window {
             search_result_window.draw(ctx);
+        }
+    }
+    
+    fn show_delete_window(&mut self, ctx: &mut ViewContext) {
+        let update = self.delete_window.draw(ctx);
+
+
+        if let Some(new_status_line) = update.new_status_line {
+            self.status_line = new_status_line;
         }
     }
 }
@@ -156,6 +165,7 @@ impl AppView for NodeView {
         self.show_downloader_window(&mut ctx);
         self.show_search_window(ctx);
         self.show_search_result_window(ctx);
+        self.show_delete_window(&mut ctx);
         self.show_status_bar(&mut ctx)
     }
 

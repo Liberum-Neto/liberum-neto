@@ -86,7 +86,7 @@ pub enum SwarmRunnerMessage {
     DeleteObject {
         obj_id: proto::Hash,
         peer: PeerId,
-        response_sender: oneshot::Sender<Result<ResultObject>>,
+        response_sender: oneshot::Sender<Result<Vec<TypedObject>>>,
     },
     StopProviding {
         obj_id: proto::Hash,
@@ -299,7 +299,7 @@ impl SwarmContext {
             }
 
             SwarmRunnerMessage::GetAddresses { response_sender } => {
-                debug!("Getting external addresses");
+                //debug!("Getting external addresses");
 
                 let addrs = self
                     .swarm
@@ -340,7 +340,7 @@ impl SwarmContext {
                     .query_sender
                     .send_request(&peer, request);
                 self.behaviour
-                    .pending_outbound_delete_object
+                    .pending_outbound_queries
                     .insert(qid, response_sender);
                 Ok(false)
             }
