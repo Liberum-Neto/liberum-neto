@@ -1,13 +1,8 @@
-use std::path::PathBuf;
-
-use super::{DeleteInfo, FileInfo, Window};
-use egui::{Align2, Color32};
-use egui_file::FileDialog;
-use liberum_core::proto::Hash;
+use super::{DeleteInfo, Window};
+use egui::Color32;
 
 pub struct DeleterWindow {
     state: DeleterWindowState,
-    download_destination_dialog: Option<FileDialog>,
 }
 
 impl DeleterWindow {
@@ -16,11 +11,9 @@ impl DeleterWindow {
             state: DeleterWindowState {
                 to_delete_id: String::new(),
                 node_name: node_name.to_string(),
-                last_delete_info: None,
                 delete_history: Vec::new(),
                 is_opened: false,
             },
-            download_destination_dialog: None,
         }
     }
 }
@@ -29,7 +22,6 @@ impl DeleterWindow {
 pub struct DeleterWindowState {
     to_delete_id: String,
     node_name: String,
-    last_delete_info: Option<DeleteInfo>,
     delete_history: Vec<DeleteHistoryEntry>,
     is_opened: bool,
 }
@@ -49,10 +41,7 @@ enum DeleteHistoryEntry {
 
 impl Window<DeleterWindowState, DeleterWindowUpdate> for DeleterWindow {
     fn from_state(state: DeleterWindowState) -> Self {
-        Self {
-            state,
-            download_destination_dialog: None,
-        }
+        Self { state }
     }
 
     fn get_state(&self) -> DeleterWindowState {
