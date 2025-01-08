@@ -127,6 +127,12 @@ impl NodeView {
             self.search_result_window = Some(SearchResultWindow::new(search_result));
         }
     }
+
+    fn show_search_result_window(&mut self, ctx: &mut ViewContext) {
+        if let Some(search_result_window) = &mut self.search_result_window {
+            search_result_window.draw(ctx);
+        }
+    }
 }
 
 impl AppView for NodeView {
@@ -149,6 +155,7 @@ impl AppView for NodeView {
         self.show_dialer_window(&mut ctx);
         self.show_downloader_window(&mut ctx);
         self.show_search_window(ctx);
+        self.show_search_result_window(ctx);
         self.show_status_bar(&mut ctx)
     }
 

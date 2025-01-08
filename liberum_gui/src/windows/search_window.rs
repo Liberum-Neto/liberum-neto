@@ -60,6 +60,7 @@ impl Window<SearchWindowState, SearchWindowUpdate> for SearchWindow {
                     match pinned_objs {
                         Ok(objs) => {
                             update.search_result = Some(objs);
+                            update.new_status_line = Some("Search result arrived!".to_string());
                         }
                         Err(e) => {
                             update.new_status_line =

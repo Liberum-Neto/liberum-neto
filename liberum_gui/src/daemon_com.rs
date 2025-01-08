@@ -225,10 +225,10 @@ impl DaemonCom {
             match self.from_daemon_receiver.recv().await {
                 Some(r) => {
                     match r {
-                        Ok(DaemonResponse::PinnedObjects { objects }) => {
+                        Ok(DaemonResponse::QueryFinished { result }) => {
                             let mut object_infos = vec![];
 
-                            for obj in objects {
+                            for obj in result {
                                 let obj_info: PlainFileInfo = obj.try_into()?;
                                 object_infos.push(obj_info);
                             }

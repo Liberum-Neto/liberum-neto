@@ -44,6 +44,10 @@ impl Window<SearchResultWindowState, SearchResultWindowUpdate> for SearchResultW
                         ui.add_space(10.0);
                     });
                 }
+
+                if self.state.search_result.is_empty() {
+                    ui.label("No pinned objects found!");
+                }
             });
 
         SearchResultWindowUpdate {}
