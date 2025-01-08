@@ -482,7 +482,7 @@ impl Node {
                         failed_count += 1;
                     }
                     Ok(r) => match r.get(0) {
-                        Some(o) => match parse_typed(o.clone()).await {
+                        Some(o) => match parse_typed(o.clone()) {
                             Ok(ObjectEnum::Result(t)) => match t.result {
                                 Ok(_) => {
                                     deleted_count += 1;
