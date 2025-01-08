@@ -79,7 +79,7 @@ impl Window<NodeListWindowState, NodeListWindowUpdate> for NodeListWindow {
                         .show(ui, |ui| {
                             ui.label("Name");
                             ui.label("PeerId");
-                            ui.label("Running addresses");
+                            ui.label("First running address");
                             ui.label("Status");
                             ui.label("Control");
                             ui.end_row();
@@ -91,7 +91,7 @@ impl Window<NodeListWindowState, NodeListWindowUpdate> for NodeListWindow {
                                 );
 
                                 ui.label(&n.peer_id);
-                                ui.label(n.running_addresses.join("\n"));
+                                ui.label(n.running_addresses.get(0).unwrap_or(&"-".to_string()));
 
                                 match n.is_running {
                                     true => {
