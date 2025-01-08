@@ -225,7 +225,7 @@ impl SwarmContext {
         object: TypedObject,
         sender: oneshot::Sender<Result<ResultObject>>,
     ) {
-        let r = parser::parse_typed(object).await;
+        let r = parser::parse_typed(object);
         match r {
             Ok(obj) => {
                 if let ObjectEnum::Result(obj) = obj {

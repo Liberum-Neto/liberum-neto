@@ -249,9 +249,8 @@ impl Vaultv3 {
         }
         let typed: TypedObject;
 
-        if let ObjectEnum::Signed(signed) = parse_typed(object)
-            .await
-            .inspect_err(|e| error!(err = format!("{e}"), "parse error"))?
+        if let ObjectEnum::Signed(signed) =
+            parse_typed(object).inspect_err(|e| error!(err = format!("{e}"), "parse error"))?
         {
             typed = signed.into();
         } else {

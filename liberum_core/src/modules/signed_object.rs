@@ -19,7 +19,7 @@ impl Module for SignedObjectModule {
         &self,
         object: TypedObject,
     ) -> Result<(Option<TypedObject>, Option<Vec<Hash>>)> {
-        if let ObjectEnum::Signed(obj) = parse_typed(object).await? {
+        if let ObjectEnum::Signed(obj) = parse_typed(object)? {
             let typed_object: TypedObject = obj.clone().into();
             let vec_hash = vec![Hash::try_from(&typed_object)?];
             return Ok((Some(obj.object), Some(vec_hash)));
@@ -31,7 +31,7 @@ impl Module for SignedObjectModule {
         let obj = params.object.unwrap();
         let hash: Hash = Hash::try_from(&obj)?;
 
-        if let ObjectEnum::Signed(obj) = parse_typed(obj).await? {
+        if let ObjectEnum::Signed(obj) = parse_typed(obj)? {
             let mut hashes = params.signed_objects_hashes;
             hashes.push(hash);
 
@@ -44,8 +44,8 @@ impl Module for SignedObjectModule {
     }
 
     async fn query(&self, params: ModuleQueryParams) -> Result<ModuleQueryParams> {
-        if let ObjectEnum::Signed(obj) = parse_typed(params.object.unwrap()).await? {
-            match parse_typed(obj.object.clone()).await? {
+        if let ObjectEnum::Signed(obj) = parse_typed(params.object.unwrap())? {
+            match parse_typed(obj.object.clone())? {
                 ObjectEnum::DeleteObject(del) => {
                     let valid_query = obj.verify_ed25519(&del.verification_key_ed25519)?;
                     if !valid_query {
@@ -66,7 +66,7 @@ impl Module for SignedObjectModule {
                         })
                         .await?
                     {
-                        if let ObjectEnum::Signed(signed) = parse_typed(typed).await? {
+                        if let ObjectEnum::Signed(signed) = parse_typed(typed)? {
                             let delete_verified =
                                 signed.verify_ed25519(&del.verification_key_ed25519)?;
 

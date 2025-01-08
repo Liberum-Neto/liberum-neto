@@ -19,7 +19,7 @@ impl Module for PinObjectModule {
         &self,
         object: TypedObject,
     ) -> Result<(Option<TypedObject>, Option<Vec<Hash>>)> {
-        match parse_typed(object).await? {
+        match parse_typed(object)? {
             ObjectEnum::Pin(obj) => {
                 let locations = if let Some(relation) = obj.relation {
                     vec![obj.pinned_id, relation]
@@ -46,7 +46,7 @@ impl Module for PinObjectModule {
     }
 
     async fn store(&self, params: ModuleStoreParams) -> Result<ModuleStoreParams> {
-        if let ObjectEnum::Pin(obj) = parse_typed(params.object.unwrap()).await? {
+        if let ObjectEnum::Pin(obj) = parse_typed(params.object.unwrap())? {
             let result = self
                 .vault
                 .ask(vaultv3::StorePin {
@@ -66,7 +66,7 @@ impl Module for PinObjectModule {
     }
 
     async fn query(&self, params: ModuleQueryParams) -> Result<ModuleQueryParams> {
-        if let ObjectEnum::PinQuery(obj) = parse_typed(params.object.unwrap()).await? {
+        if let ObjectEnum::PinQuery(obj) = parse_typed(params.object.unwrap())? {
             let matching_pins = self
                 .vault
                 .ask(vaultv3::MatchingPins {

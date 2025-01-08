@@ -627,7 +627,7 @@ async fn handle_download_file(
 async fn print_typed_object(typed: TypedObject) -> Result<()> {
     let mut typed = Some(typed);
     while let Some(obj) = typed.clone() {
-        typed = match parse_typed(obj).await {
+        typed = match parse_typed(obj) {
             Err(e) => {
                 debug!("{e}");
                 continue;

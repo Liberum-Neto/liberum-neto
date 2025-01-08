@@ -5,7 +5,6 @@ use crate::{
 use anyhow::Result;
 use kameo::request::MessageSend;
 use liberum_core::{proto, DaemonQueryStats};
-use libp2p::kad::BootstrapOk;
 use libp2p::{
     kad::{
         store::RecordStore, AddProviderError, AddProviderOk, Event, GetClosestPeersResult,

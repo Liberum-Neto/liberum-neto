@@ -16,14 +16,14 @@ impl Module for PlainFileObjectModule {
         &self,
         object: TypedObject,
     ) -> Result<(Option<TypedObject>, Option<Vec<Hash>>)> {
-        if let ObjectEnum::PlainFile(_obj) = parse_typed(object).await? {
+        if let ObjectEnum::PlainFile(_obj) = parse_typed(object)? {
             return Ok((None, None));
         }
         return Err(anyhow!("Error parsing Plain File Object"));
     }
 
     async fn store(&self, params: ModuleStoreParams) -> Result<ModuleStoreParams> {
-        if let ObjectEnum::PlainFile(_obj) = parse_typed(params.object.unwrap()).await? {
+        if let ObjectEnum::PlainFile(_obj) = parse_typed(params.object.unwrap())? {
             // no action
             return Ok(ModuleStoreParams {
                 object: None,
@@ -35,7 +35,7 @@ impl Module for PlainFileObjectModule {
     }
 
     async fn query(&self, params: ModuleQueryParams) -> Result<ModuleQueryParams> {
-        if let ObjectEnum::PlainFile(_obj) = parse_typed(params.object.unwrap()).await? {
+        if let ObjectEnum::PlainFile(_obj) = parse_typed(params.object.unwrap())? {
             return Ok(ModuleQueryParams {
                 matched_object_id: params.matched_object_id,
                 object: None, // improper object in query

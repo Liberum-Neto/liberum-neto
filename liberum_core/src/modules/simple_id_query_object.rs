@@ -15,14 +15,14 @@ impl Module for SimpleIDQueryModule {
         &self,
         object: TypedObject,
     ) -> Result<(Option<TypedObject>, Option<Vec<Hash>>)> {
-        if let ObjectEnum::SimpleIDQuery(_obj) = parse_typed(object).await? {
+        if let ObjectEnum::SimpleIDQuery(_obj) = parse_typed(object)? {
             return Ok((None, None));
         }
         return Err(anyhow!("Error parsing Simple ID Query"));
     }
 
     async fn store(&self, params: ModuleStoreParams) -> Result<ModuleStoreParams> {
-        if let ObjectEnum::SimpleIDQuery(_obj) = parse_typed(params.object.unwrap()).await? {
+        if let ObjectEnum::SimpleIDQuery(_obj) = parse_typed(params.object.unwrap())? {
             return Ok(ModuleStoreParams {
                 object: None,
                 signed_objects_hashes: params.signed_objects_hashes,
@@ -32,7 +32,7 @@ impl Module for SimpleIDQueryModule {
     }
 
     async fn query(&self, params: ModuleQueryParams) -> Result<ModuleQueryParams> {
-        if let ObjectEnum::SimpleIDQuery(obj) = parse_typed(params.object.unwrap()).await? {
+        if let ObjectEnum::SimpleIDQuery(obj) = parse_typed(params.object.unwrap())? {
             return Ok(ModuleQueryParams {
                 matched_object_id: Some(vec![obj.id]),
                 object: None,
