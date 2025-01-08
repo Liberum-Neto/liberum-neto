@@ -1,13 +1,11 @@
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Result};
-use liberum_core::{
-    parser::{parse_typed, ObjectEnum},
-    proto::Hash,
-    DaemonRequest, DaemonResponse, DaemonResult,
-};
+use liberum_core::{DaemonRequest, DaemonResponse, DaemonResult};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, error, info};
+
+use crate::windows::PlainFileInfo;
 
 pub struct DaemonCom {
     pub rt: tokio::runtime::Runtime,
@@ -148,11 +146,7 @@ impl DaemonCom {
         })
     }
 
-    pub fn download_file(
-        &mut self,
-        node_name: &str,
-        file_id: &str,
-    ) -> Result<(Vec<u8>, Vec<Hash>)> {
+    pub fn download_file(&mut self, node_name: &str, file_id: &str) -> Result<PlainFileInfo> {
         self.rt.block_on(async {
             self.to_daemon_sender
                 .send(DaemonRequest::GetObject {
@@ -165,33 +159,7 @@ impl DaemonCom {
                 Some(r) => {
                     match r {
                         Ok(DaemonResponse::ObjectDownloaded { data, stats: _ }) => {
-                            let mut typed = Some(data);
-                            let mut pins = vec![];
-
-                            while let Some(obj) = typed.clone() {
-                                typed = match parse_typed(obj).await {
-                                    Err(e) => {
-                                        debug!("{e}");
-                                        continue;
-                                    }
-                                    Ok(obj_enum) => match obj_enum {
-                                        ObjectEnum::Signed(signed) => Some(signed.object),
-                                        ObjectEnum::PlainFile(file) => {
-                                            return Ok((file.content, pins));
-                                        }
-                                        ObjectEnum::Pin(pin) => {
-                                            pins.push(pin.pinned_id);
-
-                                            Some(pin.object)
-                                        }
-                                        _ => {
-                                            debug!("Received object was not a file!");
-                                            bail!("Received unsupported object type");
-                                        }
-                                    },
-                                }
-                            }
-                            bail!("Didn't receive a supported object type in the object cascade");
+                            return PlainFileInfo::try_from(data);
                         }
                         Err(e) => {
                             error!(err = e.to_string(), "Error ocurred while downloading file!");
@@ -242,6 +210,46 @@ impl DaemonCom {
             };
 
             Ok(())
+        })
+    }
+
+    pub fn get_pinned(&mut self, node_name: &str, object_id: &str) -> Result<Vec<PlainFileInfo>> {
+        self.rt.block_on(async {
+            self.to_daemon_sender
+                .send(DaemonRequest::GetPinned {
+                    node_name: node_name.to_string(),
+                    object_id: object_id.to_string(),
+                })
+                .await?;
+
+            match self.from_daemon_receiver.recv().await {
+                Some(r) => {
+                    match r {
+                        Ok(DaemonResponse::PinnedObjects { objects }) => {
+                            let mut object_infos = vec![];
+
+                            for obj in objects {
+                                let obj_info: PlainFileInfo = obj.try_into()?;
+                                object_infos.push(obj_info);
+                            }
+
+                            return Ok(object_infos);
+                        }
+                        Err(e) => {
+                            error!(err = e.to_string(), "Error ocurred while dialing peer!");
+                            bail!("Error occured while publishing file: {}", e.to_string());
+                        }
+                        _ => {
+                            error!("Unexpected response type");
+                            bail!("Unexpected response type");
+                        }
+                    };
+                }
+                None => {
+                    error!("Failed to receive response");
+                    bail!("Failed to receive response from the daemon");
+                }
+            };
         })
     }
 }

@@ -119,7 +119,7 @@ impl Window<DownloaderWindowState, DownloaderWindowUpdate> for DownloaderWindow 
                                                 &self.state.node_name,
                                                 &self.state.file_to_download_id,
                                             ) {
-                                                Ok(data) => {
+                                                Ok(info) => {
                                                     let downloaded_file_info = FileInfo {
                                                         id: self.state.file_to_download_id.clone(),
                                                         path: self
@@ -127,12 +127,8 @@ impl Window<DownloaderWindowState, DownloaderWindowUpdate> for DownloaderWindow 
                                                             .download_destination_path
                                                             .clone()
                                                             .unwrap(),
-                                                        size: data.0.len(),
-                                                        pins: data
-                                                            .1
-                                                            .iter()
-                                                            .map(|p| p.to_string())
-                                                            .collect(),
+                                                        size: info.data.len(),
+                                                        pins: info.pins,
                                                     };
 
                                                     update.new_status_line =
@@ -147,8 +143,10 @@ impl Window<DownloaderWindowState, DownloaderWindowUpdate> for DownloaderWindow 
                                                         ),
                                                     );
 
-                                                    match std::fs::write(dest_path.clone(), data.0)
-                                                    {
+                                                    match std::fs::write(
+                                                        dest_path.clone(),
+                                                        info.data,
+                                                    ) {
                                                         Ok(_) => {
                                                             update.new_status_line =
                                                                 Some(format!("File saved!"))

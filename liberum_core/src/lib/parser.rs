@@ -44,7 +44,7 @@ impl UUIDTyped for ObjectEnum {
     }
 }
 
-pub async fn parse_typed(object: TypedObject) -> Result<ObjectEnum> {
+pub fn parse_typed(object: TypedObject) -> Result<ObjectEnum> {
     match object.uuid {
         GroupObject::UUID => {
             debug!("Parser: Group object: {:?}", object);

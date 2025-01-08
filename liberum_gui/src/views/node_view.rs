@@ -5,7 +5,8 @@ use crate::{
     windows::{
         dialer_window::DialerWindow, download_window::DownloadWindow,
         downloader_window::DownloaderWindow, node_config_window::NodeConfigWindow,
-        node_window::NodeWindow, Window,
+        node_window::NodeWindow, search_result_window::SearchResultWindow,
+        search_window::SearchWindow, Window,
     },
 };
 
@@ -18,6 +19,8 @@ pub struct NodeView {
     dialer_window: DialerWindow,
     downloader_window: DownloaderWindow,
     download_window: Option<DownloadWindow>,
+    search_window: SearchWindow,
+    search_result_window: Option<SearchResultWindow>,
     status_line: String,
 }
 
@@ -34,6 +37,8 @@ impl NodeView {
             dialer_window: DialerWindow::new(node_name),
             downloader_window: DownloaderWindow::new(node_name),
             download_window: None,
+            search_window: SearchWindow::new(node_name),
+            search_result_window: None,
             status_line: String::new(),
         }
     }
@@ -110,6 +115,18 @@ impl NodeView {
 
         action
     }
+
+    fn show_search_window(&mut self, ctx: &mut ViewContext) {
+        let update = self.search_window.draw(ctx);
+
+        if let Some(new_status_line) = update.new_status_line {
+            self.status_line = new_status_line;
+        }
+
+        if let Some(search_result) = update.search_result {
+            self.search_result_window = Some(SearchResultWindow::new(search_result));
+        }
+    }
 }
 
 impl AppView for NodeView {
@@ -131,6 +148,7 @@ impl AppView for NodeView {
         self.show_download_window(&mut ctx);
         self.show_dialer_window(&mut ctx);
         self.show_downloader_window(&mut ctx);
+        self.show_search_window(ctx);
         self.show_status_bar(&mut ctx)
     }
 
