@@ -1,10 +1,11 @@
 use crate::{
     swarm_runner::{object_sender, SwarmContext},
-    vault::{LoadObject, StoreObject},
+    vaultv3::{RetrieveObject, StoreObject},
 };
 use anyhow::Result;
 use kameo::request::MessageSend;
-use liberum_core::{parser::ObjectEnum, proto, DaemonQueryStats};
+use liberum_core::{proto, DaemonQueryStats};
+use libp2p::kad::BootstrapOk;
 use libp2p::{
     kad::{
         store::RecordStore, AddProviderError, AddProviderOk, Event, GetClosestPeersResult,
@@ -13,7 +14,6 @@ use libp2p::{
     },
     PeerId,
 };
-
 use tracing::{debug, error, info, warn};
 
 ///! The module contains methods to handle Kademlia events
@@ -65,6 +65,33 @@ impl SwarmContext {
                 self.handle_outbound_query_progressed_get_providers(id, result, stats, step)
                     .await;
             }
+            QueryResult::Bootstrap(result) => match result {
+                Ok(ok) => {
+                    if ok.num_remaining == 0 {
+                        info!(
+                            result = format!("{:?}", ok),
+                            node = self.node_snapshot.name,
+                            "Bootstrap finished"
+                        );
+                        self.bootstrapped = true;
+                        let sender = self.behaviour.pending_bootstraps.remove(&id);
+                        if let Some(sender) = sender {
+                            let _ = sender.send(());
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        node = self.node_snapshot.name,
+                        err = format!("{e:?}"),
+                        "Bootstrap failed"
+                    );
+                    let sender = self.behaviour.pending_bootstraps.remove(&id);
+                    if let Some(sender) = sender {
+                        let _ = sender.send(());
+                    }
+                }
+            },
             _ => {}
         }
     }
@@ -322,20 +349,22 @@ impl SwarmContext {
     ) -> Option<proto::TypedObject> {
         let obj = self
             .vault_ref
-            .ask(LoadObject {
+            .ask(RetrieveObject {
                 hash: obj_id.clone(),
             })
             .send()
-            .await
-            .unwrap();
-
-        match obj {
-            Some(obj) => match obj {
-                ObjectEnum::Typed(typed) => Some(typed),
-                _ => None,
-            },
-            None => None,
+            .await;
+        if let Err(e) = obj {
+            warn!(
+                id = obj_id.to_string(),
+                err = format!("{e}"),
+                "Object not found in vault"
+            );
+            self.stop_providing(obj_id);
+            return None;
         }
+
+        obj.unwrap()
     }
 
     pub async fn put_object_into_vault(&mut self, obj: proto::TypedObject) -> Result<()> {
@@ -344,7 +373,7 @@ impl SwarmContext {
         self.vault_ref
             .ask(StoreObject {
                 hash: obj_id,
-                object: ObjectEnum::Typed(obj),
+                object: obj,
             })
             .send()
             .await?;

@@ -16,7 +16,7 @@ message DaemonQueryStats{
 
 
 message Identity {
-    string hostId = 1; 
+    string hostId = 1;
 }
 
 message CallableNodes {
@@ -56,7 +56,7 @@ message TestScenario{
         oneof part{
             TestPartSimple simple = 1;
         }
-    
+
         message TestPartSimple{
             repeated Action actions = 1;
         }
@@ -80,6 +80,7 @@ message Action {
      GetObject get_object = 5;
      DeleteObject delete_object = 8;
      PublishMeta publish_meta = 9;
+     QueryPins query_pins = 10;
     }
 
 
@@ -90,20 +91,10 @@ message Action {
         string Hash = 2;
     }
     message PublishMeta {
-         oneof meta_type{
-             Tag tag = 1;
-             Link link = 2;
-         }
-         message Tag{
-             uint64 from_hash_id = 1;
-             uint64 to_hash_id = 2;
-         }
-         message Link{
-             uint64 from_hash_id = 1;
-             uint64 via_hash_id = 2;
-             oneof to {
-                 uint64 to_hash_id = 3;
-             }
+         repeated Pin pins = 1;
+         message Pin{
+             uint64 pin_to = 1;
+             optional uint64 retation = 2;
          }
     }
     message GetObject {
@@ -111,6 +102,13 @@ message Action {
     }
     message DeleteObject {
         uint64 object_hash_id  = 1;
+    }
+    message QueryPins {
+        repeated Pin pins = 1;
+        message Pin{
+			optional uint64 pin_to = 1;
+			optional uint64 retation = 2;
+		}
     }
 
 }
@@ -154,6 +152,7 @@ message ActionResoult{
         GetObjectResult get_object = 8;
         DeleteObjectResult delete_object = 10;
         PublishMetaResult publish_meta = 11;
+        QueryPinsResult query_pins = 12;
        }
 
     message DialNodeResult {
@@ -173,6 +172,10 @@ message ActionResoult{
         uint64 deleted_count = 2;
         uint64 failed_count = 3;
     }
+
+    message QueryPinsResult{
+        uint64 matches = 1;
+	}
 }
 
 message ACK{

@@ -1,21 +1,22 @@
 pub mod manager;
 pub mod store;
 
+use crate::modules::Modules;
 use crate::swarm_runner;
-use crate::vault::{ListTypedObjects, Vault};
+use crate::vaultv3::{ListObjects, Vaultv3};
 use anyhow::{anyhow, Result};
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
 use kameo::request::MessageSend;
 use kameo::{actor::ActorRef, message::Message, Actor};
 use liberum_core::node_config::NodeConfig;
-use liberum_core::proto::{self, SignedObject, TypedObject};
-use liberum_core::proto::{PlainFileObject, ResultObject};
+use liberum_core::proto::{self, signed::SignedObject, TypedObject};
+use liberum_core::proto::{file::PlainFileObject, ResultObject};
 use liberum_core::str_to_file_id;
-use liberum_core::types::TypedObjectInfo;
-use liberum_core::{parser, DaemonQueryStats, DaemonResponse};
+use liberum_core::{DaemonQueryStats, DaemonResponse};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use manager::NodeManager;
+use std::sync::Arc;
 use std::{borrow::Borrow, collections::HashSet, fmt, path::PathBuf, str::FromStr};
 use swarm_runner::messages::SwarmRunnerMessage;
 use tokio::sync::mpsc::Sender;
@@ -28,7 +29,8 @@ pub struct Node {
     pub keypair: Keypair,
     pub config: NodeConfig,
     pub manager_ref: ActorRef<NodeManager>,
-    pub vault_ref: ActorRef<Vault>,
+    pub vault_ref: ActorRef<Vaultv3>,
+    pub modules: Arc<Modules>,
     // These fields are mandatory, but may be set only after spawning the node, so unwrapping them should be safe from
     // all of the methods:
     pub self_actor_ref: Option<ActorRef<Self>>,
@@ -101,30 +103,34 @@ impl Node {
         let obj_id = proto::Hash {
             bytes: obj_id_kad.to_vec().as_slice().try_into()?,
         };
+        self.get_providers_inner(&obj_id).await
+    }
+
+    async fn get_providers_inner(
+        &mut self,
+        obj_id: &proto::Hash,
+    ) -> Result<(Vec<PeerId>, Option<DaemonQueryStats>)> {
         let (send, recv) = oneshot::channel();
 
         self.swarm_sender
             .as_mut()
             .unwrap()
             .send(SwarmRunnerMessage::GetProviders {
-                obj_id: obj_id,
+                obj_id: obj_id.clone(),
                 response_sender: send,
             })
             .await?;
 
-        if let Ok(received) = recv.await {
-            let peers: Vec<PeerId> = received
-                .0
-                .into_iter()
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .collect();
-            let stats = received.1;
-            debug!(node = self.name, "Got providers: {peers:?}");
-            return Ok((peers, stats));
-        }
-
-        Err(anyhow!("Could not get providers"))
+        let received = recv.await?;
+        let peers: Vec<PeerId> = received
+            .0
+            .into_iter()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        let stats = received.1;
+        debug!(node = self.name, "Got providers: {peers:?}");
+        return Ok((peers, stats));
     }
 
     /// Message called on the node from the daemon to provide a file.
@@ -132,32 +138,16 @@ impl Node {
     /// the ID of the file using which it can be found.
     #[message]
     pub async fn provide_file(&mut self, path: PathBuf) -> Result<String> {
-        let (resp_send, resp_recv) = oneshot::channel();
-
         let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
-        let obj_id = proto::Hash::try_from(&object)?;
-
-        self.swarm_sender
-            .as_mut()
-            .unwrap()
-            .send(SwarmRunnerMessage::ProvideObject {
-                object,
-                obj_id: obj_id.clone(),
-                response_sender: resp_send,
-            })
-            .await?;
-
-        resp_recv.await??;
-        let obj_id_str = obj_id.to_string();
-
-        Ok(obj_id_str)
+        let object: TypedObject = SignedObject::sign_ed25519(object, self.keypair.clone())?.into();
+        self.provide_object_inner(object).await
     }
 
     #[message]
-    pub async fn download_file(
+    pub async fn get_object(
         &mut self,
         obj_id_str: String,
-    ) -> Result<(proto::PlainFileObject, Option<DaemonQueryStats>)> {
+    ) -> Result<(TypedObject, Option<DaemonQueryStats>)> {
         let obj_id = proto::Hash::try_from(obj_id_str.as_str())?;
 
         // first get the providers of the file
@@ -237,6 +227,7 @@ impl Node {
                 }
 
                 Ok(Ok(obj)) => {
+                    let obj = obj[0].to_owned();
                     let calculated_obj_id = proto::Hash::try_from(&obj)?;
                     if obj_id != calculated_obj_id {
                         debug!(
@@ -248,22 +239,7 @@ impl Node {
                         );
                         continue;
                     }
-
-                    let mut typed = Some(obj);
-                    while let Some(obj) = typed.clone() {
-                        typed = match parser::parse_typed(obj).await {
-                            Ok(parser::ObjectEnum::Signed(signed)) => Some(signed.object),
-                            Ok(parser::ObjectEnum::PlainFile(file)) => return Ok((file, stats)),
-                            Err(e) => {
-                                debug!("{e}");
-                                continue;
-                            }
-                            Ok(_) => {
-                                debug!("Received object was not a file!");
-                                continue;
-                            }
-                        }
-                    }
+                    return Ok((obj, stats));
                 }
             }
         }
@@ -315,49 +291,94 @@ impl Node {
 
     #[message]
     pub async fn publish_file(&mut self, path: PathBuf) -> Result<String> {
+        self.publish_file_inner(path).await
+    }
+    async fn publish_file_inner(&mut self, path: PathBuf) -> Result<String> {
         // The file has to be read to the memory to be published. There is no other way without
         // a new behaviour kademlia could talk to, which would provide streams of data.
         // (Maybe could be implemented on the existing request_response if it would be generalised more?)
         let object: TypedObject = PlainFileObject::try_from_path(&path).await?.into();
-        let object: TypedObject = SignedObject::sign_ed25519(object, self.keypair.clone())
-            .unwrap()
-            .into();
-        let obj_id = proto::Hash::try_from(&object)?;
-        let obj_id_str = bs58::encode(&obj_id.bytes).into_string();
+        let object: TypedObject = SignedObject::sign_ed25519(object, self.keypair.clone())?.into();
+        self.publish_object_inner(object).await
+    }
 
-        let (resp_send, resp_recv) = oneshot::channel();
-        self.swarm_sender
+    #[message]
+    pub async fn sign_and_provide_object(&mut self, object: proto::TypedObject) -> Result<String> {
+        let object = SignedObject::sign_ed25519(object, self.keypair.clone())?.into();
+        self.provide_object_inner(object).await
+    }
+    async fn provide_object_inner(&mut self, object: proto::TypedObject) -> Result<String> {
+        let obj_id = proto::Hash::try_from(&object)?;
+        let obj_id_str = obj_id.to_string();
+
+        let (resp_send, _) = oneshot::channel();
+        let _ = self
+            .swarm_sender
             .as_mut()
             .unwrap()
-            .send(SwarmRunnerMessage::GetClosestPeers {
-                obj_id: obj_id.clone(),
+            .send(SwarmRunnerMessage::ProvideObject {
+                object,
+                obj_id: obj_id,
                 response_sender: resp_send,
             })
             .await?;
 
-        let peers = resp_recv.await?;
-        if peers.is_empty() {
-            return Err(anyhow!("Could not find provider for file {obj_id_str}.").into());
-        }
-        debug!(
-            node = self.name,
-            "Found {} closest nodes for publishing",
-            peers.len()
-        );
-        let peers: Vec<PeerId> = peers
-            .into_iter()
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect();
+        Ok(obj_id_str)
+    }
+    #[message]
+    pub async fn sign_and_publish_object(&mut self, object: TypedObject) -> Result<String> {
+        let object = SignedObject::sign_ed25519(object, self.keypair.clone())?.into();
+        self.publish_object_inner(object).await
+    }
+
+    async fn get_closest_peers(&mut self, object_id: &proto::Hash) -> Result<Vec<PeerId>> {
+        let (snd, rcv) = oneshot::channel();
+        self.swarm_sender
+            .as_mut()
+            .unwrap()
+            .send(SwarmRunnerMessage::GetClosestPeers {
+                obj_id: object_id.clone(),
+                response_sender: snd,
+            })
+            .await?;
+        let peers = rcv.await?;
+        Ok(peers)
+    }
+
+    async fn publish_object_inner(&mut self, object: TypedObject) -> Result<String> {
+        let obj_id = proto::Hash::try_from(&object)?;
+        let obj_id_str = bs58::encode(&obj_id.bytes).into_string();
+
         let kad_k_parameter: i32 = 20;
         let mut successes = 0;
+        let places = self.modules.publish(object.clone()).await?;
+        let mut peers = HashSet::new();
+        for place in places {
+            let p = self.get_closest_peers(&place).await?;
+            peers.extend(p);
+        }
+
         for peer in &peers {
+            if *peer == self.get_peer_id()? {
+                let (snd, _) = oneshot::channel();
+                self.swarm_sender
+                    .as_mut()
+                    .unwrap()
+                    .send(SwarmRunnerMessage::ProvideObject {
+                        object: object.clone(),
+                        obj_id: obj_id.clone(),
+                        response_sender: snd,
+                    })
+                    .await?;
+            }
+
             let (send, recv) = oneshot::channel();
             self.swarm_sender
                 .as_mut()
                 .unwrap()
                 .send(SwarmRunnerMessage::SendObject {
                     object: object.clone(),
+
                     obj_id: obj_id.clone(),
                     peer_id: peer.clone(),
                     response_sender: send,
@@ -390,63 +411,15 @@ impl Node {
     }
 
     #[message]
-    pub async fn provide_object(&mut self, object: proto::TypedObject) -> Result<String> {
-        let obj_id = proto::Hash::try_from(&object)?;
-        let obj_id_str = obj_id.to_string();
-
-        let (resp_send, _) = oneshot::channel();
-        let _ = self
-            .swarm_sender
-            .as_mut()
-            .unwrap()
-            .send(SwarmRunnerMessage::ProvideObject {
-                object,
-                obj_id: obj_id,
-                response_sender: resp_send,
-            })
-            .await?;
-
-        Ok(obj_id_str)
-    }
-
-    #[message]
-    pub async fn get_published_objects(&mut self) -> Result<Vec<TypedObjectInfo>> {
-        Ok(self.vault_ref.ask(ListTypedObjects).send().await?)
+    pub async fn get_published_objects(&mut self) -> Result<Vec<proto::Hash>> {
+        Ok(self.vault_ref.ask(ListObjects {}).send().await?)
     }
 
     #[message]
     pub async fn delete_object(&mut self, obj_id_str: String) -> Result<DaemonResponse> {
         let obj_id = proto::Hash::try_from(obj_id_str.as_str())?;
-        let (send, recv) = oneshot::channel();
+        let (providers, _) = self.get_providers_inner(&obj_id).await?;
 
-        error!("Get providers");
-        self.swarm_sender
-            .as_mut()
-            .unwrap()
-            .send(SwarmRunnerMessage::GetProviders {
-                obj_id: obj_id.clone(),
-                response_sender: send,
-            })
-            .await?;
-
-        let rec = recv.await;
-        if let Err(e) = rec {
-            debug!(
-                node = self.name,
-                err = format!("{e}"),
-                "Failed to get providers"
-            );
-            return Err(anyhow!("Failed to get providers").context(e));
-        }
-        let rec = rec.unwrap();
-        error!("Fouind providers");
-        let _stats = rec.1;
-        let providers: Vec<PeerId> = rec
-            .0
-            .into_iter()
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect();
         let mut deleted_count: u32 = 0;
         let mut failed_count: u32 = 0;
         let mut deleted_myself = false;
@@ -520,6 +493,38 @@ impl Node {
             failed_count,
         })
     }
+    #[message]
+    pub async fn send_query(&mut self, object: TypedObject) -> Result<DaemonResponse> {
+        let obj_id = proto::Hash::try_from(&object)?;
+        let hashes = self.modules.publish(object.clone()).await?;
+        let mut peers = HashSet::new();
+
+        for hash in hashes {
+            let (providers, _) = self.get_providers_inner(&hash).await?;
+            peers.extend(providers);
+        }
+        let mut responses = HashSet::new();
+        for peer in peers {
+            let (snd, rcv) = oneshot::channel();
+            self.swarm_sender
+                .as_mut()
+                .unwrap()
+                .send(SwarmRunnerMessage::SendQuery {
+                    object: object.clone(),
+                    obj_id: obj_id.clone(),
+                    peer_id: peer,
+                    response_sender: snd,
+                })
+                .await?;
+            if let Ok(resp) = rcv.await? {
+                responses.extend(resp);
+            }
+        }
+
+        return Ok(DaemonResponse::QueryFinished {
+            result: responses.into_iter().collect(),
+        });
+    }
 }
 
 impl Node {
@@ -532,6 +537,8 @@ impl Node {
             swarm_runner::run_swarm(
                 self.self_actor_ref.as_mut().unwrap().clone(),
                 self.vault_ref.clone(),
+                self.modules.clone(),
+                NodeSnapshot::from(self.borrow()),
             )
             .await,
         );
@@ -569,7 +576,7 @@ pub struct NodeBuilder {
     keypair: Option<Keypair>,
     config: Option<NodeConfig>,
     manager_ref: Option<ActorRef<NodeManager>>,
-    vault_ref: Option<ActorRef<Vault>>,
+    vault_ref: Option<ActorRef<Vaultv3>>,
     self_actor_ref: Option<ActorRef<Node>>,
     swarm_sender: Option<Sender<SwarmRunnerMessage>>,
 }
@@ -609,7 +616,7 @@ impl NodeBuilder {
         self
     }
 
-    pub fn vault_ref(mut self, vault_ref: ActorRef<Vault>) -> Self {
+    pub fn vault_ref(mut self, vault_ref: ActorRef<Vaultv3>) -> Self {
         self.vault_ref = Some(vault_ref);
         self
     }
@@ -622,6 +629,9 @@ impl NodeBuilder {
     }
 
     pub fn build(self) -> Result<Node> {
+        let vault_ref = self.vault_ref.ok_or(anyhow!("vault ref is required"))?;
+        let mut modules = Modules::new();
+        modules.install_default(vault_ref.clone());
         let node = Node {
             name: self.name.ok_or(anyhow!("node name is required"))?,
             keypair: self.keypair.ok_or(anyhow!("keypair is required"))?,
@@ -629,9 +639,10 @@ impl NodeBuilder {
             manager_ref: self
                 .manager_ref
                 .ok_or(anyhow!("node manager ref is required"))?,
-            vault_ref: self.vault_ref.ok_or(anyhow!("vault ref is required"))?,
+            vault_ref: vault_ref,
             self_actor_ref: self.self_actor_ref,
             swarm_sender: self.swarm_sender,
+            modules: Arc::new(modules),
         };
 
         Ok(node)
