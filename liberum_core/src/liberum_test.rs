@@ -423,7 +423,7 @@ async fn handle_create_nodes(
             node.node_id,
             liberum_core::DaemonRequest::NewNode {
                 node_name: node.name.clone(),
-                id_seed: None,
+                id_seed: Some(node.name.clone()),
             },
         ));
     }
