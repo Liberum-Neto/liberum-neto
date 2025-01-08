@@ -108,7 +108,13 @@ async fn run_swarm_main(
     let id = identity::PeerId::from_public_key(&keypair.public());
     let swarm = SwarmBuilder::with_existing_identity(keypair.clone())
         .with_tokio()
-        .with_quic()
+        .with_quic_config(|mut config| {
+            config.handshake_timeout = Duration::from_secs(30);
+            config.max_concurrent_stream_limit = 1000;
+            config.keep_alive_interval = Duration::from_secs(10);
+            config.max_idle_timeout = 31000;
+            config
+        })
         .with_behaviour(|key| {
             let store_conf = kad::store::MemoryStoreConfig::default();
             let store = MemoryStore::with_config(key.public().to_peer_id(), store_conf);
