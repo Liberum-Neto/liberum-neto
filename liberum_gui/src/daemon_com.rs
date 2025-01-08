@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::{anyhow, bail, Result};
 use liberum_core::{
     parser::{parse_typed, ObjectEnum},
+    proto::Hash,
     DaemonRequest, DaemonResponse, DaemonResult,
 };
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -147,7 +148,11 @@ impl DaemonCom {
         })
     }
 
-    pub fn download_file(&mut self, node_name: &str, file_id: &str) -> Result<Vec<u8>> {
+    pub fn download_file(
+        &mut self,
+        node_name: &str,
+        file_id: &str,
+    ) -> Result<(Vec<u8>, Vec<Hash>)> {
         self.rt.block_on(async {
             self.to_daemon_sender
                 .send(DaemonRequest::GetObject {
@@ -161,6 +166,8 @@ impl DaemonCom {
                     match r {
                         Ok(DaemonResponse::ObjectDownloaded { data, stats: _ }) => {
                             let mut typed = Some(data);
+                            let mut pins = vec![];
+
                             while let Some(obj) = typed.clone() {
                                 typed = match parse_typed(obj).await {
                                     Err(e) => {
@@ -170,7 +177,12 @@ impl DaemonCom {
                                     Ok(obj_enum) => match obj_enum {
                                         ObjectEnum::Signed(signed) => Some(signed.object),
                                         ObjectEnum::PlainFile(file) => {
-                                            return Ok(file.content);
+                                            return Ok((file.content, pins));
+                                        }
+                                        ObjectEnum::Pin(pin) => {
+                                            pins.push(pin.pinned_id);
+
+                                            Some(pin.object)
                                         }
                                         _ => {
                                             debug!("Received object was not a file!");

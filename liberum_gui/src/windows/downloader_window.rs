@@ -127,21 +127,12 @@ impl Window<DownloaderWindowState, DownloaderWindowUpdate> for DownloaderWindow 
                                                             .download_destination_path
                                                             .clone()
                                                             .unwrap(),
-                                                        size: data.len(),
-                                                        pins: vec![
-                                                            bs58::encode(
-                                                                "hello---------------------------",
-                                                            )
-                                                            .into_string(),
-                                                            bs58::encode(
-                                                                "p2p-----------------------------",
-                                                            )
-                                                            .into_string(),
-                                                            bs58::encode(
-                                                                "world---------------------------",
-                                                            )
-                                                            .into_string(),
-                                                        ],
+                                                        size: data.0.len(),
+                                                        pins: data
+                                                            .1
+                                                            .iter()
+                                                            .map(|p| p.to_string())
+                                                            .collect(),
                                                     };
 
                                                     update.new_status_line =
@@ -156,7 +147,8 @@ impl Window<DownloaderWindowState, DownloaderWindowUpdate> for DownloaderWindow 
                                                         ),
                                                     );
 
-                                                    match std::fs::write(dest_path.clone(), data) {
+                                                    match std::fs::write(dest_path.clone(), data.0)
+                                                    {
                                                         Ok(_) => {
                                                             update.new_status_line =
                                                                 Some(format!("File saved!"))

@@ -67,7 +67,11 @@ impl Window<DownloadWindowState, ()> for DownloadWindow {
                                 ui.end_row();
                             }
                         });
+                } else {
+                    ui.label("No pinned objects found");
                 }
+
+                ui.add_space(20.0);
             });
     }
 
