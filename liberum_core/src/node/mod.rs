@@ -357,6 +357,8 @@ impl Node {
         for place in places {
             let p = self.get_closest_peers(&place).await?;
             peers.extend(p);
+            let p = self.get_providers_inner(&place).await?;
+            peers.extend(p.0);
         }
 
         for peer in &peers {
@@ -516,6 +518,10 @@ impl Node {
         }
         let mut responses = HashSet::new();
         for peer in peers {
+            if peer == self.get_peer_id()? {
+                warn!(node = self.name, "Querying myself, this should not happen");
+                continue;
+            }
             let (snd, rcv) = oneshot::channel();
             self.swarm_sender
                 .as_mut()
@@ -527,8 +533,24 @@ impl Node {
                     response_sender: snd,
                 })
                 .await?;
-            if let Ok(resp) = rcv.await? {
-                responses.extend(resp);
+            match rcv.await {
+                Ok(Ok(resp)) => {
+                    responses.extend(resp);
+                }
+                Ok(Err(e)) => {
+                    error!(
+                        node = self.name,
+                        err = format!("{e}"),
+                        "Failed to send query"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        node = self.name,
+                        err = format!("{e}"),
+                        "Failed to send query"
+                    );
+                }
             }
         }
 

@@ -133,10 +133,9 @@ impl NodeView {
             search_result_window.draw(ctx);
         }
     }
-    
+
     fn show_delete_window(&mut self, ctx: &mut ViewContext) {
         let update = self.delete_window.draw(ctx);
-
 
         if let Some(new_status_line) = update.new_status_line {
             self.status_line = new_status_line;

@@ -5,8 +5,8 @@ use liberum_core::{DaemonRequest, DaemonResponse, DaemonResult};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, error, info};
 
-use crate::windows::PlainFileInfo;
 use crate::windows::DeleteInfo;
+use crate::windows::PlainFileInfo;
 
 pub struct DaemonCom {
     pub rt: tokio::runtime::Runtime,
@@ -250,7 +250,6 @@ impl DaemonCom {
                     error!("Failed to receive response");
                     bail!("Failed to receive response from the daemon");
                 }
-
             };
         })
     }
@@ -267,7 +266,6 @@ impl DaemonCom {
             match self.from_daemon_receiver.recv().await {
                 Some(r) => {
                     match r {
-
                         Ok(DaemonResponse::ObjectDeleted {
                             deleted_myself,
                             deleted_count,
@@ -283,7 +281,6 @@ impl DaemonCom {
                         Err(e) => {
                             error!(err = e.to_string(), "Error ocurred while deleting file!");
                             bail!("Error occured while deleting file: {}", e.to_string());
-
                         }
                         _ => {
                             error!("Unexpected response type");
@@ -295,8 +292,7 @@ impl DaemonCom {
                     error!("Failed to receive response");
                     bail!("Failed to receive response from the daemon");
                 }
-
-            };   
+            };
         })
     }
 }
