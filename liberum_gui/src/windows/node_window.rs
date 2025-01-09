@@ -100,6 +100,11 @@ impl Window<NodeWindowState, NodeWindowUpdate> for NodeWindow {
                 });
 
                 ui.horizontal(|ui| {
+                    ui.colored_label(Color32::from_rgb(0, 100, 200), "PeerId:");
+                    ui.label(&node_info.peer_id);
+                });
+
+                ui.horizontal(|ui| {
                     ui.colored_label(Color32::from_rgb(0, 100, 200), "Is running:");
                     ui.label(&node_info.is_running.to_string());
                 });
