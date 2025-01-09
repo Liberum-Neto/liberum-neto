@@ -39,4 +39,23 @@ impl PlainFileObject {
             content: tokio::fs::read(path).await?,
         })
     }
+
+    pub fn try_from_path_sync(path: &Path) -> Result<Self> {
+        let name = {
+            let name = path.file_name();
+            if let None = name {
+                bail!("Invalid filename! {}", path.to_string_lossy())
+            }
+            let name = name.unwrap().to_str();
+            if let None = name {
+                bail!("Invalid filename! {},", path.to_string_lossy())
+            }
+            name.unwrap().to_string()
+        };
+
+        Ok(PlainFileObject {
+            name,
+            content: std::fs::read(path)?,
+        })
+    }
 }

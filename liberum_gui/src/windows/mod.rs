@@ -5,7 +5,7 @@ use liberum_core::{
     parser::{parse_typed, ObjectEnum},
     proto::{Hash, TypedObject},
 };
-use tracing::{debug, error};
+use tracing::debug;
 
 use crate::views::ViewContext;
 

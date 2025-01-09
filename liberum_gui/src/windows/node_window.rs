@@ -1,8 +1,15 @@
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
+use anyhow::Result;
 use egui::Color32;
 use egui_file::FileDialog;
-use liberum_core::types::NodeInfo;
+use liberum_core::{
+    proto::{file::PlainFileObject, pins::PinObject, Hash, TypedObject},
+    types::NodeInfo,
+};
 
 use super::Window;
 
@@ -15,6 +22,8 @@ pub struct NodeWindow {
 pub struct NodeWindowState {
     node_name: String,
     file_to_send_path: Option<PathBuf>,
+    input_pin_hash: String,
+    pins_to_send: HashSet<String>,
     is_opened: bool,
 }
 
@@ -38,6 +47,8 @@ impl NodeWindow {
             state: NodeWindowState {
                 node_name: node_name.to_string(),
                 file_to_send_path: None,
+                input_pin_hash: String::new(),
+                pins_to_send: HashSet::new(),
                 is_opened: false,
             },
             file_to_send_dialog: None,
@@ -168,6 +179,40 @@ impl Window<NodeWindowState, NodeWindowUpdate> for NodeWindow {
                     ui.label(file_selected_text);
                 });
 
+                ui.colored_label(Color32::from_rgb(0, 200, 100), "Pins to include:");
+
+                if !self.state.pins_to_send.is_empty() {
+                    egui::Grid::new("pins_to_send")
+                        .num_columns(2)
+                        .striped(true)
+                        .show(ui, |ui| {
+                            self.state.pins_to_send.clone().iter().for_each(|pin| {
+                                ui.label(pin);
+
+                                if ui.button("Remove").clicked() {
+                                    self.state.pins_to_send.remove(pin);
+                                }
+
+                                ui.end_row();
+                            });
+                        });
+                }
+
+                ui.add_space(10.0);
+
+                ui.horizontal(|ui| {
+                    ui.text_edit_singleline(&mut self.state.input_pin_hash);
+
+                    if ui.button("Add pin").clicked() && !self.state.input_pin_hash.is_empty() {
+                        self.state
+                            .pins_to_send
+                            .insert(self.state.input_pin_hash.clone());
+                        self.state.input_pin_hash.clear();
+                    }
+                });
+
+                ui.add_space(10.0);
+
                 ui.horizontal(|ui| {
                     if ui.button("Select file").clicked() {
                         let filter = Box::new(move |path: &Path| -> bool { path.is_file() });
@@ -189,16 +234,35 @@ impl Window<NodeWindowState, NodeWindowUpdate> for NodeWindow {
                     if ui.button("Publish file").clicked() {
                         match &self.state.file_to_send_path {
                             Some(path) => {
-                                let result = view_ctx
-                                    .daemon_com
-                                    .publish_file(&self.state.node_name, &path);
-                                match result {
-                                    Ok(id) => {
-                                        update.new_status_line =
-                                            Some(format!("File published; id={id}"))
+                                let object: TypedObject =
+                                    PlainFileObject::try_from_path_sync(&path).unwrap().into();
+
+                                let obj_res =
+                                    prepare_pin_object(object, self.state.pins_to_send.clone());
+
+                                match obj_res {
+                                    Ok(object) => {
+                                        let result = view_ctx
+                                            .daemon_com
+                                            .publish_object(&self.state.node_name, object);
+
+                                        match result {
+                                            Ok(id) => {
+                                                update.new_status_line =
+                                                    Some(format!("File published; id={id}"));
+                                                self.state.file_to_send_path = None;
+                                                self.state.pins_to_send.clear();
+                                            }
+                                            Err(e) => update.new_status_line = Some(e.to_string()),
+                                        };
                                     }
-                                    Err(e) => update.new_status_line = Some(e.to_string()),
-                                };
+                                    Err(e) => {
+                                        update.new_status_line =
+                                            Some(format!("Failed to preapre pin object: {}", e));
+
+                                        return;
+                                    }
+                                }
                             }
                             None => {
                                 update.new_status_line =
@@ -225,4 +289,20 @@ impl Window<NodeWindowState, NodeWindowUpdate> for NodeWindow {
     fn close(&mut self) {
         self.state.is_opened = false;
     }
+}
+
+fn prepare_pin_object(typed_object: TypedObject, pins: HashSet<String>) -> Result<TypedObject> {
+    let mut pin_hashes = vec![];
+
+    for pin in pins.iter() {
+        pin_hashes.push(Hash::try_from(pin)?);
+    }
+
+    Ok(PinObject::add_pins(
+        typed_object,
+        pin_hashes
+            .into_iter()
+            .map(|pin_hash| (pin_hash, None))
+            .collect(),
+    ))
 }

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Result};
-use liberum_core::proto;
+use liberum_core::proto::{self, TypedObject};
 use liberum_core::{DaemonRequest, DaemonResponse, DaemonResult};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, error, info};
@@ -298,6 +298,38 @@ impl DaemonCom {
                     bail!("Failed to receive response from the daemon");
                 }
             };
+        })
+    }
+
+    pub fn publish_object(&mut self, node_name: &str, object: TypedObject) -> Result<String> {
+        self.rt.block_on(async {
+            self.to_daemon_sender
+                .send(DaemonRequest::SignAndPublishObject {
+                    node_name: node_name.to_string(),
+                    object,
+                })
+                .await?;
+
+            let resp = self
+                .from_daemon_receiver
+                .recv()
+                .await
+                .ok_or(anyhow!("Daemon returned no response"))?;
+
+            match resp {
+                Ok(DaemonResponse::ObjectPublished { id }) => {
+                    info!(id = id, "File published");
+                    println!("{id}");
+                    return Ok(id);
+                }
+                Err(e) => {
+                    println!("Error publishing file: {e}");
+                    bail!("Error publishing file");
+                }
+                _ => {
+                    bail!("Daemon returned wrong response");
+                }
+            }
         })
     }
 }
