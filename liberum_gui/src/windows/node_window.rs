@@ -57,6 +57,10 @@ impl Window<NodeWindowState, NodeWindowUpdate> for NodeWindow {
         self.state.clone()
     }
 
+    fn set_state(&mut self, state: NodeWindowState) {
+        self.state = state;
+    }
+
     fn draw(&mut self, view_ctx: &mut crate::views::ViewContext) -> NodeWindowUpdate {
         let mut update = NodeWindowUpdate::default();
 

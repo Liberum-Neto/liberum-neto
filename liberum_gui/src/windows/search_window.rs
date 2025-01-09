@@ -40,6 +40,10 @@ impl Window<SearchWindowState, SearchWindowUpdate> for SearchWindow {
         return self.state.clone();
     }
 
+    fn set_state(&mut self, state: SearchWindowState) {
+        self.state = state;
+    }
+
     fn draw(&mut self, view_ctx: &mut crate::views::ViewContext) -> SearchWindowUpdate {
         let mut update = SearchWindowUpdate::default();
 

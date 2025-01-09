@@ -3,10 +3,15 @@ use std::any::Any;
 use crate::{
     components::status_bar::StatusBar,
     windows::{
-        delete_window::DeleterWindow, dialer_window::DialerWindow, download_window::DownloadWindow,
-        downloader_window::DownloaderWindow, node_config_window::NodeConfigWindow,
-        node_window::NodeWindow, search_result_window::SearchResultWindow,
-        search_window::SearchWindow, Window,
+        delete_window::{DeleterWindow, DeleterWindowState},
+        dialer_window::{DialerWindow, DialerWindowState},
+        download_window::{DownloadWindow, DownloadWindowState},
+        downloader_window::{DownloaderWindow, DownloaderWindowState},
+        node_config_window::{NodeConfigWindow, NodeConfigWindowState},
+        node_window::{NodeWindow, NodeWindowState},
+        search_result_window::{SearchResultWindow, SearchResultWindowState},
+        search_window::{SearchWindow, SearchWindowState},
+        Window,
     },
 };
 
@@ -27,6 +32,14 @@ pub struct NodeView {
 
 struct NodeViewState {
     status_line: String,
+    config_state: NodeConfigWindowState,
+    node_window_state: NodeWindowState,
+    download_state: DownloaderWindowState,
+    download_result_state: Option<DownloadWindowState>,
+    dialer_state: DialerWindowState,
+    deleter_state: DeleterWindowState,
+    search_state: SearchWindowState,
+    search_result_state: Option<SearchResultWindowState>,
 }
 
 impl NodeView {
@@ -151,7 +164,24 @@ impl AppView for NodeView {
 
         if let Some(init_state) = init_state {
             let node_view_state = init_state.downcast::<NodeViewState>().unwrap();
+            self.downloader_window
+                .set_state(node_view_state.download_state);
+            self.dialer_window.set_state(node_view_state.dialer_state);
+            self.search_window.set_state(node_view_state.search_state);
+            self.delete_window.set_state(node_view_state.deleter_state);
             self.status_line = node_view_state.status_line;
+            self.config_window.set_state(node_view_state.config_state);
+            self.node_window
+                .set_state(node_view_state.node_window_state);
+
+            if let Some(download_result_state) = node_view_state.download_result_state {
+                self.download_window = Some(DownloadWindow::from_state(download_result_state));
+            }
+
+            if let Some(search_result_state) = node_view_state.search_result_state {
+                self.search_result_window =
+                    Some(SearchResultWindow::from_state(search_result_state));
+            }
         }
     }
 
@@ -175,6 +205,14 @@ impl AppView for NodeView {
 
         Some(Box::new(NodeViewState {
             status_line: self.status_line.clone(),
+            download_state: self.downloader_window.get_state(),
+            download_result_state: self.download_window.as_ref().map(|w| w.get_state()),
+            dialer_state: self.dialer_window.get_state(),
+            deleter_state: self.delete_window.get_state(),
+            search_state: self.search_window.get_state(),
+            search_result_state: self.search_result_window.as_ref().map(|w| w.get_state()),
+            config_state: self.config_window.get_state(),
+            node_window_state: self.node_window.get_state(),
         }))
     }
 

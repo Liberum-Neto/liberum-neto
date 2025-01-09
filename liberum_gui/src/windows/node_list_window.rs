@@ -38,6 +38,10 @@ impl Window<NodeListWindowState, NodeListWindowUpdate> for NodeListWindow {
         self.state.clone()
     }
 
+    fn set_state(&mut self, state: NodeListWindowState) {
+        self.state = state;
+    }
+
     fn draw(&mut self, view_ctx: &mut crate::views::ViewContext) -> NodeListWindowUpdate {
         let state = view_ctx.system_state.lock().unwrap();
         let state = (*state).clone();

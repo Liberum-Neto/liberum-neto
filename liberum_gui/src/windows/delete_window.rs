@@ -48,6 +48,10 @@ impl Window<DeleterWindowState, DeleterWindowUpdate> for DeleterWindow {
         self.state.clone()
     }
 
+    fn set_state(&mut self, state: DeleterWindowState) {
+        self.state = state;
+    }
+
     fn draw(&mut self, view_ctx: &mut crate::views::ViewContext) -> DeleterWindowUpdate {
         let mut update = DeleterWindowUpdate::default();
 

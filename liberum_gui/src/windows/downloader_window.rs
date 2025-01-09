@@ -61,6 +61,10 @@ impl Window<DownloaderWindowState, DownloaderWindowUpdate> for DownloaderWindow 
         self.state.clone()
     }
 
+    fn set_state(&mut self, state: DownloaderWindowState) {
+        self.state = state;
+    }
+
     fn draw(&mut self, view_ctx: &mut crate::views::ViewContext) -> DownloaderWindowUpdate {
         let mut update = DownloaderWindowUpdate::default();
 

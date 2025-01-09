@@ -32,6 +32,10 @@ impl Window<SearchResultWindowState, SearchResultWindowUpdate> for SearchResultW
         self.state.clone()
     }
 
+    fn set_state(&mut self, state: SearchResultWindowState) {
+        self.state = state;
+    }
+
     fn draw(&mut self, view_ctx: &mut crate::views::ViewContext) -> SearchResultWindowUpdate {
         egui::Window::new("Search Result")
             .open(&mut self.state.is_opened)

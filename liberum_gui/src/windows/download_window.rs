@@ -32,6 +32,10 @@ impl Window<DownloadWindowState, ()> for DownloadWindow {
         self.state.clone()
     }
 
+    fn set_state(&mut self, state: DownloadWindowState) {
+        self.state = state;
+    }
+
     fn draw(&mut self, view_ctx: &mut crate::views::ViewContext) -> () {
         egui::Window::new("Download info")
             .open(&mut self.state.is_opened)

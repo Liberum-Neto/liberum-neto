@@ -60,6 +60,10 @@ impl Window<DialerWindowState, DialerWindowUpdate> for DialerWindow {
         self.state.clone()
     }
 
+    fn set_state(&mut self, state: DialerWindowState) {
+        self.state = state;
+    }
+
     fn draw(&mut self, view_ctx: &mut crate::views::ViewContext) -> DialerWindowUpdate {
         let mut update = DialerWindowUpdate::default();
 
