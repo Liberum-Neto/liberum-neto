@@ -1,9 +1,13 @@
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Result};
+use liberum_core::proto::{self, TypedObject};
 use liberum_core::{DaemonRequest, DaemonResponse, DaemonResult};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, error, info};
+
+use crate::windows::DeleteInfo;
+use crate::windows::PlainFileInfo;
 
 pub struct DaemonCom {
     pub rt: tokio::runtime::Runtime,
@@ -144,10 +148,10 @@ impl DaemonCom {
         })
     }
 
-    pub fn download_file(&mut self, node_name: &str, file_id: &str) -> Result<Vec<u8>> {
+    pub fn download_file(&mut self, node_name: &str, file_id: &str) -> Result<PlainFileInfo> {
         self.rt.block_on(async {
             self.to_daemon_sender
-                .send(DaemonRequest::DownloadFile {
+                .send(DaemonRequest::GetObject {
                     node_name: node_name.to_string(),
                     id: file_id.to_string(),
                 })
@@ -156,7 +160,9 @@ impl DaemonCom {
             match self.from_daemon_receiver.recv().await {
                 Some(r) => {
                     match r {
-                        Ok(DaemonResponse::FileDownloaded { data, .. }) => return Ok(data.content),
+                        Ok(DaemonResponse::ObjectDownloaded { data, stats: _ }) => {
+                            return PlainFileInfo::try_from(data);
+                        }
                         Err(e) => {
                             error!(err = e.to_string(), "Error ocurred while downloading file!");
                             bail!("Error occured while publishing file: {}", e.to_string());
@@ -206,6 +212,124 @@ impl DaemonCom {
             };
 
             Ok(())
+        })
+    }
+
+    pub fn get_pinned(&mut self, node_name: &str, object_id: &str) -> Result<Vec<PlainFileInfo>> {
+        self.rt.block_on(async {
+            self.to_daemon_sender
+                .send(DaemonRequest::GetPinned {
+                    node_name: node_name.to_string(),
+                    object_id: object_id.to_string(),
+                })
+                .await?;
+
+            match self.from_daemon_receiver.recv().await {
+                Some(r) => {
+                    match r {
+                        Ok(DaemonResponse::QueryFinished { result }) => {
+                            let mut object_infos = vec![];
+
+                            for obj in result {
+                                error!(
+                                    obj_id = proto::Hash::try_from(&obj)?.to_string(),
+                                    "Pinned object found"
+                                );
+                                let obj_info: PlainFileInfo = obj.try_into()?;
+                                object_infos.push(obj_info);
+                            }
+
+                            return Ok(object_infos);
+                        }
+                        Err(e) => {
+                            error!(err = e.to_string(), "Error ocurred while dialing peer!");
+                            bail!("Error occured while publishing file: {}", e.to_string());
+                        }
+                        _ => {
+                            error!("Unexpected response type");
+                            bail!("Unexpected response type");
+                        }
+                    };
+                }
+                None => {
+                    error!("Failed to receive response");
+                    bail!("Failed to receive response from the daemon");
+                }
+            };
+        })
+    }
+
+    pub fn delete_file(&mut self, node_name: &str, file_id: &str) -> Result<DeleteInfo> {
+        self.rt.block_on(async {
+            self.to_daemon_sender
+                .send(DaemonRequest::DeleteObject {
+                    node_name: node_name.to_string(),
+                    object_id: file_id.to_string(),
+                })
+                .await?;
+
+            match self.from_daemon_receiver.recv().await {
+                Some(r) => {
+                    match r {
+                        Ok(DaemonResponse::ObjectDeleted {
+                            deleted_myself,
+                            deleted_count,
+                            failed_count,
+                        }) => {
+                            return Ok(DeleteInfo {
+                                id: file_id.to_string(),
+                                deleted_locally: deleted_myself,
+                                number_of_successes: deleted_count,
+                                number_of_failures: failed_count,
+                            });
+                        }
+                        Err(e) => {
+                            error!(err = e.to_string(), "Error ocurred while deleting file!");
+                            bail!("Error occured while deleting file: {}", e.to_string());
+                        }
+                        _ => {
+                            error!("Unexpected response type");
+                            bail!("Unexpected response type");
+                        }
+                    };
+                }
+                None => {
+                    error!("Failed to receive response");
+                    bail!("Failed to receive response from the daemon");
+                }
+            };
+        })
+    }
+
+    pub fn publish_object(&mut self, node_name: &str, object: TypedObject) -> Result<String> {
+        self.rt.block_on(async {
+            self.to_daemon_sender
+                .send(DaemonRequest::SignAndPublishObject {
+                    node_name: node_name.to_string(),
+                    object,
+                })
+                .await?;
+
+            let resp = self
+                .from_daemon_receiver
+                .recv()
+                .await
+                .ok_or(anyhow!("Daemon returned no response"))?;
+
+            match resp {
+                Ok(DaemonResponse::ObjectPublished { id }) => {
+                    info!(id = id, "File published");
+                    println!("{id}");
+                    return Ok(id);
+                }
+                Err(e) => {
+                    println!("Error publishing file: {e}");
+                    bail!("Error publishing file");
+                }
+                _ => {
+                    bail!("Daemon returned wrong response");
+                }
+            }
         })
     }
 }

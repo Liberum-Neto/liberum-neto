@@ -2913,6 +2913,7 @@ name = "liberum_core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "bincode",
  "blake3",
  "bs58",
@@ -2954,6 +2955,7 @@ name = "liberum_gui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bs58",
  "chrono",
  "eframe",
  "egui",

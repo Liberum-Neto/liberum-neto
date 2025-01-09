@@ -1,39 +1,60 @@
-use std::path::{Path, PathBuf};
+use std::any::Any;
 
-use egui::{Align2, Color32};
-use egui_file::FileDialog;
-use liberum_core::types::NodeInfo;
+use crate::{
+    components::status_bar::StatusBar,
+    windows::{
+        delete_window::{DeleterWindow, DeleterWindowState},
+        dialer_window::{DialerWindow, DialerWindowState},
+        download_window::{DownloadWindow, DownloadWindowState},
+        downloader_window::{DownloaderWindow, DownloaderWindowState},
+        node_config_window::{NodeConfigWindow, NodeConfigWindowState},
+        node_window::{NodeWindow, NodeWindowState},
+        search_result_window::{SearchResultWindow, SearchResultWindowState},
+        search_window::{SearchWindow, SearchWindowState},
+        Window,
+    },
+};
 
 use super::{AppView, NodesListView, ViewAction, ViewContext};
 
 pub struct NodeView {
     node_name: String,
-    file_to_send_path: Option<PathBuf>,
-    file_to_send_dialog: Option<FileDialog>,
-    file_to_download_id: String,
-    config_window_opened: bool,
+    config_window: NodeConfigWindow,
+    node_window: NodeWindow,
+    dialer_window: DialerWindow,
+    downloader_window: DownloaderWindow,
+    download_window: Option<DownloadWindow>,
+    search_window: SearchWindow,
+    search_result_window: Option<SearchResultWindow>,
+    delete_window: DeleterWindow,
     status_line: String,
-    download_window_opened: bool,
-    download_data: Vec<u8>,
-    dial_peer_id: String,
-    dial_addr: String,
-    dial_history: Vec<(String, String, bool)>,
+}
+
+struct NodeViewState {
+    status_line: String,
+    config_state: NodeConfigWindowState,
+    node_window_state: NodeWindowState,
+    download_state: DownloaderWindowState,
+    download_result_state: Option<DownloadWindowState>,
+    dialer_state: DialerWindowState,
+    deleter_state: DeleterWindowState,
+    search_state: SearchWindowState,
+    search_result_state: Option<SearchResultWindowState>,
 }
 
 impl NodeView {
     pub fn new(node_name: &str) -> Self {
         Self {
             node_name: node_name.to_string(),
-            file_to_send_path: None,
-            file_to_send_dialog: None,
-            file_to_download_id: String::new(),
-            config_window_opened: false,
+            config_window: NodeConfigWindow::new(node_name),
+            node_window: NodeWindow::new(node_name),
+            dialer_window: DialerWindow::new(node_name),
+            downloader_window: DownloaderWindow::new(node_name),
+            download_window: None,
+            search_window: SearchWindow::new(node_name),
+            search_result_window: None,
+            delete_window: DeleterWindow::new(node_name),
             status_line: String::new(),
-            download_window_opened: false,
-            download_data: Vec::new(),
-            dial_peer_id: String::new(),
-            dial_addr: String::new(),
-            dial_history: Vec::new(),
         }
     }
 
@@ -44,285 +65,53 @@ impl NodeView {
     }
 
     fn show_node_window(&mut self, ctx: &mut ViewContext) {
-        egui::Window::new("Node")
-            .default_pos([32.0, 64.0])
-            .show(ctx.egui_ctx, |ui| {
-                let system_state = ctx.system_state.lock().unwrap();
-                let system_state = (*system_state).clone();
-                let system_state = match system_state {
-                    Some(s) => s,
-                    None => {
-                        ui.heading("Could not get system state");
-                        return;
-                    }
-                };
+        let update = self.node_window.draw(ctx);
 
-                let node_infos = system_state
-                    .node_infos
-                    .into_iter()
-                    .filter(|n| n.name == self.node_name)
-                    .collect::<Vec<NodeInfo>>();
+        if update.config_button_clicked {
+            self.config_window.open();
+        }
 
-                let node_info = match node_infos.first() {
-                    Some(n) => n,
-                    None => {
-                        ui.heading("No node info available");
-                        ui.label("No such node found in the system");
-                        return;
-                    }
-                };
-
-                ui.heading(format!("Node {}", node_info.name));
-
-                ui.horizontal(|ui| {
-                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Name:");
-                    ui.label(&node_info.name);
-                });
-
-                ui.horizontal(|ui| {
-                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Is running:");
-                    ui.label(&node_info.is_running.to_string());
-                });
-
-                ui.horizontal(|ui| {
-                    ui.colored_label(Color32::from_rgb(0, 100, 200), "Addresses:");
-
-                    ui.vertical(|ui| {
-                        for addr in &node_info.config_addresses {
-                            ui.label(addr);
-                        }
-                    });
-
-                    if node_info.config_addresses.is_empty() {
-                        ui.label("No addresses");
-                    }
-                });
-
-                ui.add_space(10.0);
-
-                ui.horizontal(|ui| {
-                    if ui.button("Run").clicked() {
-                        let _ = ctx.daemon_com.run_node(&node_info.name);
-                    }
-
-                    if ui.button("Stop").clicked() {
-                        let _ = ctx.daemon_com.stop_node(&node_info.name);
-                    }
-
-                    if ui.button("Config").clicked() {
-                        self.config_window_opened = true;
-                    }
-                });
-
-                ui.add_space(20.0);
-                ui.heading("Send files");
-
-                let file_selected_text = self
-                    .file_to_send_path
-                    .as_ref()
-                    .map(|path| path.to_str().unwrap_or("Unprintable path"))
-                    .unwrap_or("No file selected");
-
-                ui.horizontal(|ui| {
-                    ui.colored_label(Color32::from_rgb(0, 100, 200), "File selected:");
-                    ui.label(file_selected_text);
-                });
-
-                ui.horizontal(|ui| {
-                    if ui.button("Select file").clicked() {
-                        let filter = Box::new(move |path: &Path| -> bool { path.is_file() });
-                        let mut dialog = FileDialog::open_file(self.file_to_send_path.clone())
-                            .show_files_filter(filter);
-                        dialog.open();
-                        self.file_to_send_dialog = Some(dialog);
-                    }
-
-                    if let Some(dialog) = &mut self.file_to_send_dialog {
-                        if dialog.show(ctx.egui_ctx).selected() {
-                            if let Some(file_path) = dialog.path() {
-                                self.file_to_send_path = Some(file_path.to_path_buf());
-                            }
-                        }
-                    }
-
-                    if ui.button("Publish file").clicked() {
-                        match &self.file_to_send_path {
-                            Some(path) => {
-                                let result = ctx.daemon_com.publish_file(&self.node_name, &path);
-                                match result {
-                                    Ok(id) => self.status_line = format!("File published; id={id}"),
-                                    Err(e) => self.status_line = e.to_string(),
-                                };
-                            }
-                            None => {
-                                self.status_line = "Error: No file selected".to_string();
-                            }
-                        }
-                    }
-                });
-
-                ui.add_space(20.0);
-
-                ui.heading("Download file");
-                ui.label("File ID:");
-                ui.text_edit_singleline(&mut self.file_to_download_id);
-                ui.add_space(10.0);
-
-                if ui.button("Download").clicked() {
-                    match ctx
-                        .daemon_com
-                        .download_file(&self.node_name, &self.file_to_download_id)
-                    {
-                        Ok(data) => {
-                            self.status_line = "File downloaded".to_string();
-                            self.file_to_download_id = String::new();
-                            self.download_window_opened = true;
-                            self.download_data = data;
-                        }
-                        Err(e) => self.status_line = e.to_string(),
-                    }
-                }
-
-                ui.add_space(20.0);
-            });
+        if let Some(new_status_line) = update.new_status_line {
+            self.status_line = new_status_line;
+        }
     }
 
     fn show_dialer_window(&mut self, ctx: &mut ViewContext) {
-        egui::Window::new("Dialer")
-            .anchor(Align2::RIGHT_TOP, [-16.0, 16.0])
-            .show(ctx.egui_ctx, |ui| {
-                egui::TopBottomPanel::top("dial_controls").show_inside(ui, |ui| {
-                    ui.label("PeerID:");
-                    ui.text_edit_singleline(&mut self.dial_peer_id);
-                    ui.label("Peer address:");
-                    ui.text_edit_singleline(&mut self.dial_addr);
+        let update = self.dialer_window.draw(ctx);
 
-                    ui.add_space(10.0);
+        if let Some(new_status_line) = update.new_status_line {
+            self.status_line = new_status_line;
+        }
+    }
 
-                    if ui.button("Dial").clicked() {
-                        match ctx.daemon_com.dial(
-                            &self.node_name,
-                            &self.dial_peer_id,
-                            &self.dial_addr,
-                        ) {
-                            Ok(_) => {
-                                self.status_line = format!(
-                                    "Dial {} @ {} successful!",
-                                    self.dial_peer_id, self.dial_addr
-                                );
+    fn show_downloader_window(&mut self, ctx: &mut ViewContext) {
+        let update = self.downloader_window.draw(ctx);
 
-                                self.dial_history.push((
-                                    self.dial_peer_id.clone(),
-                                    self.dial_addr.clone(),
-                                    true,
-                                ));
+        if let Some(new_status_line) = update.new_status_line {
+            self.status_line = new_status_line;
+        }
 
-                                self.dial_peer_id = String::new();
-                                self.dial_addr = String::new();
-                            }
-                            Err(e) => {
-                                self.status_line = e.to_string();
+        if let Some(file_info) = update.file_downloaded {
+            let mut download_window = DownloadWindow::new(file_info);
+            download_window.open();
+            self.download_window = Some(download_window);
+        }
 
-                                self.dial_history.push((
-                                    self.dial_peer_id.clone(),
-                                    self.dial_addr.clone(),
-                                    false,
-                                ));
-                            }
-                        }
-                    }
-
-                    ui.add_space(10.0);
-
-                    if !self.dial_history.is_empty() {
-                        egui::Grid::new("dial_history")
-                            .num_columns(3)
-                            .striped(true)
-                            .show(ui, |ui| {
-                                ui.label("Peer ID");
-                                ui.label("Peer address");
-                                ui.label("Successful?");
-                                ui.end_row();
-
-                                for (peer_id, peer_addr, success) in &self.dial_history {
-                                    ui.label(peer_id);
-                                    ui.label(peer_addr);
-                                    ui.label(success.to_string());
-                                    ui.end_row();
-                                }
-                            });
-                    }
-                });
-            });
+        if let Some(file_info) = update.display_file_info {
+            let mut download_window = DownloadWindow::new(file_info);
+            download_window.open();
+            self.download_window = Some(download_window);
+        }
     }
 
     fn show_config_window(&mut self, ctx: &mut ViewContext) {
-        egui::Window::new("Configuration")
-            .open(&mut self.config_window_opened)
-            .show(ctx.egui_ctx, |ui| {
-                let system_state = ctx.system_state.lock().unwrap();
-                let system_state = (*system_state).clone();
-                let system_state = match system_state {
-                    Some(s) => s,
-                    None => {
-                        ui.heading("Could not get system state");
-                        return;
-                    }
-                };
-
-                let node_config = system_state.node_configs.get(&self.node_name);
-
-                match node_config {
-                    Some(cfg) => {
-                        egui::Grid::new("config_grid")
-                            .num_columns(2)
-                            .striped(true)
-                            .show(ui, |ui| {
-                                ui.label("Bootstrap nodes");
-                                ui.vertical(|ui| {
-                                    for b in cfg.bootstrap_nodes.iter() {
-                                        ui.label(format!("{} @ {}", b.id, b.addr));
-                                    }
-
-                                    let mut text = String::new();
-
-                                    ui.horizontal(|ui| {
-                                        let _ = ui.text_edit_singleline(&mut text);
-                                        let _ = ui.button("Add new");
-                                    });
-                                });
-                                ui.end_row();
-                                ui.label("External addresses");
-                                ui.vertical(|ui| {
-                                    for a in cfg.external_addresses.iter() {
-                                        ui.horizontal(|ui| {
-                                            ui.label(a.to_string());
-                                            let _ = ui.button("Remove");
-                                        });
-                                    }
-
-                                    let mut text = String::new();
-
-                                    ui.horizontal(|ui| {
-                                        let _ = ui.text_edit_singleline(&mut text);
-                                        let _ = ui.button("Add new");
-                                    });
-                                });
-                            });
-                    }
-                    None => {
-                        ui.label("Config not found");
-                    }
-                };
-            });
+        self.config_window.draw(ctx);
     }
 
     fn show_download_window(&mut self, ctx: &mut ViewContext) {
-        egui::Window::new("Download info")
-            .open(&mut self.download_window_opened)
-            .show(ctx.egui_ctx, |ui| {
-                ui.label(String::from_utf8(self.download_data.clone()).unwrap());
-            });
+        if let Some(window) = &mut self.download_window {
+            window.draw(ctx);
+        }
     }
 
     fn show_status_bar(&mut self, ctx: &mut ViewContext) -> ViewAction {
@@ -332,26 +121,68 @@ impl NodeView {
             .frame(egui::Frame::default().inner_margin(16.0))
             .show_separator_line(false)
             .show(ctx.egui_ctx, |ui| {
-                ui.horizontal(|ui| {
-                    if ui.button("Back to nodes list").clicked() {
-                        action = ViewAction::SwitchView {
-                            view: Box::new(NodesListView::default()),
-                        }
-                    }
-
-                    ui.label(&self.status_line);
-                });
+                ui.add(StatusBar::status(
+                    &self.status_line,
+                    &mut action,
+                    Box::new(NodesListView::new()),
+                ))
             });
 
         action
     }
+
+    fn show_search_window(&mut self, ctx: &mut ViewContext) {
+        let update = self.search_window.draw(ctx);
+        if let Some(new_status_line) = update.new_status_line {
+            self.status_line = new_status_line;
+        }
+        if let Some(search_result) = update.search_result {
+            self.search_result_window = Some(SearchResultWindow::new(search_result));
+        }
+    }
+
+    fn show_search_result_window(&mut self, ctx: &mut ViewContext) {
+        if let Some(search_result_window) = &mut self.search_result_window {
+            search_result_window.draw(ctx);
+        }
+    }
+
+    fn show_delete_window(&mut self, ctx: &mut ViewContext) {
+        let update = self.delete_window.draw(ctx);
+
+        if let Some(new_status_line) = update.new_status_line {
+            self.status_line = new_status_line;
+        }
+    }
 }
 
 impl AppView for NodeView {
-    fn setup(&mut self, ctx: &mut ViewContext) {
+    fn setup(&mut self, ctx: &mut ViewContext, init_state: Option<Box<dyn Any>>) {
         ctx.system_observer
             .borrow_mut()
             .add_observed_config(&self.node_name);
+
+        if let Some(init_state) = init_state {
+            let node_view_state = init_state.downcast::<NodeViewState>().unwrap();
+            self.downloader_window
+                .set_state(node_view_state.download_state);
+            self.dialer_window.set_state(node_view_state.dialer_state);
+            self.search_window.set_state(node_view_state.search_state);
+            self.delete_window.set_state(node_view_state.deleter_state);
+            self.status_line = node_view_state.status_line;
+            self.config_window.set_state(node_view_state.config_state);
+            self.node_window
+                .set_state(node_view_state.node_window_state);
+
+            if let Some(download_result_state) = node_view_state.download_result_state {
+                self.download_window = Some(DownloadWindow::from_state(download_result_state));
+            }
+
+            if let Some(search_result_state) = node_view_state.search_result_state {
+                self.search_result_window =
+                    Some(SearchResultWindow::from_state(search_result_state));
+            }
+        }
     }
 
     fn draw(&mut self, mut ctx: &mut ViewContext) -> ViewAction {
@@ -360,12 +191,32 @@ impl AppView for NodeView {
         self.show_node_window(&mut ctx);
         self.show_download_window(&mut ctx);
         self.show_dialer_window(&mut ctx);
+        self.show_downloader_window(&mut ctx);
+        self.show_search_window(ctx);
+        self.show_search_result_window(ctx);
+        self.show_delete_window(&mut ctx);
         self.show_status_bar(&mut ctx)
     }
 
-    fn teardown(&mut self, ctx: &mut ViewContext) {
+    fn teardown(&mut self, ctx: &mut ViewContext) -> Option<Box<dyn Any>> {
         ctx.system_observer
             .borrow_mut()
             .remove_observed_config(&self.node_name);
+
+        Some(Box::new(NodeViewState {
+            status_line: self.status_line.clone(),
+            download_state: self.downloader_window.get_state(),
+            download_result_state: self.download_window.as_ref().map(|w| w.get_state()),
+            dialer_state: self.dialer_window.get_state(),
+            deleter_state: self.delete_window.get_state(),
+            search_state: self.search_window.get_state(),
+            search_result_state: self.search_result_window.as_ref().map(|w| w.get_state()),
+            config_state: self.config_window.get_state(),
+            node_window_state: self.node_window.get_state(),
+        }))
+    }
+
+    fn unique_state_id(&self) -> String {
+        format!("node_view_{}", self.node_name)
     }
 }

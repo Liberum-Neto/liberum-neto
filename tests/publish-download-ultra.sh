@@ -30,10 +30,10 @@ FILE4_NAME="$PWD/test-file4.txt"
 FILE4_CONTENT="44444 Hello, World! 44444"
 
 cleanup () {
-    $CLI_BIN -d stop-node $N1 2> /dev/null
-    $CLI_BIN -d stop-node $N2 2> /dev/null
-    $CLI_BIN -d stop-node $N3 2> /dev/null
-    $CLI_BIN -d stop-node $N4 2> /dev/null
+    $CLI_BIN stop-node $N1 2> /dev/null
+    $CLI_BIN stop-node $N2 2> /dev/null
+    $CLI_BIN stop-node $N3 2> /dev/null
+    $CLI_BIN stop-node $N4 2> /dev/null
     killall liberum_core &> /dev/null
     rm "$FILE1_NAME"
     rm "$FILE2_NAME"
@@ -49,34 +49,34 @@ $CORE_BIN --daemon  &> /dev/null &
 sleep 0.1; # the socket file is created asynchronously and may not be ready yet :))))
 
 # create ndoes
-$CLI_BIN -d new-node $N1 --id-seed $N1_SEED 2> /dev/null
-$CLI_BIN -d new-node $N2 --id-seed $N2_SEED 2> /dev/null
-$CLI_BIN -d new-node $N3 --id-seed $N3_SEED 2> /dev/null
-$CLI_BIN -d new-node $N4 --id-seed $N4_SEED 2> /dev/null
+$CLI_BIN new-node $N1 --id-seed $N1_SEED 2> /dev/null
+$CLI_BIN new-node $N2 --id-seed $N2_SEED 2> /dev/null
+$CLI_BIN new-node $N3 --id-seed $N3_SEED 2> /dev/null
+$CLI_BIN new-node $N4 --id-seed $N4_SEED 2> /dev/null
 
 #config addresses
-$CLI_BIN -d config-node $N1 add-external-addr $N1_ADDR 2> /dev/null
-$CLI_BIN -d config-node $N2 add-external-addr $N2_ADDR 2> /dev/null
-$CLI_BIN -d config-node $N3 add-external-addr $N3_ADDR 2> /dev/null
-$CLI_BIN -d config-node $N4 add-external-addr $N4_ADDR 2> /dev/null
+$CLI_BIN config-node $N1 add-external-addr $N1_ADDR 2> /dev/null
+$CLI_BIN config-node $N2 add-external-addr $N2_ADDR 2> /dev/null
+$CLI_BIN config-node $N3 add-external-addr $N3_ADDR 2> /dev/null
+$CLI_BIN config-node $N4 add-external-addr $N4_ADDR 2> /dev/null
 
 # get peer ids
-$CLI_BIN -d start-node $N1 2> /dev/null
-N1_ID=$($CLI_BIN -d get-peer-id $N1 2> /dev/null)
-$CLI_BIN -d start-node $N2 2> /dev/null
-N2_ID=$($CLI_BIN -d get-peer-id $N2 2> /dev/null)
-$CLI_BIN -d start-node $N3 2> /dev/null
-N3_ID=$($CLI_BIN -d get-peer-id $N3 2> /dev/null)
-$CLI_BIN -d start-node $N4 2> /dev/null
-N4_ID=$($CLI_BIN -d get-peer-id $N4 2> /dev/null)
-$CLI_BIN -d stop-node $N1 2> /dev/null
-$CLI_BIN -d stop-node $N2 2> /dev/null
-$CLI_BIN -d stop-node $N3 2> /dev/null
-$CLI_BIN -d stop-node $N4 2> /dev/null
+$CLI_BIN start-node $N1 2> /dev/null
+N1_ID=$($CLI_BIN get-peer-id $N1 2> /dev/null)
+$CLI_BIN start-node $N2 2> /dev/null
+N2_ID=$($CLI_BIN get-peer-id $N2 2> /dev/null)
+$CLI_BIN start-node $N3 2> /dev/null
+N3_ID=$($CLI_BIN get-peer-id $N3 2> /dev/null)
+$CLI_BIN start-node $N4 2> /dev/null
+N4_ID=$($CLI_BIN get-peer-id $N4 2> /dev/null)
+$CLI_BIN stop-node $N1 2> /dev/null
+$CLI_BIN stop-node $N2 2> /dev/null
+$CLI_BIN stop-node $N3 2> /dev/null
+$CLI_BIN stop-node $N4 2> /dev/null
 
 # setup bootstraps
-$CLI_BIN -d config-node $N2 add-bootstrap-node "${N1_ID}" $N1_ADDR 2> /dev/null
-$CLI_BIN -d config-node $N3 add-bootstrap-node "${N1_ID}" $N1_ADDR 2> /dev/null
+$CLI_BIN config-node $N2 add-bootstrap-node "${N1_ID}" $N1_ADDR 2> /dev/null
+$CLI_BIN config-node $N3 add-bootstrap-node "${N1_ID}" $N1_ADDR 2> /dev/null
 
 
 # create files
@@ -86,10 +86,10 @@ echo "${FILE3_CONTENT}" > "$FILE3_NAME"
 echo "${FILE4_CONTENT}" > "$FILE4_NAME"
 
 # start nodes
-$CLI_BIN -d start-node $N1 2> /dev/null
-$CLI_BIN -d start-node $N2 2> /dev/null
-$CLI_BIN -d start-node $N3 2> /dev/null
-$CLI_BIN -d start-node $N4 2> /dev/null
+$CLI_BIN start-node $N1 2> /dev/null
+$CLI_BIN start-node $N2 2> /dev/null
+$CLI_BIN start-node $N3 2> /dev/null
+$CLI_BIN start-node $N4 2> /dev/null
 
 # wait for nodes to connect
 sleep 0.1
@@ -100,7 +100,7 @@ FILE2_HASH=$($CLI_BIN publish-file $N2 "$FILE2_NAME" 2> /dev/null)
 FILE3_HASH=$($CLI_BIN publish-file $N3 "$FILE3_NAME" 2> /dev/null)
 
 # dial
-$CLI_BIN -d dial $N4 $N3_ID $N3_ADDR 2> /dev/null
+$CLI_BIN dial $N4 $N3_ID $N3_ADDR 2> /dev/null
 
 # publish the last file after dialing
 FILE4_HASH=$($CLI_BIN publish-file $N4 "$FILE4_NAME" 2> /dev/null)

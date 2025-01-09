@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{debug, error};
 
-use crate::vault::Vault;
+use crate::vaultv3::Vaultv3;
 
 use super::NodeSnapshot;
 
@@ -37,11 +37,11 @@ impl NodeStore {
     #[message]
     pub async fn load_node(&self, name: String) -> Result<NodeSnapshot, NodeStoreError> {
         let node_dir_path = self.resolve_node_dir_path(&name);
-        debug!(
-            name = name,
-            path = node_dir_path.display().to_string(),
-            "loading node"
-        );
+        // debug!(
+        //     name = name,
+        //     path = node_dir_path.display().to_string(),
+        //     "loading node"
+        // );
 
         if !node_dir_path.exists() {
             debug!(
@@ -176,8 +176,8 @@ impl NodeStore {
     }
 
     #[message]
-    pub async fn get_node_vault(&self, name: String) -> Result<Vault> {
-        Vault::new_on_disk(&self.resolve_node_dir_path(&name)).await
+    pub async fn get_node_vault(&self, name: String) -> Result<Vaultv3> {
+        Vaultv3::new_on_disk(&self.resolve_node_dir_path(&name)).await
     }
 }
 

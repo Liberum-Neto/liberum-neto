@@ -1,9 +1,10 @@
 pub mod behaviour;
 pub mod messages;
 
+use crate::modules::Modules;
 use crate::node::NodeSnapshot;
 use crate::node::{self, Node};
-use crate::vault::Vault;
+use crate::vaultv3::Vaultv3;
 use anyhow::anyhow;
 use anyhow::Result;
 use behaviour::*;
@@ -16,14 +17,16 @@ use libp2p::{identity, kad, Multiaddr, StreamProtocol, SwarmBuilder};
 use libp2p::{kad::store::MemoryStore, request_response, swarm::SwarmEvent, Swarm};
 use messages::*;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::warn;
-use tracing::{debug, error, info};
+use tokio::sync::oneshot;
+use tracing::{debug, error, info, warn};
 const KAD_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/kad/1.0.0");
 //const FILE_SHARE_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/file-share/1.0.0");
 const OBJECT_SENDER_PROTO_NAME: StreamProtocol =
     StreamProtocol::new("/liberum/object-sender/1.0.0");
+const QUERY_SENDER_PROTO_NAME: StreamProtocol = StreamProtocol::new("/liberum/query-sender/1.0.0");
 const DEFAULT_MULTIADDR_STR_IP6: &str = "/ip6/::/udp/0/quic-v1";
 const DEFAULT_MULTIADDR_STR_IP4: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 
@@ -39,28 +42,53 @@ const DEFAULT_MULTIADDR_STR_IP4: &str = "/ip4/0.0.0.0/udp/0/quic-v1";
 struct SwarmContext {
     swarm: Swarm<LiberumNetoBehavior>,
     _node_actor: ActorRef<Node>,
-    vault_ref: ActorRef<Vault>,
+    vault_ref: ActorRef<Vaultv3>,
     node_snapshot: NodeSnapshot,
     behaviour: BehaviourContext,
+    modules: Arc<Modules>,
+    bootstrapped: bool,
 }
 
 /// Prepares the sender to send messages to the swarm
 pub async fn run_swarm(
     node_ref: ActorRef<Node>,
-    vault_ref: ActorRef<Vault>,
+    vault_ref: ActorRef<Vaultv3>,
+    modules: Arc<Modules>,
+    node_snapshot: NodeSnapshot,
 ) -> mpsc::Sender<SwarmRunnerMessage> {
     let (sender, receiver) = mpsc::channel::<SwarmRunnerMessage>(16);
-    tokio::spawn(run_swarm_task(node_ref, vault_ref, receiver));
+    let (ready_sender, ready_receiver) = oneshot::channel();
+    tokio::spawn(run_swarm_task(
+        node_ref,
+        node_snapshot,
+        vault_ref,
+        modules,
+        receiver,
+        ready_sender,
+    ));
+    let _ = ready_receiver.await;
     sender
 }
 
 /// Task that runs the swarm and handles errors which can't be propagated outside of a task
 async fn run_swarm_task(
     node_ref: ActorRef<Node>,
-    vault_ref: ActorRef<Vault>,
+    node_snapshot: NodeSnapshot,
+    vault_ref: ActorRef<Vaultv3>,
+    modules: Arc<Modules>,
     receiver: mpsc::Receiver<SwarmRunnerMessage>,
+    ready_sender: oneshot::Sender<()>,
 ) {
-    if let Err(e) = run_swarm_main(node_ref.clone(), vault_ref, receiver).await {
+    if let Err(e) = run_swarm_main(
+        node_ref.clone(),
+        node_snapshot,
+        vault_ref,
+        modules,
+        receiver,
+        ready_sender,
+    )
+    .await
+    {
         error!(err = format!("{e:?}"), "Swarm run error");
         node_ref.ask(node::SwarmDied).send().await.unwrap();
     }
@@ -69,19 +97,12 @@ async fn run_swarm_task(
 /// The main function that runs the swarm
 async fn run_swarm_main(
     node_ref: ActorRef<Node>,
-    vault_ref: ActorRef<Vault>,
+    node_snapshot: NodeSnapshot,
+    vault_ref: ActorRef<Vaultv3>,
+    modules: Arc<Modules>,
     mut receiver: mpsc::Receiver<SwarmRunnerMessage>,
+    ready_sender: oneshot::Sender<()>,
 ) -> Result<()> {
-    // It must be guaranteed not to ever fail. Swarm can't start without this data.
-    // If it fails then it's a bug
-
-    // Get the node data
-    let node_snapshot = node_ref
-        .ask(node::GetSnapshot {})
-        .send()
-        .await
-        .inspect_err(|e| error!(err = e.to_string(), "Swarm can't get node snapshot!"))?;
-
     // Create a new swarm using the node data
     let keypair = node_snapshot.keypair.clone();
     let id = identity::PeerId::from_public_key(&keypair.public());
@@ -101,11 +122,19 @@ async fn run_swarm_main(
                 object_sender::ObjectResponse,
             >::new(
                 [(OBJECT_SENDER_PROTO_NAME, ProtocolSupport::Full)],
-                request_response::Config::default().with_request_timeout(Duration::from_secs(10)),
+                request_response::Config::default().with_request_timeout(Duration::from_secs(100)),
+            );
+            let query_sender = request_response::cbor::Behaviour::<
+                query_sender::QueryRequest,
+                query_sender::QueryResponse,
+            >::new(
+                [(QUERY_SENDER_PROTO_NAME, ProtocolSupport::Full)],
+                request_response::Config::default().with_request_timeout(Duration::from_secs(100)),
             );
             LiberumNetoBehavior {
                 kademlia,
                 object_sender: obj_sender,
+                query_sender: query_sender,
             }
         })
         .inspect_err(|e| error!(err = e.to_string(), "could not create behavior"))?
@@ -118,6 +147,8 @@ async fn run_swarm_main(
         vault_ref,
         swarm: swarm,
         behaviour: BehaviourContext::new(),
+        modules: modules,
+        bootstrapped: false,
     };
 
     let swarm_default_addr_ip6 =
@@ -171,15 +202,22 @@ async fn run_swarm_main(
             .add_address(&node.id, node.addr.clone());
         debug!("Bootstrap node: {}", serde_json::to_string(&node)?);
     }
-    context
+    let qid = context
         .swarm
         .behaviour_mut()
         .kademlia
         .bootstrap()
         .inspect_err(|e| {
-            warn!(err = e.to_string(), "Could not bootstrap the swarm");
-        })
-        .ok();
+            warn!(err = e.to_string(), "Bootstrapping: No known peers");
+        });
+    if let Ok(qid) = qid {
+        context
+            .behaviour
+            .pending_bootstraps
+            .insert(qid, ready_sender);
+    } else {
+        ready_sender.send(()).unwrap();
+    }
 
     loop {
         tokio::select! {
@@ -288,6 +326,6 @@ impl SwarmContext {
                     debug!("neighbour: {:?}: {:?}", e.node.key, e.node.value);
                 });
             });
-        error!(node = self.node_snapshot.name, "Neighbour count: {i}")
+        debug!(node = self.node_snapshot.name, "Neighbour count: {i}")
     }
 }

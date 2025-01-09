@@ -33,14 +33,14 @@ for (( i = 1; i <= $INIT_COUNT; i++ )); do
     N="test_n$i"
     N_ADDR="${NODE_ADDR_PREFIX}$(($i + 22136))${NODE_ADDR_SUFFIX}"
 
-    $CLI_BIN -d new-node $N --id-seed $i &> /dev/null
-    $CLI_BIN -d config-node $N add-external-addr $N_ADDR &> /dev/null
+    $CLI_BIN new-node $N --id-seed $i &> /dev/null
+    $CLI_BIN config-node $N add-external-addr $N_ADDR &> /dev/null
     if [[ $i -gt 1 ]]; then
-        $CLI_BIN -d config-node $N add-bootstrap-node "${N_IDS[$(($i - 2))]}" "${N_ADDRESSES[$(($i - 2))]}" &> /dev/null
+        $CLI_BIN config-node $N add-bootstrap-node "${N_IDS[$(($i - 2))]}" "${N_ADDRESSES[$(($i - 2))]}" &> /dev/null
     fi
-    $CLI_BIN -d start-node $N &> /dev/null
+    $CLI_BIN start-node $N &> /dev/null
 
-    ID=$($CLI_BIN -d get-peer-id $N 2> /dev/null)
+    ID=$($CLI_BIN get-peer-id $N 2> /dev/null)
     N_NAMES+=("$N")
     N_IDS+=("$ID")
     N_ADDRESSES+=("$N_ADDR")
@@ -66,21 +66,21 @@ for (( i = $INIT_COUNT+1; i <= $((INIT_COUNT + NODE_COUNT)); i++ )); do
     N="test_n$i"
     N_ADDR="${NODE_ADDR_PREFIX}$(($i + 23136))${NODE_ADDR_SUFFIX}"
 
-    $CLI_BIN -d new-node $N --id-seed $i &> /dev/null
-    $CLI_BIN -d config-node $N add-external-addr $N_ADDR &> /dev/null
+    $CLI_BIN new-node $N --id-seed $i &> /dev/null
+    $CLI_BIN config-node $N add-external-addr $N_ADDR &> /dev/null
     if [[ $i -gt 1 ]]; then
-        $CLI_BIN -d config-node $N add-bootstrap-node "${N_IDS[$(($i - 2))]}" "${N_ADDRESSES[$(($i - 2))]}" &> /dev/null
+        $CLI_BIN config-node $N add-bootstrap-node "${N_IDS[$(($i - 2))]}" "${N_ADDRESSES[$(($i - 2))]}" &> /dev/null
     fi
-    $CLI_BIN -d start-node $N &> /dev/null
+    $CLI_BIN start-node $N &> /dev/null
 
-    ID=$($CLI_BIN -d get-peer-id $N 2> /dev/null)
+    ID=$($CLI_BIN get-peer-id $N 2> /dev/null)
     N_NAMES+=("$N")
     N_IDS+=("$ID")
     N_ADDRESSES+=("$N_ADDR")
 
     sleep 0.1
 
-    RESULT=$($CLI_BIN -d download-file ${N} "${FILE_ID}" 2> /dev/null)
+    RESULT=$($CLI_BIN download-file ${N} "${FILE_ID}" 2> /dev/null)
     if [[ "$RESULT" == "$FILE_CONTENT" ]]; then
         COUNT_PASS=$((COUNT_PASS+1))
     else
@@ -97,7 +97,7 @@ echo Fail: $COUNT_FAIL
 set +x
 echo "${BLUE}Skipping test logs for stopping nodes${NC}\n"
 for (( i = 1; i <= $NODE_COUNT; i++ )); do
-    $CLI_BIN -d stop-node ${N_NAMES[$i]} &> /dev/null
+    $CLI_BIN stop-node ${N_NAMES[$i]} &> /dev/null
 done
 echo "${BLUE}Nodes stopped${NC}\n"
 set -x

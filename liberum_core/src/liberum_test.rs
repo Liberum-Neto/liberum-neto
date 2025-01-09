@@ -5,7 +5,11 @@ use std::{
 };
 
 use connection::AppContext;
-use liberum_core::{node_config::NodeConfig, DaemonError, DaemonRequest, DaemonResponse};
+use liberum_core::{
+    node_config::NodeConfig,
+    proto::{self, pins::PinObject, queries::PinQuery, EmptyObject, Hash, TypedObject},
+    DaemonError, DaemonRequest, DaemonResponse,
+};
 use libp2p::Multiaddr;
 use node::store::NodeStore;
 use tokio::{sync::RwLock, time::sleep};
@@ -20,7 +24,9 @@ use crate::test_protocol::test_scenario::node_definition::NodeDefinitionLevel;
 use crate::test_protocol::test_scenario::test_part_scenario::Part::Simple;
 
 use test_protocol::{
-    action_resoult::{Details, DialNodeResult, GetObjectResult, PublishObjectResult},
+    action_resoult::{
+        Details, DialNodeResult, GetObjectResult, PublishObjectResult, QueryPinsResult,
+    },
     callable_nodes::CallableNode,
     identity_server_client::IdentityServerClient,
     Action, ActionResoult, DaemonQueryStats, Identity, NodeInstance, NodesCreated, TestPartResult,
@@ -31,7 +37,9 @@ pub mod connection;
 pub mod node;
 pub mod swarm_runner;
 pub mod test_runner;
-pub mod vault;
+// pub mod vault;
+pub mod modules;
+pub mod vaultv3;
 
 pub mod test_protocol {
     tonic::include_proto!("test_protocol");
@@ -187,16 +195,14 @@ async fn handle_simple_action(
                         path: PathBuf::from(publish_object.hash.to_string()),
                     }
                 }
-                test_protocol::action::Details::GetObject(get_object) => {
-                    DaemonRequest::DownloadFile {
-                        node_name: action.node_name,
-                        id: ctx
-                            .hash_map
-                            .get(&get_object.object_hash_id)
-                            .unwrap()
-                            .clone(),
-                    }
-                }
+                test_protocol::action::Details::GetObject(get_object) => DaemonRequest::GetObject {
+                    node_name: action.node_name,
+                    id: ctx
+                        .hash_map
+                        .get(&get_object.object_hash_id)
+                        .unwrap()
+                        .clone(),
+                },
                 test_protocol::action::Details::DeleteObject(delete_object) => {
                     DaemonRequest::DeleteObject {
                         node_name: action.node_name,
@@ -207,7 +213,68 @@ async fn handle_simple_action(
                             .clone(),
                     }
                 }
-                test_protocol::action::Details::PublishMeta(publish_meta) => todo!(),
+                test_protocol::action::Details::PublishMeta(publish_meta) => {
+                    let mut obj: TypedObject = EmptyObject {}.into();
+                    for pin in &publish_meta.pins {
+                        let pin_to = ctx.hash_map.get(&pin.pin_to).unwrap().clone();
+                        let pin_to = Hash::try_from(pin_to).unwrap();
+
+                        let relation = if let Some(hash_id) = pin.retation {
+                            if hash_id == 0 {
+                                None
+                            } else {
+                                Some(ctx.hash_map.get(&hash_id).unwrap().clone())
+                            }
+                        } else {
+                            None
+                        };
+                        let relation = relation.map(|rel| Hash::try_from(&rel).unwrap());
+
+                        obj = PinObject {
+                            object: obj.into(),
+                            pinned_id: pin_to,
+                            relation: relation,
+                        }
+                        .into();
+                    }
+
+                    DaemonRequest::SignAndPublishObject {
+                        node_name: action.node_name,
+                        object: obj,
+                    }
+                }
+                test_protocol::action::Details::QueryPins(query_pins) => {
+                    let mut obj: TypedObject = EmptyObject {}.into();
+                    for pin in &query_pins.pins {
+                        let pin_to: Option<proto::Hash> = pin
+                            .pin_to
+                            .map(|rel| ctx.hash_map.get(&rel).unwrap().clone())
+                            .map(|hash_str| proto::Hash::try_from(hash_str).unwrap());
+
+                        let relation = if let Some(hash_id) = pin.retation {
+                            if hash_id == 0 {
+                                None
+                            } else {
+                                Some(ctx.hash_map.get(&hash_id).unwrap().clone())
+                            }
+                        } else {
+                            None
+                        };
+                        let relation = relation.map(|rel| Hash::try_from(&rel).unwrap());
+
+                        obj = PinQuery {
+                            object: obj.into(),
+                            pinned_id: pin_to,
+                            relation: relation,
+                        }
+                        .into();
+                    }
+
+                    DaemonRequest::QueryObject {
+                        node_name: action.node_name.clone(),
+                        object: obj,
+                    }
+                }
             };
 
             let daemon_request = daemon_request(request, ctx.app_context.clone()).await;
@@ -217,7 +284,7 @@ async fn handle_simple_action(
                 Ok(response) => {
                     result.is_success = true;
                     result.details = Some(match response {
-                        DaemonResponse::FileDownloaded { data: _, stats } => {
+                        DaemonResponse::ObjectDownloaded { data: _, stats } => {
                             if let Some(stats) = stats {
                                 test_protocol::action_resoult::Details::GetObject(GetObjectResult {
                                     stats: Some(DaemonQueryStats {
@@ -248,6 +315,29 @@ async fn handle_simple_action(
                                 )
                             }
                         }
+                        DaemonResponse::QueryFinished { result } => {
+                            test_protocol::action_resoult::Details::QueryPins(QueryPinsResult {
+                                matches: result.len() as u64,
+                            })
+                        }
+                        DaemonResponse::ObjectPublished { id } => {
+                            test_protocol::action_resoult::Details::PublishMeta(
+                                test_protocol::action_resoult::PublishMetaResult {
+                                    object_hash: id,
+                                },
+                            )
+                        }
+                        DaemonResponse::ObjectDeleted {
+                            deleted_myself,
+                            deleted_count,
+                            failed_count,
+                        } => test_protocol::action_resoult::Details::DeleteObject(
+                            test_protocol::action_resoult::DeleteObjectResult {
+                                deleted_myself,
+                                deleted_count: deleted_count as u64,
+                                failed_count: failed_count as u64,
+                            },
+                        ),
                         _ => panic!(),
                     })
                 }
@@ -277,6 +367,11 @@ async fn handle_simple_action(
                             }
                             test_protocol::action::Details::GetObject(_) => {
                                 Details::GetObject(GetObjectResult { stats: None })
+                            }
+                            test_protocol::action::Details::QueryPins(_query_pins) => {
+                                Details::QueryPins(QueryPinsResult {
+                                    ..Default::default()
+                                })
                             }
                         });
                     }
@@ -368,9 +463,10 @@ async fn handle_create_nodes(
                     node_name: node.name.clone(),
                     new_cfg: NodeConfig {
                         bootstrap_nodes: Vec::new(),
-                        external_addresses: vec![
-                            Multiaddr::from_str("/ip4/0.0.0.0/udp/0/quic-v1").unwrap()
-                        ],
+                        external_addresses: vec![Multiaddr::from_str(
+                            &(node.address.clone().unwrap().clone()),
+                        )
+                        .unwrap()],
                     },
                 },
             ));

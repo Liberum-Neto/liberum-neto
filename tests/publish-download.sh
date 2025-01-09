@@ -21,17 +21,17 @@ $CORE_BIN --daemon  &> /dev/null &
 sleep 0.1; # the socket file is created asynchronously and may not be ready yet :))))
 
 # create ndoes
-$CLI_BIN -d new-node $N1 --id-seed $N1_SEED 2> /dev/null
-$CLI_BIN -d new-node $N2 --id-seed $N2_SEED 2> /dev/null
-$CLI_BIN -d config-node $N1 add-external-addr $N1_ADDR 2> /dev/null
+$CLI_BIN new-node $N1 --id-seed $N1_SEED 2> /dev/null
+$CLI_BIN new-node $N2 --id-seed $N2_SEED 2> /dev/null
+$CLI_BIN config-node $N1 add-external-addr $N1_ADDR 2> /dev/null
 
 # start n1 and get its peer id
-$CLI_BIN -d start-node $N1 2> /dev/null
-N1_ID=$($CLI_BIN -d get-peer-id $N1 2> /dev/null)
+$CLI_BIN start-node $N1 2> /dev/null
+N1_ID=$($CLI_BIN get-peer-id $N1 2> /dev/null)
 
 # add n1 as bootstrap
-$CLI_BIN -d config-node $N2 add-bootstrap-node "${N1_ID}" $N1_ADDR 2> /dev/null
-$CLI_BIN -d start-node $N2 2> /dev/null
+$CLI_BIN config-node $N2 add-bootstrap-node "${N1_ID}" $N1_ADDR 2> /dev/null
+$CLI_BIN start-node $N2 2> /dev/null
 
 # wait for nodes to connect
 sleep 0.1
@@ -42,12 +42,12 @@ FILE_ID=$($CLI_BIN publish-file $N1 "$FILE_NAME" 2> /dev/null)
 
 init_asserts
 # download file
-RESULT=$($CLI_BIN -d download-file $N2 "${FILE_ID}" 2> /dev/null)
+RESULT=$($CLI_BIN download-file $N2 "${FILE_ID}" 2> /dev/null)
 should_contain "$RESULT" "${FILE_CONTENT}"
 
 # cleanup
-$CLI_BIN -d stop-node $N1 2> /dev/null
-$CLI_BIN -d stop-node $N2 2> /dev/null
+$CLI_BIN stop-node $N1 2> /dev/null
+$CLI_BIN stop-node $N2 2> /dev/null
 killall liberum_core &> /dev/null
 rm "$FILE_NAME"
 

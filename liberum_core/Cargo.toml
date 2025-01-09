@@ -55,5 +55,6 @@ prost = "0.13.4"
 futures-util = "0.3.31"
 chrono = "0.4.38"
 ed25519 = {version="2.2.3", features=["serde"]}
+async-trait = "0.1.83"
 [build-dependencies]
 tonic-build = "0.12.3"

@@ -14,7 +14,7 @@ else
 fi
 
 # build dependencies
-cargo build --release
+cargo build --release --quiet
 CLI_BIN="./target/release/liberum_cli"
 CORE_BIN="./target/release/liberum_core"
 
