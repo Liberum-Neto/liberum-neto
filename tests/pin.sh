@@ -22,9 +22,9 @@ FILE2_CONTENT="Howdy Ho!"
 echo "Publish and download file test:"
 
 # run daemon
-# killall liberum_core &> /dev/null
-# $CORE_BIN --daemon  &> /dev/null &
-# sleep 0.1; # the socket file is created asynchronously and may not be ready yet :))))
+killall liberum_core &> /dev/null
+$CORE_BIN --daemon  &> /dev/null &
+sleep 0.1; # the socket file is created asynchronously and may not be ready yet :))))
 
 # create ndoes
 $CLI_BIN new-node $N1 --id-seed $N1_SEED 2> /dev/null
@@ -56,16 +56,14 @@ FILE2_ID=$($CLI_BIN publish-file $N2 "$FILE2_NAME" --pins "$FILE1_ID" 2> /dev/nu
 
 init_asserts
 # # download file
-# RESULT=$($CLI_BIN download-file $N2 "${FILE1_ID}" 2> /dev/null)
-# should_contain "$RESULT" "${FILE1_CONTENT}"
-# # check if file2 contains pins
-# RESULT=$($CLI_BIN download-file $N2 "${FILE2_ID}" 2> /dev/null)
-# should_contain "$RESULT" "${FILE2_CONTENT}"
-# should_contain "$RESULT" "${FILE1_ID}"
-# check if can find file2 using file1 ID
-# RESULT=$($CLI_BIN get-pinned $N2 "${FILE1_ID}" 2> /dev/null)
-# should_contain "$RESULT" "$FILE2_CONTENT"
-# should_contain "$RESULT" "$FILE2_ID"
+RESULT=$($CLI_BIN download-file $N3 "${FILE1_ID}" 2> /dev/null)
+should_contain "$RESULT" "${FILE1_CONTENT}"
+# check if file2 contains pins
+RESULT=$($CLI_BIN download-file $N3 "${FILE2_ID}" 2> /dev/null)
+should_contain "$RESULT" "${FILE2_CONTENT}"
+should_contain "$RESULT" "${FILE1_ID}"
+
+# check if pinned files are available on other nodes
 
 RESULT=$($CLI_BIN get-pinned $N1 "${FILE1_ID}" 2> /dev/null)
 should_contain "$RESULT" "$FILE2_CONTENT"
@@ -87,6 +85,7 @@ should_contain "$RESULT" "$FILE2_ID"
 $CLI_BIN stop-node $N1 2> /dev/null
 $CLI_BIN stop-node $N2 2> /dev/null
 $CLI_BIN stop-node $N3 2> /dev/null
+$CLI_BIN stop-node $N4 2> /dev/null
 killall liberum_core &> /dev/null
 rm "$FILE1_NAME"
 rm "$FILE2_NAME"

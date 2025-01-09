@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use liberum_core::proto::{self, ResultObject, TypedObject};
+use liberum_core::proto::{self, TypedObject};
 use libp2p::request_response::{self, InboundRequestId, OutboundRequestId, ResponseChannel};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
