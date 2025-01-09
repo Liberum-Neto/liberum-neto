@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Result};
+use liberum_core::proto;
 use liberum_core::{DaemonRequest, DaemonResponse, DaemonResult};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, error, info};
@@ -230,6 +231,10 @@ impl DaemonCom {
                             let mut object_infos = vec![];
 
                             for obj in result {
+                                error!(
+                                    obj_id = proto::Hash::try_from(&obj)?.to_string(),
+                                    "Pinned object found"
+                                );
                                 let obj_info: PlainFileInfo = obj.try_into()?;
                                 object_infos.push(obj_info);
                             }

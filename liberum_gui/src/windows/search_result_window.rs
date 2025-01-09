@@ -44,6 +44,9 @@ impl Window<SearchResultWindowState, SearchResultWindowUpdate> for SearchResultW
                     ui.vertical(|ui| {
                         ui.label("Object");
                         ui.label(format!("ID: {}", &obj.obj_id));
+                        for pin in &obj.pins {
+                            ui.label(format!("Pin: {}", &pin));
+                        }
                         ui.label(format!("Name: {}", &obj.name));
                         ui.add_space(10.0);
                     });

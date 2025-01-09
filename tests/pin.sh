@@ -81,7 +81,7 @@ RESULT=$($CLI_BIN get-pinned $N4 "${FILE1_ID}" 2> /dev/null)
 should_contain "$RESULT" "$FILE2_CONTENT"
 should_contain "$RESULT" "$FILE2_ID"
 
-# # cleanup
+# cleanup
 $CLI_BIN stop-node $N1 2> /dev/null
 $CLI_BIN stop-node $N2 2> /dev/null
 $CLI_BIN stop-node $N3 2> /dev/null

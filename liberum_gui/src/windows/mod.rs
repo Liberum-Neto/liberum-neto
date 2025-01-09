@@ -5,7 +5,7 @@ use liberum_core::{
     parser::{parse_typed, ObjectEnum},
     proto::{Hash, TypedObject},
 };
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::views::ViewContext;
 
@@ -56,13 +56,13 @@ pub struct PlainFileInfo {
 impl TryFrom<TypedObject> for PlainFileInfo {
     type Error = anyhow::Error;
 
+    // TEST
     fn try_from(typed: TypedObject) -> Result<Self> {
+        let obj_id = Hash::try_from(&typed)?.to_string();
         let mut typed = Some(typed);
         let mut pins = vec![];
 
         while let Some(obj) = typed.clone() {
-            let obj_id = Hash::try_from(&obj)?.to_string();
-
             typed = match parse_typed(obj) {
                 Err(e) => {
                     debug!("{e}");
