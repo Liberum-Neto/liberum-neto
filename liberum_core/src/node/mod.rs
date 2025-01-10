@@ -37,7 +37,7 @@ pub struct Node {
     swarm_sender: Option<mpsc::Sender<SwarmRunnerMessage>>,
 }
 
-const DIAL_TIMEOUT: Duration = Duration::from_secs(10);
+const DIAL_TIMEOUT: Duration = Duration::from_secs(120);
 
 impl Actor for Node {
     type Mailbox = BoundedMailbox<Self>;

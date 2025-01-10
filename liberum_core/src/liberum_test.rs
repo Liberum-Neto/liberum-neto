@@ -19,6 +19,11 @@ use tonic::{
     transport::{Channel, Uri},
     Code,
 };
+use tracing_subscriber::{
+    fmt::{self, format::FmtSpan},
+    layer::SubscriberExt,
+    Layer,
+};
 
 use crate::test_protocol::test_scenario::node_definition::NodeDefinitionLevel;
 use crate::test_protocol::test_scenario::test_part_scenario::Part::Simple;
@@ -32,7 +37,7 @@ use test_protocol::{
     Action, ActionResoult, DaemonQueryStats, Identity, NodeInstance, NodesCreated, TestPartResult,
     TestScenario,
 };
-use tracing::{error, info};
+use tracing::{error, info, Level};
 pub mod connection;
 pub mod node;
 pub mod swarm_runner;
@@ -67,7 +72,7 @@ impl Interceptor for HostHeaderInterceptor {
     }
 }
 
-#[tokio::main]
+#[tokio::main(worker_threads = 64)]
 pub(crate) async fn run_test(
     url: String,
     host_id: String,
@@ -93,7 +98,7 @@ pub(crate) async fn run_test(
         .into_inner();
 
     let new_nodes = handle_create_nodes(&test_scenario, app_context.clone()).await;
-    sleep(Duration::from_secs(1)).await;
+    sleep(Duration::from_secs(5)).await;
     let diallable_nodes = client.test_ready(new_nodes).await?.into_inner();
 
     let mut test_context = TestContext {
@@ -389,16 +394,32 @@ async fn daemon_request(
     request: DaemonRequest,
     app_context: AppContext,
 ) -> Result<DaemonResponse, DaemonError> {
-    connection::handle_message(request, &app_context).await
+    let mut result: Result<DaemonResponse, DaemonError>;
+    for i in 0..3 {
+        result = connection::handle_message(request.clone(), &app_context).await;
+        if result.is_ok() {
+            return result;
+        }
+
+        if i == 2 {
+            return result;
+        }
+    }
+    panic!("WTF")
 }
 
+#[tracing::instrument]
 async fn run_few_and_collect(
     requests: Vec<(u64, DaemonRequest)>,
     app_context: AppContext,
 ) -> Result<Vec<(u64, DaemonResponse)>, Box<dyn error::Error>> {
     let mut tasks = Vec::with_capacity(requests.len());
-    sleep(Duration::from_millis(250)).await;
+    let add_slow = requests.len() < 10;
+
     for request in &requests {
+        if add_slow {
+            sleep(Duration::from_millis((request.0 % 25) * 100)).await;
+        }
         tasks.push(tokio::spawn(daemon_request(
             request.1.clone(),
             app_context.clone(),
@@ -548,12 +569,12 @@ async fn handle_create_nodes(
 /// Helper function to setup logging
 fn setup_logging() {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .with_line_number(true)
-        .with_target(true)
-        .compact()
+        .with_span_events(FmtSpan::CLOSE)
+        .with_target(false)
+        .with_level(false)
+        .with_max_level(Level::TRACE)
         .with_file(true)
-        .with_env_filter("liberum_test=debug")
+        .with_line_number(true)
         .init();
 }
 

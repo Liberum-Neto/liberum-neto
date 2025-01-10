@@ -16,6 +16,7 @@ use libp2p::request_response::ProtocolSupport;
 use libp2p::{identity, kad, Multiaddr, StreamProtocol, SwarmBuilder};
 use libp2p::{kad::store::MemoryStore, request_response, swarm::SwarmEvent, Swarm};
 use messages::*;
+use std::num::NonZero;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -109,10 +110,10 @@ async fn run_swarm_main(
     let swarm = SwarmBuilder::with_existing_identity(keypair.clone())
         .with_tokio()
         .with_quic_config(|mut config| {
-            config.handshake_timeout = Duration::from_secs(30);
-            config.max_concurrent_stream_limit = 1000;
+            config.handshake_timeout = Duration::from_secs(10);
+            config.max_concurrent_stream_limit = 10000;
             config.keep_alive_interval = Duration::from_secs(10);
-            config.max_idle_timeout = 31000;
+            config.max_idle_timeout = 20;
             config
         })
         .with_behaviour(|key| {
@@ -120,6 +121,11 @@ async fn run_swarm_main(
             let store = MemoryStore::with_config(key.public().to_peer_id(), store_conf);
 
             let mut conf = kad::Config::new(KAD_PROTO_NAME);
+            conf.set_query_timeout(Duration::from_secs(10));
+            conf.set_caching(kad::Caching::Enabled { max_peers: 10 });
+            conf.disjoint_query_paths(false);
+            conf.set_kbucket_inserts(kad::BucketInserts::OnConnected);
+            conf.set_kbucket_pending_timeout(Duration::from_secs(10));
 
             conf.set_record_filtering(kad::StoreInserts::FilterBoth);
             let kademlia = kad::Behaviour::with_config(id, store, conf);
@@ -144,7 +150,11 @@ async fn run_swarm_main(
             }
         })
         .inspect_err(|e| error!(err = e.to_string(), "could not create behavior"))?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
+        .with_swarm_config(|c| {
+            c.with_idle_connection_timeout(Duration::from_secs(10))
+                .with_dial_concurrency_factor(NonZero::new(1).unwrap())
+                .with_notify_handler_buffer_size(NonZero::new(1000).unwrap())
+        })
         .build();
 
     let mut context = SwarmContext {

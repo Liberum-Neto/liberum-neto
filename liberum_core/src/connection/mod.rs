@@ -20,6 +20,7 @@ use liberum_core::DaemonResponse;
 use liberum_core::DaemonResult;
 use libp2p::identity::Keypair;
 use libp2p::PeerId;
+use std::fmt::Debug;
 use std::path::PathBuf;
 use tokio::net::UnixListener;
 use tokio_util::codec::Decoder;
@@ -32,6 +33,12 @@ type SocketFramed =
 #[derive(Clone)]
 pub struct AppContext {
     node_manager: ActorRef<NodeManager>,
+}
+
+impl Debug for AppContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AppContext").finish()
+    }
 }
 
 impl AppContext {
@@ -149,7 +156,7 @@ pub async fn handle_message(message: DaemonRequest, context: &AppContext) -> Dae
         } => handle_get_pinned(node_name, object_id, context).await,
     }
 }
-
+#[tracing::instrument]
 async fn get_node(node_name: &str, context: &AppContext) -> Result<ActorRef<Node>, DaemonError> {
     context
         .node_manager
@@ -167,7 +174,7 @@ async fn get_node(node_name: &str, context: &AppContext) -> Result<ActorRef<Node
         })
         .map_err(|e| DaemonError::Other(e.to_string()))
 }
-
+#[tracing::instrument]
 async fn handle_get_peer_id(node_name: String, context: &AppContext) -> DaemonResult {
     let node = get_node(&node_name, context).await?;
 
@@ -182,7 +189,7 @@ async fn handle_get_peer_id(node_name: String, context: &AppContext) -> DaemonRe
         id: peer_id.to_base58(),
     })
 }
-
+#[tracing::instrument]
 async fn handle_new_node(
     name: String,
     id_seed: Option<String>,
@@ -209,7 +216,7 @@ async fn handle_new_node(
         Ok(_resp) => Ok(DaemonResponse::NodeCreated),
     }
 }
-
+#[tracing::instrument]
 async fn handle_start_node(name: String, context: &AppContext) -> DaemonResult {
     context
         .node_manager
@@ -223,7 +230,7 @@ async fn handle_start_node(name: String, context: &AppContext) -> DaemonResult {
 
     Ok(DaemonResponse::NodeStarted)
 }
-
+#[tracing::instrument]
 async fn handle_get_node_config(name: String, context: &AppContext) -> DaemonResult {
     let config = context
         .node_manager
@@ -237,7 +244,7 @@ async fn handle_get_node_config(name: String, context: &AppContext) -> DaemonRes
 
     Ok(DaemonResponse::NodeConfig(config))
 }
-
+#[tracing::instrument]
 async fn handle_overwrite_node_config(
     name: String,
     new_cfg: NodeConfig,
@@ -263,7 +270,7 @@ async fn handle_overwrite_node_config(
 
     Ok(DaemonResponse::NodeConfigUpdated)
 }
-
+#[tracing::instrument]
 async fn handle_stop_node(name: String, context: &AppContext) -> DaemonResult {
     let resp = context
         .node_manager
@@ -276,7 +283,7 @@ async fn handle_stop_node(name: String, context: &AppContext) -> DaemonResult {
         Ok(_nodes) => Ok(DaemonResponse::NodeStopped),
     }
 }
-
+#[tracing::instrument]
 async fn handle_list_nodes(context: &AppContext) -> DaemonResult {
     let node_store = context
         .node_manager
@@ -302,14 +309,14 @@ async fn handle_list_nodes(context: &AppContext) -> DaemonResult {
 
     Ok(DaemonResponse::NodeList(node_infos))
 }
-
+#[tracing::instrument]
 async fn handle_get_node_details(node_name: &str, context: &AppContext) -> DaemonResult {
     let node_info = get_node_details(node_name, context)
         .await
         .map_err(|e| DaemonError::Other(e.to_string()))?;
     DaemonResult::Ok(DaemonResponse::NodeDetails(node_info))
 }
-
+#[tracing::instrument]
 async fn get_node_details(node_name: &str, context: &AppContext) -> Result<NodeInfo> {
     let is_running = context
         .node_manager
@@ -369,7 +376,7 @@ async fn get_node_details(node_name: &str, context: &AppContext) -> Result<NodeI
 
     Ok(node_info)
 }
-
+#[tracing::instrument]
 async fn handle_provide_file(node_name: &str, path: PathBuf, context: &AppContext) -> DaemonResult {
     let node = get_node(&node_name, context).await?;
 
@@ -383,6 +390,7 @@ async fn handle_provide_file(node_name: &str, path: PathBuf, context: &AppContex
     Ok(DaemonResponse::FileProvided { id: resp_id })
 }
 
+#[tracing::instrument]
 async fn handle_get_providers(node_name: String, id: String, context: &AppContext) -> DaemonResult {
     let node = get_node(&node_name, context).await?;
 
@@ -402,6 +410,7 @@ async fn handle_get_providers(node_name: String, id: String, context: &AppContex
 }
 
 // TODO! Downloading a file is blocking now, it should be done in background in some way
+#[tracing::instrument]
 async fn handle_download_file(node_name: String, id: String, context: &AppContext) -> DaemonResult {
     let node = get_node(&node_name, context).await?;
 
@@ -414,7 +423,7 @@ async fn handle_download_file(node_name: String, id: String, context: &AppContex
     let (data, stats) = resp;
     Ok(DaemonResponse::ObjectDownloaded { data, stats })
 }
-
+#[tracing::instrument]
 async fn handle_dial(
     node_name: String,
     peer_id: String,
@@ -435,7 +444,7 @@ async fn handle_dial(
     debug!("Dialed peer: {}", peer_id);
     Ok(DaemonResponse::Dialed)
 }
-
+#[tracing::instrument]
 async fn handle_publish_file(
     node_name: String,
     path: PathBuf,
@@ -452,7 +461,7 @@ async fn handle_publish_file(
 
     Ok(DaemonResponse::FilePublished { id: resp_id })
 }
-
+#[tracing::instrument]
 async fn handle_get_published_objects(node_name: String, context: &AppContext) -> DaemonResult {
     let node = get_node(&node_name, context).await?;
     let object_infos = node
@@ -463,7 +472,7 @@ async fn handle_get_published_objects(node_name: String, context: &AppContext) -
         .map_err(|e| DaemonError::Other(e.to_string()))?;
     DaemonResult::Ok(DaemonResponse::PublishedObjectsList { object_infos })
 }
-
+#[tracing::instrument]
 async fn handle_delete_object(
     node_name: String,
     object_id: String,
@@ -480,6 +489,7 @@ async fn handle_delete_object(
 
     DaemonResult::Ok(result)
 }
+#[tracing::instrument]
 async fn handle_provide_object(
     node_name: String,
     object: TypedObject,
@@ -496,6 +506,7 @@ async fn handle_provide_object(
 
     Ok(DaemonResponse::ObjectPublished { id: resp_id })
 }
+#[tracing::instrument]
 async fn handle_publish_object(
     node_name: String,
     object: TypedObject,
@@ -512,7 +523,7 @@ async fn handle_publish_object(
 
     Ok(DaemonResponse::ObjectPublished { id: resp_id })
 }
-
+#[tracing::instrument]
 async fn handle_query_object(
     node_name: String,
     query_object: TypedObject,
@@ -529,7 +540,7 @@ async fn handle_query_object(
         .map_err(|e| DaemonError::Other(e.to_string()))?;
     Ok(resp)
 }
-
+#[tracing::instrument]
 async fn handle_get_pinned(
     node_name: String,
     object_id: String,
