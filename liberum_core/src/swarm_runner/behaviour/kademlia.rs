@@ -76,7 +76,9 @@ impl SwarmContext {
                         self.bootstrapped = true;
                         let sender = self.behaviour.pending_bootstraps.remove(&id);
                         if let Some(sender) = sender {
-                            let _ = sender.send(());
+                            let _ = sender.send(()).inspect_err(|err| {
+                                error!("While sendin via handle outbound query")
+                            });
                         }
                     }
                 }
@@ -88,7 +90,9 @@ impl SwarmContext {
                     );
                     let sender = self.behaviour.pending_bootstraps.remove(&id);
                     if let Some(sender) = sender {
-                        let _ = sender.send(());
+                        let _ = sender
+                            .send(())
+                            .inspect_err(|err| error!("While sendin via handle outbound query"));
                     }
                 }
             },

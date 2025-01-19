@@ -6,6 +6,7 @@ use liberum_core::{proto::*, DaemonQueryStats};
 use libp2p::request_response::ResponseChannel;
 use std::collections::HashMap;
 
+use instrumented_channels::oneshot;
 use libp2p::{
     kad,
     request_response::{self, OutboundRequestId},
@@ -14,7 +15,6 @@ use libp2p::{
 };
 use object_sender::*;
 use query_sender::*;
-use tokio::sync::oneshot;
 
 use liberum_core::proto::{self, TypedObject};
 

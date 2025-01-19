@@ -13,11 +13,11 @@ use super::query_sender::QueryRequest;
 use super::SwarmContext;
 use anyhow::anyhow;
 use anyhow::Result;
+use instrumented_channels::oneshot;
 use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::PeerId;
 use libp2p::{kad, Multiaddr};
 use std::collections::hash_map;
-use tokio::sync::oneshot;
 use tracing::{debug, error, warn};
 pub enum SwarmRunnerError {}
 

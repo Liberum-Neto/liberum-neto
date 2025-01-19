@@ -5,6 +5,8 @@ use crate::modules::Modules;
 use crate::swarm_runner;
 use crate::vaultv3::{ListObjects, Vaultv3};
 use anyhow::{anyhow, Result};
+use instrumented_channels::mpsc::Sender;
+use instrumented_channels::{mpsc, oneshot};
 use kameo::mailbox::bounded::BoundedMailbox;
 use kameo::messages;
 use kameo::request::MessageSend;
@@ -19,8 +21,6 @@ use manager::NodeManager;
 use std::sync::Arc;
 use std::{borrow::Borrow, collections::HashSet, fmt, path::PathBuf, str::FromStr};
 use swarm_runner::messages::SwarmRunnerMessage;
-use tokio::sync::mpsc::Sender;
-use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
 use tracing::{debug, error, warn};
 

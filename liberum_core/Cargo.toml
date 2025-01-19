@@ -56,5 +56,6 @@ futures-util = "0.3.31"
 chrono = "0.4.38"
 ed25519 = {version="2.2.3", features=["serde"]}
 async-trait = "0.1.83"
+instrumented-channels  = { git = "https://github.com/sajmon170/instrumented-channels.git", version="0.2.0" }
 [build-dependencies]
 tonic-build = "0.12.3"

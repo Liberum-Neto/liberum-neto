@@ -4,9 +4,9 @@ use anyhow::Result;
 use liberum_core::parser::{self, ObjectEnum};
 use liberum_core::proto::{self, ResultObject, TypedObject, UUIDTyped};
 
+use instrumented_channels::oneshot;
 use libp2p::request_response::{self, InboundRequestId, OutboundRequestId, ResponseChannel};
 use serde::{Deserialize, Serialize};
-use tokio::sync::oneshot;
 use tracing::{debug, error};
 
 use super::super::SwarmContext;
